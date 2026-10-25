@@ -5,7 +5,7 @@ description: Run Mavan's information architecture (IA) audit for a client site f
 
 # Information Architecture Audit (Mavan SOP)
 
-Full SOP: the "Information Architecture Audit Process" page in Notion. This skill is its Step 4 prompt, turned into scripts plus the judgment calls the scripts can't make. The output is a diagnosis with suggested actions, not the new structure: a person decides the target architecture.
+This skill carries the whole process: it is the Information Architecture Audit SOP's prompt turned into scripts, plus the judgment calls the scripts can't make. It does not need the written SOP; a copy in a project management tool is documentation for people. The output is a diagnosis with suggested actions, not the new structure: a person decides the target architecture.
 
 Template: https://docs.google.com/spreadsheets/d/1uLh1ceuPOhxVeTmIi7dlTbAFYDaIk_BhjaQGNpxHVu4/edit (file id `1uLh1ceuPOhxVeTmIi7dlTbAFYDaIk_BhjaQGNpxHVu4`).
 
@@ -13,10 +13,10 @@ Scripts do every count, match and join; never estimate a number by reading. `$SK
 
 ## What you need
 
-- **Crawl exports**, every URL not just 200s: (1) URL export, (2) all internal links export, (3) redirects export. Sitebulb or Screaming Frog; the SOP's Step 3 lists the columns. Ask for them if missing. The Sitebulb connector cannot replace them (it returns 50 sample URLs per query).
+- **Crawl exports**, every URL not just 200s: (1) URL export, (2) all internal links export, (3) redirects export. Sitebulb or Screaming Frog. Ask for them if missing, naming the exports: Sitebulb URL Explorer > Internal > HTML (URL, HTTP Status Code, Indexable Status, Crawl Depth, Path Depth, Crawl Source, Title, H1, H2s, No. Content Words, No. Internal Links to URL, No. Internal Linking URLs; no GSC or GA columns), Links > Internal Links (Target URL, Anchor Text, Linking URL, Location, CSS Path, Image, Nofollow) and the Redirects report; Screaming Frog Internal > HTML (Address, Status Code, Indexability, Indexability Status, Title 1, H1-1, H2-1, Word Count, Crawl Depth, Unique Inlinks, Outlinks), Bulk Export > Links > All Inlinks (Source, Destination, Anchor, Status Code, Link Position, Link Path, Type) and Reports > Redirects > All Redirects. The Sitebulb connector cannot replace them (it returns 50 sample URLs per query).
 - **Client facts**: business name, domain, main city and state, other cities targeted, brand terms (name and nicknames). Ask in one question for whatever the request doesn't give; work out what you can from the site first.
 - **Optional**: the client's existing redirect list (e.g. a redirect plugin export) and past prune & merge decisions. Skip anything about them when they aren't attached.
-- **Composio** connector with Google Search Console and Google Analytics connected (once per account, see the SOP's Step 1).
+- **Composio** connector with Google Search Console and Google Analytics connected, using a Google account that has access to the client's properties (set up once per account in Composio). Without it the audit still runs: the search columns stay blank and the Read Me says why.
 
 ## Step 1: Template
 
@@ -71,4 +71,4 @@ Send the .xlsx. In the reply:
 - 5-7 headline findings in plain language.
 - The Unclassified pages, if any.
 - Anything you could not do (no GA4, no Search Console, missing export columns) and anything else from Read Me "Missing / uncertain".
-- How to get it into Sheets, from the SOP's Step 5: new blank Google Sheet named "[Client] Information Architecture Audit", File > Import > Upload > **Replace spreadsheet**, then spot-check that the Area column and the Recommendations Pages column show numbers.
+- How to get it into Sheets: new blank Google Sheet named "[Client] Information Architecture Audit", File > Import > Upload > **Replace spreadsheet**, then spot-check that the Area column and the Recommendations Pages column show numbers.

@@ -1,6 +1,6 @@
 # Reviewing the analysis
 
-analyze.py applies the SOP's rules mechanically. Review is where you catch what rules get wrong. Every correction goes in `work/decisions.json`, so a re-run from the exports reproduces it. Re-run `analyze.py` after each round and work down `work/review/next_steps.md` until it asks for nothing.
+analyze.py applies the audit's rules mechanically. Review is where you catch what rules get wrong. Every correction goes in `work/decisions.json`, so a re-run from the exports reproduces it. Re-run `analyze.py` after each round and work down `work/review/next_steps.md` until it asks for nothing.
 
 ## decisions.json keys read by analyze.py
 
@@ -47,7 +47,7 @@ A pair is a duplicate only if both pages are about the same treatment. Look at:
 - **not** with high overlap: usually a missing synonym. Fix the synonym rather than the pair.
 - **city**: the same treatment in different cities. These stay city variants for a policy decision; never merge them automatically.
 
-The keeper follows the SOP (service page, then concern, then blog; main city first; then most impressions). Override with `keepers` only for a clear reason, such as the rule picking an orphaned page with no traffic, and say why in the chat summary.
+The keeper rule is: service page first, then concern, then blog; main city first; then most impressions. Override with `keepers` only for a clear reason, such as the rule picking an orphaned page with no traffic, and say why in the chat summary.
 
 ## Searches with no owner (`analysis/no_owner.csv`)
 

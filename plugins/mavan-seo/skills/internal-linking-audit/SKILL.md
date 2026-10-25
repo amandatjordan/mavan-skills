@@ -5,7 +5,7 @@ description: "Run Mavan's internal linking audit for a client site from Sitebulb
 
 # Internal Linking Audit (Mavan SOP)
 
-Version 1.1 (Oct 2026). Full SOP: the "Internal Linking Audit Process" page in Notion. Sheet template: https://docs.google.com/spreadsheets/d/1hyxsOaSlpdvPdV9y289M-8Gb6t4f0qCMYZvj4xJkzW0/edit
+Version 1.2 (Oct 2026). This skill carries the whole process and does not need the written SOP; a copy in a project management tool is documentation for people. Sheet template: https://docs.google.com/spreadsheets/d/1hyxsOaSlpdvPdV9y289M-8Gb6t4f0qCMYZvj4xJkzW0/edit
 
 This skill finds internal linking opportunities for a client's priority pages (any commercial page the strategist picks; usually service pages) and delivers an implementation sheet the team can work straight down. Code does everything with a clear right answer; Claude's judgment is used only for relevance, link placement and anchors. Follow the steps in order and don't skip the verification step.
 
@@ -14,7 +14,11 @@ This skill finds internal linking opportunities for a client's priority pages (a
 - **Crawl exports** from Sitebulb or Screaming Frog: a URLs export (status code, indexability, title, H1, crawl depth) and an all-internal-links export (source, target, anchor, link position/location, CSS path or link path). Ask for them if they're not attached.
 - **Priority pages**: a list of URLs (any commercial page: service, location, concern, package), optionally with topic/synonyms per page, or "all service pages".
 - **The client domain.**
-- **The built-in browser** (Claude desktop app). The live-page read in Step 3 needs it. If no browser tool is available, tell the person the audit can't verify existing links or quote sentences without it, and stop.
+- **A way to read the live pages** (Step 3), in this order of preference:
+  1. The built-in browser (Claude desktop app) or Claude in Chrome: any browser tool that can run JavaScript on a page of the site.
+  2. Python in this session, when it can reach the client site (try `python -c "import requests;print(requests.get('https://DOMAIN',timeout=15).status_code)"`).
+  3. Composio's remote workbench (`COMPOSIO_REMOTE_WORKBENCH`), which can fetch sites this session's network blocks.
+  Check which one works before Step 1 and tell the person which you'll use. If none does, say the audit can't verify existing links or quote sentences without reading the pages, and stop.
 
 ## Setup (every run)
 
@@ -42,10 +46,18 @@ Sitebulb caveat: when a body link has the same anchor as a menu link to the same
 **Over ~1,000 pages to read** (reader.py make prints the count and warns): do Step 4 first, then run `python scripts/checks.py --work work --base https://DOMAIN --priority priority.csv --service-regex '<pattern>' --terms-only` and add `--filter-terms work/terms.csv --keep-full '<service pattern>'` to the make command below. The browser then sends back every body link and a word count for each page, but only the paragraphs that mention a priority term (full text for the homepage and service pages). On the test site this gave identical candidates from a fifth of the data. Retarget rows on filtered pages that don't mention a priority term can't be auto-verified; finalize.py warns, so check those by hand.
 
 1. `python scripts/reader.py make --work work --base https://DOMAIN` (adjust `--exclude` if gallery/review/listing URLs use other patterns; galleries, reviews, tag/category pages and the sitemap are excluded by default).
-2. Open any page of the client site in the built-in browser (preview_start). Run the contents of `work/js/start.js` with the browser's JavaScript tool. It returns immediately and keeps fetching in the background (about 10 pages at a time).
+**With a browser** (built-in browser or Claude in Chrome):
+
+2. Open any page of the client site in the browser (built-in browser: preview_start; Claude in Chrome: open a new tab). Run the contents of `work/js/start.js` with the browser's JavaScript tool. It returns immediately and keeps fetching in the background (about 10 pages at a time).
 3. Run `work/js/status.js` every ~20 seconds until `done == total`. Check the sample text looks like article copy, not menus. If many content pages come back empty, the site uses different markup: inspect one page and pass better selectors with `--body-sel` / `--remove-sel`, then redo this step.
 4. Run `work/js/chunk.js` with `CHUNK = 0`. The result is gzipped and padded so the tool saves it to a file; note the file path and the `of` value (number of chunks). Then run CHUNK = 1 … of-1 (they can run in parallel). If any result says it was truncated, lower SIZE in chunk.js and redo that chunk.
 5. `python scripts/reader.py merge --work work --base https://DOMAIN <saved files…>`. It must report 0 missing pages.
+
+**Without a browser** (same selectors and output, so every later step is identical):
+
+- *Python here:* `python scripts/reader.py fetch --work work` (needs `requests` and `beautifulsoup4`; `pip install --break-system-packages requests beautifulsoup4` if missing), then run the merge command it prints.
+- *Composio workbench:* write `scripts/reader.py` and `work/read_config.json` into the workbench (send their contents in `code_to_execute` and save them as files there), then run `python reader.py fetch --work <dir> --emit` there. Each printed line is one chunk; save each line, exactly as printed, to its own file here and pass those files to `reader.py merge`. If a line is too long to come back in one call, lower `--size` and run again.
+- A site that blocks plain HTTP requests (a bot wall, an empty page without JavaScript) needs the browser route; check that the sample pages the merge reports have body text.
 
 ## Step 4: Terms and service map
 
@@ -225,7 +237,7 @@ if __name__ == '__main__':
 
 ```python
 #!/usr/bin/env python3
-"""Read live page body copy through the built-in browser.
+"""Read live page body copy: in a browser (built-in browser or Claude in Chrome), or with Python (fetch).
 
 Above ~1,000 pages, pass --filter-terms work/terms.csv --keep-full '<service path regex>' so the browser
 sends back only paragraphs that mention a service term (plus every body link and a word count per page).
@@ -235,12 +247,14 @@ sends back only paragraphs that mention a service term (plus every body link and
    Run start.js in the browser (javascript tool) on any page of the site, poll status.js until done,
    then run chunk.js once per chunk (edit the CHUNK number). Each chunk is gzipped, base64-encoded and
    padded so the tool always saves it to a file instead of printing it.
+   No browser? python reader.py fetch --work work  (Python requests + BeautifulSoup, same selectors).
+   Writes work/fetched_0.json ...; with --emit it prints gzipped chunks instead (for Composio's workbench).
 2) python reader.py merge --work work FILE [FILE ...]
    FILE = the saved tool-result files from the chunk calls. Writes work/pages.json and
    work/body_links.csv (every link found in body copy, from the live pages).
 """
 import argparse, base64, gzip, json, os, re, sys
-import pandas as pd
+from urllib.parse import urljoin, urlparse
 
 BODY_SEL = ('article p, article li, main p, main li, [id^=post-part] p, [id^=post-part] li, '
             '.section__text-block p, .section__text-block li, .faq summary, .faq p, '
@@ -294,6 +308,7 @@ CHUNK = r'''
 '''
 
 def make(a):
+    import pandas as pd
     U = pd.read_pickle(f'{a.work}/urls.pkl')
     pages = U[(U.status == 200) & U.indexable]
     if a.include:
@@ -316,9 +331,74 @@ def make(a):
     open(f'{a.work}/js/status.js', 'w').write(STATUS.replace('__N__', str(len(urls))))
     open(f'{a.work}/js/chunk.js', 'w').write(CHUNK)
     json.dump(urls, open(f'{a.work}/read_list.json', 'w'))
+    json.dump({'base': a.base.rstrip('/'), 'paths': paths, 'sel': a.body_sel, 'rm': a.remove_sel, 'filter': filt, 'keep': keep},
+              open(f'{a.work}/read_config.json', 'w'))
     print(f'{len(urls)} pages to read. Sections:', pd.Series([u.replace(a.base, '').split('/')[1] if u.count('/') > 2 else 'home' for u in urls]).value_counts().head(12).to_dict())
     print('mode:', f'filtered by {a.filter_terms} (full text kept for {keep})' if filt else 'full text for every page')
     print(f'Files: {a.work}/js/start.js (run once), status.js (poll), chunk.js (set CHUNK = 0, 1, 2 ... until it says no chunk)')
+    print(f'No browser: python reader.py fetch --work {a.work}  (uses {a.work}/read_config.json)')
+
+def read_one(url, cfg, session):
+    """Python twin of start.js: same selectors, dedupe, word count and filter."""
+    from bs4 import BeautifulSoup
+    r = session.get(url, timeout=30, headers={'User-Agent': 'Mozilla/5.0 (internal linking audit)'})
+    d = BeautifulSoup(r.text, 'html.parser')
+    for x in d.select(cfg['rm']):
+        x.decompose()
+    flt = re.compile(cfg['filter'], re.I) if cfg['filter'] else None
+    keep = re.compile(cfg['keep'])
+    seen, out = set(), []
+    for e in d.select(cfg['sel']):
+        if e.name == 'li' and e.find('p'):
+            continue
+        t = re.sub(r'\s+', ' ', e.get_text(' ')).strip()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append({'tag': e.name, 't': t, 'links': [[re.sub(r'\s+', ' ', a.get_text(' ')).strip(), a.get('href') or ''] for a in e.find_all('a')]})
+    words = sum(len(x['t'].split(' ')) for x in out if x['tag'] in ('p', 'li'))
+    path = urlparse(url).path.rstrip('/') or '/'
+    full = flt is None or bool(keep.search(path))
+    h1 = d.find('h1')
+    return {'status': r.status_code, 'final': r.url, 'h1': h1.get_text(' ').strip() if h1 else '', 'words': words,
+            'all_links': [l for x in out for l in x['links']] if flt else None,
+            'items': out if full else [x for x in out if flt.search(x['t'])]}
+
+def fetch(a):
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+    cfg = json.load(open(f'{a.work}/read_config.json'))
+    urls = [cfg['base'] + p for p in cfg['paths']]
+    P, err = {}, {}
+    with requests.Session() as sess, ThreadPoolExecutor(8) as ex:
+        def go(u):
+            try:
+                P[u] = read_one(u, cfg, sess)
+            except Exception as e:
+                err[u] = str(e)[:120]
+        list(ex.map(go, urls))
+    for k in list(P):
+        if P[k]['all_links'] is None:
+            del P[k]['all_links']
+    keys, chunks, cur, n = sorted(P), [], [], 0
+    for k in keys:
+        size = len(json.dumps(P[k])) + len(k)
+        if n + size > a.size and cur:
+            chunks.append(cur); cur, n = [], 0
+        cur.append(k); n += size
+    if cur:
+        chunks.append(cur)
+    for i, ch in enumerate(chunks):
+        obj = {'chunk': i, 'of': len(chunks), 'pages': {k: P[k] for k in ch}}
+        if a.emit:
+            gz = base64.b64encode(gzip.compress(json.dumps(obj['pages']).encode())).decode()
+            print(json.dumps({'chunk': i, 'of': len(chunks), 'gz': gz}))
+        else:
+            json.dump(obj, open(f'{a.work}/fetched_{i}.json', 'w'))
+    empty = [u for u, p in P.items() if not p['items']]
+    print(f'read {len(P)} of {len(urls)} pages, {len(err)} errors {list(err.items())[:3]}, {len(empty)} with no body text {empty[:5]}', file=sys.stderr)
+    if not a.emit:
+        print(f'merge with: python reader.py merge --work {a.work} --base {cfg["base"]} ' + ' '.join(f'{a.work}/fetched_{i}.json' for i in range(len(chunks))))
 
 def parse_tool_file(path):
     raw = open(path, encoding='utf-8').read()
@@ -337,6 +417,7 @@ def parse_tool_file(path):
     return json.loads(s)
 
 def merge(a):
+    import pandas as pd
     P = {}
     for f in a.files:
         obj = parse_tool_file(f)
@@ -375,8 +456,11 @@ if __name__ == '__main__':
     m.add_argument('--body-sel', default=BODY_SEL); m.add_argument('--remove-sel', default=REMOVE_SEL)
     g = sub.add_parser('merge'); g.add_argument('--work', default='work'); g.add_argument('--base', required=True)
     g.add_argument('--drop', default=r'/sitemap|/directory$', help='pages to leave out of pages.json (link lists, not content)'); g.add_argument('files', nargs='+')
+    f = sub.add_parser('fetch'); f.add_argument('--work', default='work')
+    f.add_argument('--size', type=int, default=550000, help='max characters of page data per chunk')
+    f.add_argument('--emit', action='store_true', help='print gzipped chunks (one JSON line each) instead of writing files')
     a = ap.parse_args()
-    make(a) if a.cmd == 'make' else merge(a)
+    {'make': make, 'merge': merge, 'fetch': fetch}[a.cmd](a)
 ```
 
 ### scripts/checks.py
