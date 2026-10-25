@@ -37,4 +37,4 @@ Call `COMPOSIO_SEARCH_TOOLS` (use case: list Search Console sites; query search 
 
 Pull clicks and impressions by page for the last 12 months with `GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY` (dimensions `["page"]`, `row_limit` 25000, `start_row` to paginate until a page returns fewer rows). Do it inside the workbench and print only the top pages per topic you need, so the result stays small. Use it to choose between two equally good redirect targets for a broken backlink.
 
-**The Search Console API has no manual actions or Links report.** The manual actions result comes from the person (SOP Step 2) and goes in config.json; the Links report comes as an attached CSV. Never say you checked manual actions.
+**The Search Console API has no manual actions or Links report.** The manual actions result comes from the person and goes in config.json (references/process.md § Disavow rule); the Links report comes as an attached CSV. Never say you checked manual actions.
