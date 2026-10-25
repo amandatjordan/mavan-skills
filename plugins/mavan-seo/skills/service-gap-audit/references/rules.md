@@ -63,7 +63,7 @@ Never create a gap for a node whose Status / Notes says "Do not flag" or "NOT US
 | Indexability blocker | Best page is not indexable | P1 |
 | Empty / thin page | Best page indexable and < thin | P1 |
 | Missing page (offered) | Confirmed or Likely, coverage is meta / gallery / none | P1 if Confirmed and volume >= 5,000, else P2 |
-| No Service page (brand pages only) | Service with only brand / sub-service pages | P2 if volume >= 20,000, else P3 |
+| No Service page (brand pages only) | Service with only brand / sub-service pages (keep the list of those pages for the Recommendations tab) | P2 if volume >= 20,000, else P3 |
 | Missing page (blog only) | Only blog posts | P2 if volume >= 20,000, else P3 |
 | Section, no page | Only an H2 section | P3 |
 | Light page | Best page indexable, thin <= words < light | P3 |
