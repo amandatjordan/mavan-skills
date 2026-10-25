@@ -18,7 +18,7 @@ All optional.
  "pair_verdicts":  {"/page-a/ | /page-b/": "duplicate"},
  "keepers":        {"facelift": "/facelift/"},
  "service_pages":  {"facelift": "/facelift/"},
- "noowner_owner":  {"sagging jowls rochester mi": "Make /jowls/ the owner and link to it from the facelift and neck pages"},
+ "noowner_owner":  {"sagging jowls springfield il": "Make /jowls/ the owner and link to it from the facelift and neck pages"},
  "extra_areas":    {"/path/": "Hubs & packages"}
 }
 ```

@@ -18,19 +18,46 @@ plugins/mavan-seo/.claude-plugin/plugin.json
 plugins/mavan-seo/skills/<skill-name>/   SKILL.md plus any references/ and scripts/
 ```
 
-## Install in Claude Code
+## Install
 
-Members who use the Claude Code terminal without org sync can install the plugin directly:
+Anyone with a Claude account can use these skills; how depends on your plan. Every plan needs **code execution** turned on, because the skills run Python: Settings > Capabilities on Free, Pro and Max, or Organization settings on Team and Enterprise (an owner turns it on).
+
+### Pro, Max, Team and Enterprise: add the marketplace (gets updates)
+
+1. In Claude, open **Customize > Plugins** and select **Add marketplace**.
+2. Enter `amandatjordan/mavan-skills`.
+3. Install **mavan-seo**. When a new version is released, click **Update** on the marketplace.
+
+On Team and Enterprise, an organization owner may need to allow outside marketplaces first.
+
+In the Claude Code terminal:
 
 ```
-/plugin install mavan-seo --marketplace amandatjordan/mavan-skills
+claude plugin marketplace add amandatjordan/mavan-skills
+claude plugin install mavan-seo@mavan-skills
 ```
+
+### Free (or anyone who prefers a file): upload a skill ZIP
+
+Free plans can use skills but not plugins. Download the ZIP for the skill you want:
+
+| Skill | Download |
+| --- | --- |
+| Information architecture audit | [information-architecture-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/information-architecture-audit.zip) |
+| Internal linking audit | [internal-linking-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/internal-linking-audit.zip) |
+| Content prune & merge | [content-prune-merge.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/content-prune-merge.zip) |
+| Service gap audit | [service-gap-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/service-gap-audit.zip) |
+| Backlink audit | [backlink-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/backlink-audit.zip) |
+
+Then in Claude: **Customize > Skills**, **+** > **Create skill** > **Upload a skill**, and choose the ZIP. Uploaded skills do not update themselves: download the ZIP again when a new version is released ([all releases](https://github.com/amandatjordan/mavan-skills/releases)).
+
+The whole plugin is also attached to each release as `mavan-seo.plugin`, for uploading under Customize > Plugins.
 
 ## Add or change a skill
 
 1. Add or edit the folder under `plugins/mavan-seo/skills/`. The folder name must match the `name` in its SKILL.md.
 2. Raise `version` in `plugins/mavan-seo/.claude-plugin/plugin.json`.
-3. Open a pull request. Once it merges to `main`, the team gets it on the next sync.
+3. Open a pull request. Once it merges to `main`, the team gets it on the next sync, and the **Release skill downloads** workflow publishes a new release with fresh ZIPs. Raise the version on every change, or the release keeps the old version number.
 
 To update the service taxonomy, edit `plugins/mavan-seo/skills/service-gap-audit/references/service-taxonomy.xlsx` (add the brand, device or service with its match terms on the Taxonomy tab) and open a pull request like any other change.
 

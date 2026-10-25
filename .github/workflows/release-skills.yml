@@ -1,0 +1,55 @@
+name: Release skill downloads
+
+# Builds one ZIP per skill (for Claude's Customize > Skills > Upload) and the
+# whole plugin file, and attaches them to a release named after the plugin
+# version. Download links that always point at the newest version:
+#   https://github.com/<owner>/<repo>/releases/latest/download/<skill-name>.zip
+#   https://github.com/<owner>/<repo>/releases/latest/download/mavan-seo.plugin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - ".claude-plugin/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ZIPs
+        id: build
+        run: |
+          set -euo pipefail
+          plugin=plugins/mavan-seo
+          version=$(python3 -c "import json;print(json.load(open('$plugin/.claude-plugin/plugin.json'))['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          for dir in "$plugin"/skills/*/; do
+            name=$(basename "$dir")
+            # The ZIP holds the skill folder itself, so it unpacks to <name>/SKILL.md
+            (cd "$plugin/skills" && zip -qr "$GITHUB_WORKSPACE/dist/$name.zip" "$name" -x "*/__pycache__/*" "*.DS_Store")
+          done
+          (cd "$plugin" && zip -qr "$GITHUB_WORKSPACE/dist/mavan-seo.plugin" . -x "*/__pycache__/*" "*.DS_Store")
+          ls -l dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          notes="Download the ZIP for the skill you want and upload it in Claude under Customize > Skills. Paid plans can instead add this repo as a plugin marketplace to get updates automatically (see the README)."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # Same version merged again: refresh the files in place.
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* --title "mavan-seo $VERSION" --notes "$notes" --latest
+          fi

@@ -7,9 +7,9 @@ description: Run Mavan's information architecture (IA) audit for a client site f
 
 Full SOP: the "Information Architecture Audit Process" page in Notion. This skill is its Step 4 prompt, turned into scripts plus the judgment calls the scripts can't make. The output is a diagnosis with suggested actions, not the new structure: a person decides the target architecture.
 
-Template: https://docs.google.com/spreadsheets/d/1uLh1ceuPOhxVeTmIi7dlTbAFYDaIk_BhjaQGNpxHVu4/edit (file id `1uLh1ceuPOhxVeTmIi7dlTbAFYDaIk_BhjaQGNpxHVu4`). Model output: the Zare Information Architecture Audit sheet linked from the SOP.
+Template: https://docs.google.com/spreadsheets/d/1uLh1ceuPOhxVeTmIi7dlTbAFYDaIk_BhjaQGNpxHVu4/edit (file id `1uLh1ceuPOhxVeTmIi7dlTbAFYDaIk_BhjaQGNpxHVu4`).
 
-Scripts do every count, match and join; never estimate a number by reading. `$SKILL` below is this skill's folder: the base directory shown when the skill loads (`${CLAUDE_SKILL_DIR}` in Claude Code). Set it once in the shell, e.g. `SKILL=<that folder>`. Scripts need Python 3 with pandas and openpyxl (`pip install --break-system-packages pandas openpyxl` if missing). Work in a folder named after the client (e.g. `zare-ia/`) with a `work/` subfolder, and keep a task list with one item per step below.
+Scripts do every count, match and join; never estimate a number by reading. `$SKILL` below is this skill's folder: the base directory shown when the skill loads (`${CLAUDE_SKILL_DIR}` in Claude Code). Set it once in the shell, e.g. `SKILL=<that folder>`. Scripts need Python 3 with pandas and openpyxl (`pip install --break-system-packages pandas openpyxl` if missing). Work in a folder named after the client (e.g. `client-ia/`) with a `work/` subfolder, and keep a task list with one item per step below.
 
 ## What you need
 
@@ -46,8 +46,8 @@ Follow [references/composio.md](references/composio.md). Composio keeps large AP
 Write `work/config.json`:
 
 ```json
-{"client": "Zare Cosmetic Surgery", "domain": "zarecosmeticsurgery.com", "city": "Rochester Hills, MI",
- "other_cities": ["Rochester", "Troy", "Birmingham"], "brand_terms": ["zare"],
+{"client": "Example Med Spa", "domain": "examplemedspa.com", "city": "Springfield, IL",
+ "other_cities": ["Chatham", "Rochester"], "brand_terms": ["example med spa", "example"],
  "crawler": "Sitebulb", "crawl_date": "2026-10-20"}
 ```
 
