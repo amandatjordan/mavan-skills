@@ -4,7 +4,7 @@
 
 ## 1. Find the property
 
-Call `COMPOSIO_SEARCH_TOOLS` (use case: list Search Console sites; query search analytics by page and query; run a GA4 report). Its connection status lists the Search Console properties. Pick the one for the domain, preferring `sc-domain:`, and copy it exactly as listed. If neither Search Console nor GA4 shows an active connection, tell the person Composio needs Google Search Console and Google Analytics connected with the Mavan Google login (SOP Step 1) and continue without them.
+Call `COMPOSIO_SEARCH_TOOLS` (use case: list Search Console sites; query search analytics by page and query; run a GA4 report). Its connection status lists the Search Console properties. Pick the one for the domain, preferring `sc-domain:`, and copy it exactly as listed. If neither Search Console nor GA4 shows an active connection, tell the person Composio needs Google Search Console and Google Analytics connected with a Google account that has access to the client's properties, and continue without them.
 
 ## 2. Load the script
 
@@ -39,5 +39,5 @@ Every block carries a row count and checksum. A block that fails was copied wron
 
 analyze.py's `next_steps.md` prints two more workbench calls. Run each and save its block to `work/gsc/` the same way, then re-run gsc_import.py and analyze.py:
 
-- `ia_crawl_split([...])`: the SOP's migration check split into URLs live in the crawl vs not, for the Read Me table. It needs the crawl, which Composio can't see, so analyze.py passes it the ids of pages that aren't live.
+- `ia_crawl_split([...])`: the migration check split into URLs live in the crawl vs not, for the Read Me table. It needs the crawl, which Composio can't see, so analyze.py passes it the ids of pages that aren't live.
 - `ia_pair_queries([...])`: top shared searches for the duplicate and city-variant pairs. Rounds add up, so after a later review round you only run it for the new pairs.

@@ -5,7 +5,7 @@ description: Run Mavan's Service Gap Audit for a medspa or plastic surgery site 
 
 # Service Gap Audit (Mavan SOP)
 
-Full SOP: the "Service Gap Audit" page in Notion. Model output: the agelesscdga.com example workbook attached to that page.
+This skill carries the whole process and does not need the written SOP; a copy in a project management tool is documentation for people.
 
 The audit answers four questions for every service in the taxonomy: does the practice offer it, does it have a page Google can index, does that page have real content, and how much national search demand is behind it. The deliverable is the Recommendations tab: one row per page to build or fix.
 

@@ -2,13 +2,13 @@
 
 Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so Claude can sync them to the whole team from this repository.
 
-| Skill | What it does | SOP |
+| Skill | What it does | Matching SOP |
 | --- | --- | --- |
-| `information-architecture-audit` | Classifies every page, finds duplicate intent, path and link problems, and fills the IA Audit template | Notion: Information Architecture Audit Process |
-| `internal-linking-audit` | Finds internal linking opportunities for priority pages and builds the implementation sheet | Notion: Internal Linking Audit |
-| `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Notion: Content Prune & Merge |
-| `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Notion: Service Gap Audit |
-| `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and recommends broken-backlink fixes and link opportunities, from Ahrefs or Semrush exports | Notion: Backlink Gap |
+| `information-architecture-audit` | Classifies every page, finds duplicate intent, path and link problems, and fills the IA Audit template | Information Architecture Audit Process |
+| `internal-linking-audit` | Finds internal linking opportunities for priority pages and builds the implementation sheet | Internal Linking Audit |
+| `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
+| `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
+| `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and recommends broken-backlink fixes and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
 
 ## Layout
 

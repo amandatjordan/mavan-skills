@@ -33,7 +33,7 @@ Copy every line between `##STATUS` and `##END` (not the markers) and append it t
 
 ## Search Console
 
-Call `COMPOSIO_SEARCH_TOOLS` (use case: list Search Console sites; query search analytics by page). Its connection status lists the properties. Pick the one for the domain, preferring `sc-domain:`, and copy it exactly as listed. If there's no active Search Console connection, say Composio needs Google Search Console connected with the Mavan Google login and carry on without it.
+Call `COMPOSIO_SEARCH_TOOLS` (use case: list Search Console sites; query search analytics by page). Its connection status lists the properties. Pick the one for the domain, preferring `sc-domain:`, and copy it exactly as listed. If there's no active Search Console connection, say Composio needs Google Search Console connected with a Google account that has access to the client's property, and carry on without it.
 
 Pull clicks and impressions by page for the last 12 months with `GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY` (dimensions `["page"]`, `row_limit` 25000, `start_row` to paginate until a page returns fewer rows). Do it inside the workbench and print only the top pages per topic you need, so the result stays small. Use it to choose between two equally good redirect targets for a broken backlink.
 
