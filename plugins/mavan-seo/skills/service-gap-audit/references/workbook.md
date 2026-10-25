@@ -8,12 +8,13 @@ Arial throughout, header row dark blue with white bold text, frozen header, Exce
 Two columns (label, text): Inputs (crawler, URL count, crawl date, taxonomy version, GSC yes/no), Fields used, Practice type and service area, Level names, Offered Status definitions, Coverage definitions, Priority definitions, Competitor Volume (ranks gaps against each other; not local demand), Limits of export-only (two H2s, no body text: a Sub-Service covered lower on a page shows as not found), Thresholds, Recommendations tab, Search volume (how keywords are assigned and which are excluded), Yellow columns.
 
 ### 2. Recommendations (the deliverable)
-Row 1 header groups: **Page** over columns A–C, **Search Volume** over D–E. Row 2 column headers:
+Row 1 header groups: **Page** over columns A–D, **Search Volume** over E–F. Row 2 column headers:
 
 | Column | Content |
 | --- | --- |
 | Service Page Recommended | Service name; Sub-Service or Brand / Device with its parent, e.g. "Lip Filler (Dermal Filler)", "Botox (Neurotoxin)" |
-| Current URL | Path of the existing page, blank for a new page |
+| Current URL | Path of the existing page for this row, blank for a new page |
+| Existing Brand / Sub-Service Page(s) | Only for "Only has a brand/product page" and "Only has Sub-Service pages" rows: every page under this Service as "Node: path", separated by "; " (e.g. "SkinPen: /services/skinpen-microneedling-canandaigua-ny"). Blank on every other row |
 | Why Recommended | One label from the list below |
 | Relevant Keywords | One cell, comma-separated, highest volume first |
 | Total National Search Volume | Sum of those keywords |
@@ -58,3 +59,4 @@ Every check passes before the workbook goes to the person:
 - The top 10 Recommendations rows' Relevant Keywords contain no other city and no keyword from a different service. A wrong-service keyword means a match term is too broad: tighten it in your working copy, re-run, and list it for the taxonomy pull request.
 - Every Why Recommended value is one of the ten labels.
 - Totals in Total National Search Volume equal the sum of that row's Keyword Map rows.
+- Every "Only has a brand/product page" and "Only has Sub-Service pages" row names at least one page in Existing Brand / Sub-Service Page(s), and that page's primary node in Page Inventory belongs to the row's Service.
