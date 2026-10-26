@@ -15,7 +15,7 @@ Sites are built differently. Never assume folder names, page types or a CMS: map
 
 - **Crawl exports** from Sitebulb or Screaming Frog: (1) URL export (every URL, not just 200s), (2) all internal links export, (3) redirects/errors export. Sitebulb: the URLs export, Links > Internal Links, and the redirected URLs export. Screaming Frog: Internal > All, Bulk Export > Links > All Inlinks, and Response Codes > Redirection (3xx) / Client Error (4xx). The Sitebulb connector cannot replace these files. Load these files in code only, never print or paste one into the chat; the links file is often 20MB+.
 - **Client facts**: domain, main city, brand terms (client name, doctor's name, misspellings). Ask in one question for whatever is missing.
-- **Optional**: a bulk backlink export (referring domains per page, from Ahrefs or Semrush), an IA audit All Pages tab (use it only when the person asks), a newer pasted copy of the SOP (it wins over references/rules.md; list the differences in the report).
+- **Optional**: a bulk backlink export (referring domains per page, from Ahrefs or Semrush), an IA audit All Pages tab (when one is attached, use its page types), a newer pasted copy of the SOP (it wins over references/rules.md; list the differences in the report).
 
 ## Step 1: Check access
 
@@ -71,4 +71,4 @@ In chat, plain language:
 - The skim list and review queue counts (references/rules.md, Review triage).
 - The findings that change the plan: archives the crawl missed, demand with no page (404s or gaps), technical bugs (broken canonicals, case duplicates), menu links to pages being redirected, Needs Discussion items.
 - The judgment calls, anything you could not get (no overlap data, no GA4, no page + query export, missing export columns), and any differences from a pasted SOP.
-- The next human step: pull Referring Domains for every Merge and Remove row that has none, then work the review queue by page type. Skim-list rows only need the suggestion copied into Next Steps.
+- The next human step: pull Referring Domains for every Merge and Remove row that has none, then work the review queue by page type. Skim-list rows only need the suggestion copied into Next Steps. Once Next Steps are filled in, the SOP's Step 6 check and its final redirect-map check (Step 7) still need to run, because this skill's QA only covers its own suggestions.
