@@ -23,7 +23,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import is_live, load_json, load_status, norm_url, reg_domain, bare_domain, save_json  # noqa: E402
-from prep import OPP_TYPES, default_priority, guess_type  # noqa: E402
+from prep import OPP_TYPES, default_priority, dofollow_label, guess_type  # noqa: E402
 
 PRIORITIES = ['High', 'Medium', 'Low']
 STATUSES_DIS = ['Monitor', 'Review closer', 'Disavow candidate - matches manual action']
@@ -102,12 +102,12 @@ def dropdown(ws, header, col_name, values, n):
     dv.add(f'{letter}2:{letter}{n + 1}')
 
 
-BROKEN_COLS = ['url', 'code', 'refdomains', 'best_domain', 'best_authority', 'evidence', 'map_target']
+BROKEN_COLS = ['url', 'code', 'refdomains', 'refdomains_total', 'best_domain', 'best_authority', 'evidence', 'map_target']
 # Gap domains prep.py filtered out that decisions.json may still add back (a person's call, not a safety rule).
 OVERRIDABLE = {'one competitor, low authority', 'junk domain (spam TLD or SEO-tool name)'}
 
 
-def derive_broken(links, status, client, rmap, needed):
+def derive_broken(links, status, client, rmap, needed, noise=()):
     """Broken client URLs found from the live status of every URL the backlinks point at.
 
     Broken = 404, 410, 5xx, or 403 while the homepage answers 200 (checked after following redirects, so a
@@ -137,8 +137,10 @@ def derive_broken(links, status, client, rmap, needed):
             forbidden.append(t)
         elif not (code in ('404', '410') or code.startswith('5')):
             continue
-        best = g.sort_values('authority', ascending=False, na_position='last').iloc[0]
-        rows.append({'url': t, 'code': code, 'refdomains': g['domain'].nunique(), 'best_domain': best['domain'],
+        real = g[~g['domain'].isin(noise)]  # priority counts real referring domains, not noise networks
+        best = (real if not real.empty else g).sort_values('authority', ascending=False, na_position='last').iloc[0]
+        rows.append({'url': t, 'code': code, 'refdomains': real['domain'].nunique(),
+                     'refdomains_total': g['domain'].nunique(), 'best_domain': best['domain'],
                      'best_authority': best['authority'], 'evidence': best['source_url'],
                      'map_target': rmap.get(t, '')})
     warns = []
@@ -203,7 +205,7 @@ def main():
                          'Client URL Linked To': g['target_url'].mode().iloc[0],
                          'Anchor Text (most common)': g['anchor'].fillna('').mode().iloc[0],
                          'Links from Domain': len(g), metric: g['authority'].max(),
-                         'Domain Organic Traffic': g['traffic'].max(), 'Dofollow?': '',
+                         'Domain Organic Traffic': g['traffic'].max(), 'Dofollow?': dofollow_label(g),
                          'First Seen': '', 'Why Flagged': o.get('why_flagged', ''),
                          'Pattern Group': o.get('pattern_group', 'Added on review'),
                          'Suggested Status': o.get('status', 'Review closer')})
@@ -230,7 +232,7 @@ def main():
     # ------------------------------------------------ Recommendations: broken backlinks
     br = read(W, 'broken.csv')
     rmap = load_json(os.path.join(W, 'redirect_map.json'), {}) or {}
-    derived_br, derived_warns = derive_broken(links, status, client, rmap, needed)
+    derived_br, derived_warns = derive_broken(links, status, client, rmap, needed, noise)
     soft.extend(derived_warns)
     export_urls = set(br['url']) if 'url' in br else set()
     br = pd.concat([br, derived_br[~derived_br['url'].isin(export_urls)]], ignore_index=True) if not derived_br.empty else br
@@ -280,7 +282,9 @@ def main():
         pr = o.get('priority') or ('High' if n >= 5 or (not blank(auth) and auth >= 40) else
                                    'Medium' if n >= 2 or (not blank(auth) and auth >= 20) else 'Low')
         code = '' if blank(r.get('code')) else str(r['code']).replace('.0', '')
-        found = f'Returns {st["final_status"] or st["status"] or code or "an error"}; {n} referring domain{"s link" if n != 1 else " links"} here'
+        tot = 0 if blank(r.get('refdomains_total')) else int(r['refdomains_total'])
+        total_note = f' ({tot} counting noise domains)' if tot > n else ''
+        found = f'Returns {st["final_status"] or st["status"] or code or "an error"}; {n} referring domain{"s link" if n != 1 else " links"} here{total_note}'
         if not blank(r.get('best_domain')):
             found += f', strongest {r["best_domain"]}' + ('' if blank(auth) else f' ({metric} {auth:.0f})')
         rec.append({'Priority': pr, 'Type': 'Broken backlink', 'Domain / Source': clean(r.get('best_domain')),

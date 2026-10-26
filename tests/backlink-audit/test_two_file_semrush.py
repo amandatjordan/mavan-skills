@@ -208,6 +208,40 @@ class TwoFileSemrushAudit(unittest.TestCase):
             if r['Type'] == 'Link opportunity':
                 self.assertIsNone(r['Evidence URL'])
 
+    def test_disavow_as_is_page_level_max_and_flagged(self):
+        summ = json.loads((self.work / 'prep_summary.json').read_text())
+        self.assertTrue(summ['authority_is_page_level'])
+        self.assertIn('PAGE-level', self.prep.stdout + ' '.join(summ.get('notes', [])))
+        _, rows = self.tab('Disavow Review')
+        real = [r for r in rows if r['Pattern Group'] != 'Noise - auto-generated, ignore']
+        for r in real:
+            self.assertEqual(r['AS'], 31)
+
+    def test_noise_row_has_no_as_and_counts_domains(self):
+        _, rows = self.tab('Disavow Review')
+        noise = [r for r in rows if r['Pattern Group'] == 'Noise - auto-generated, ignore'][0]
+        self.assertIsNone(noise['AS'])
+        self.assertEqual(noise['Links from Domain'], N_SPAM)
+
+    def test_dofollow_yes_no_mixed(self):
+        import pandas as pd
+        sys.path.insert(0, str(SKILL / 'scripts'))
+        from prep import dofollow_label
+        self.assertEqual(dofollow_label(pd.DataFrame({'nofollow': [False, False]})), 'Yes')
+        self.assertEqual(dofollow_label(pd.DataFrame({'nofollow': [True, True]})), 'No')
+        self.assertEqual(dofollow_label(pd.DataFrame({'nofollow': [True, False]})), 'Mixed')
+
+    def test_handoff_noise_patterns_and_tlds(self):
+        sys.path.insert(0, str(SKILL / 'scripts'))
+        from prep import NOISE_TEXT, junk_domain
+        for s in ['example.com/all/356/x', 'Aged Domains for sale', 'SEO Domain Research', 'website stats for x',
+                  'linkly.agency', 'Directory Pages Index', 'niche edits', 'tiered link building']:
+            self.assertTrue(NOISE_TEXT.search(s), s)
+        for d in ['x.icu', 'x.sbs', 'x.cfd', 'seotools.com']:
+            self.assertTrue(junk_domain(d), d)
+        for d in ['localdirectory.com', 'medspalistings.com', 'frank.com']:
+            self.assertFalse(junk_domain(d), d)  # "directory"/"listing" are reviewed, not auto-removed
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -21,6 +21,18 @@ Scripts do every count, match and join; never estimate a number by reading. `$SK
 - **Optional**: a planned redirect map as CSV (e.g. a prune & merge Redirects tab), so broken-backlink redirects match planned redirects.
 - **Composio**, for the live URL checks ([references/composio.md](references/composio.md)). Search Console doesn't need to be connected. Without Composio, ask the person to run the status check snippet themselves or list the URLs for them to check.
 
+## Step 0: Preflight
+
+Do these before any analysis, in one message to the person if anything is missing:
+
+1. **Files reachable.** Files attached only in chat can't be seen by the Composio workbench (a separate machine). If the audit will load exports in Composio instead of here, ask the person to put them in Google Drive and open each as a Google Sheet (File > Save as Google Sheets). Test one read before starting.
+2. **Composio access.** Test Drive and Sheets access first. If Drive answers 403 (ACCESS_TOKEN_SCOPE_INSUFFICIENT) even though the connection shows active, use the Sheets route and don't retry Drive.
+3. **Approvals up front.** Ask the person to approve read-only GET requests to the client domain (status checks, sitemap) and sandbox file access now, so the permission layer doesn't block mid-run.
+4. **Output name.** If Drive already has a sheet with the output name, don't touch it: add a version suffix such as "(v2)". Copy headers from the TEMPLATE_Backlink_Audit sheet.
+5. **Infer, echo back, ask only if missing.** Domain = most common host in the backlinks `Target url` column. Tool = column names (`Page ascore` means Semrush; `Domain rating` means Ahrefs). Competitors = the gap file's column headers. Manual Actions result and date = from the person. Show what you inferred in one line and continue unless the person corrects it.
+
+**If a tool is blocked, stop, say what you tried and why, and ask. Do not work around it.**
+
 ## Step 1: Config and exports
 
 Identify each attached file by its header row (references/exports.md), then write `work/config.json`:
@@ -54,7 +66,7 @@ Open `work/disavow.csv` and `work/opportunities.csv`, run build.py once (Step 4)
 
 In the order of the tabs:
 
-1. **Broken backlinks** (Recommendations): `work/broken_found.csv` lists the client URLs that status.tsv shows as broken, with who links to them. Give each a target and action. Done when every still-broken URL has a target or `drop`.
+1. **Broken backlinks** (Recommendations; priority counts non-noise referring domains and the total is shown too): `work/broken_found.csv` lists the client URLs that status.tsv shows as broken, with who links to them. Give each a target and action. Done when every still-broken URL has a target or `drop`.
 2. **Link opportunities** (Recommendations): set the real type, a specific `do_this` for High rows and every Other row, the target page, and `include: false` for link sellers and irrelevant sites. For High rows where the type isn't obvious, open the Evidence URL when there is one (Semrush has none: search the domain). Done when no kept row is type Other without a `do_this`.
 3. **Disavow Review**: look at every row; drop false positives, move scrapers to noise, group patterns, add anything prep.py missed. Done when every remaining row is something a person should actually look at, and no row says disavow candidate unless `manual_action` is `unnatural-to`.
 
@@ -73,6 +85,7 @@ Send the .xlsx. To use it in Google Sheets, the person opens a new blank sheet a
 Reply in plain language:
 - The GSC manual actions result and what it means for disavowing (one line). If it was `unknown`, say it still needs checking and where.
 - The 3 biggest findings and the top 5 actions.
+- Say what AS means on Disavow Review: if prep.py's notes say it is page-level (Semrush backlinks export), it is the highest page score among that domain's linking pages, not the domain's AS.
 - Counts: broken URLs to fix and already fixed, opportunities kept, removed and over the 75 cap, Disavow Review rows (and noise domains summarized). Include the client's referring domains and backlinks, and the link-gap domains per competitor, from `work/prep_summary.json`: there is no Rollup tab, so this is the baseline the next audit compares against.
 - What's missing or uncertain: capped exports, columns left blank because an optional export wasn't attached (linking-domain authority on Semrush without referring domains, GSC and risk-score columns), URLs that blocked the status check.
 - What the person reviews next, from references/process.md § After delivery, for this audit's manual action result.

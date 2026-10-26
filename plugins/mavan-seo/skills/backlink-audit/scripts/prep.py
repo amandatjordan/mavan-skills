@@ -42,6 +42,7 @@ SPEC = {
         'anchor': (['Anchor', 'Anchor text'], False),
         'title': (['Referring page title', 'Source title', 'Title'], False),
         'authority': (['Domain rating', 'DR', 'Domain ascore', 'Authority Score', 'AS'], False),
+        'page_authority': (['Page ascore', 'Page AS', 'Page authority score'], False),
         'traffic': (['Domain traffic', 'Referring domain traffic'], False),
         'nofollow': (['Nofollow', 'No follow'], False),
         'sitewide': (['Sitewide'], False),
@@ -119,10 +120,14 @@ GENERIC = {'', 'here', 'click here', 'website', 'this website', 'link', 'read mo
            '[image]', 'image', 'noname', 'empty anchor', 'no anchor', 'view website', 'official website'}
 # Link-seller / PBN networks: matched against a domain's linking page URLs, anchors and page titles.
 # These domains go to the noise summary row, not one Disavow Review row each.
-NOISE_TEXT = re.compile(r'link-outreach-services|premium link building|dofollow link building|dofollow backlinks|'
-                        r'guest posts, my sales|backlink|\bpbn\b|aged domains', re.I)
+# A domain is noise when ANY of its rows matches (domain level, not row level).
+NOISE_TEXT = re.compile(r'link-outreach-services|/all/356/|premium link building|dofollow link building|'
+                        r'dofollow backlinks|guest posts?|niche edits?|tiered link building|aged domains?|'
+                        r'seo domain research|website stats|url shared|domain report|any seo resource|'
+                        r'directory pages index|linkly\.agency|backlink|\bpbn\b', re.I)
 # Link-gap domains that are never real opportunities: junk TLDs and SEO-tool names in the domain.
-JUNK_TLD = {'shop', 'store', 'space', 'site', 'online', 'website', 'xyz'}
+JUNK_TLD = {'shop', 'store', 'space', 'site', 'online', 'website', 'xyz', 'icu', 'sbs', 'cfd', 'top', 'buzz',
+            'cyou', 'click', 'monster', 'quest', 'rest'}
 JUNK_WORDS = ['seo', 'backlink', 'checker', 'dapa', 'serp']
 COMMERCIAL = ['botox', 'filler', 'lip ', 'laser', 'hair removal', 'med spa', 'medspa', 'medical spa',
               'plastic surg', 'cosmetic', 'facelift', 'rhinoplasty', 'liposuction', 'lipo', 'tummy tuck',
@@ -190,6 +195,12 @@ def junk_domain(dom):
     if d.rsplit('.', 1)[-1] in JUNK_TLD or any(w in label for w in JUNK_WORDS):
         return True
     return bool(re.search(r'(^|-)rank', label))
+
+
+def dofollow_label(g):
+    """Yes = every link from the domain is dofollow, No = none are, Mixed = some of each."""
+    nf = g['nofollow'].astype(bool)
+    return 'No' if nf.all() else 'Yes' if not nf.any() else 'Mixed'
 
 
 def default_priority(n, auth, t):
@@ -295,6 +306,7 @@ def main():
         'anchor': col(df, c['anchor']).fillna('').astype(str) if c['anchor'] else '',
         'title': col(df, c['title']).fillna('') if c['title'] else '',
         'authority': col(df, c['authority'], num), 'traffic': col(df, c['traffic'], num),
+        'page_authority': col(df, c['page_authority'], num) if c['page_authority'] else float('nan'),
         'nofollow': col(df, c['nofollow'], truthy) if c['nofollow'] else False,
         'sitewide': col(df, c['sitewide'], truthy) if c['sitewide'] else False,
         'first_seen': pd.to_datetime(col(df, c['first_seen']), errors='coerce', utc=True)
@@ -311,13 +323,23 @@ def main():
     links['domain'] = links['source_url'].map(reg_domain)
     links = links[links['domain'] != client]
     links['authority'] = links['authority'].fillna(links['domain'].map(ref_auth))
+    # Semrush backlinks rows carry a PAGE score, not the domain's AS. Where no domain-level score exists,
+    # use the highest page score among the domain's linking pages and say so (summary + notes).
+    page_max = links.groupby('domain')['page_authority'].transform('max')
+    use_page = links['authority'].isna() & page_max.notna()
+    summary['authority_is_page_level'] = bool(use_page.any())
+    links['authority'] = links['authority'].fillna(page_max)
     links['traffic'] = links['traffic'].fillna(links['domain'].map(ref_traffic))
     links.to_csv(os.path.join(a.out, 'links.csv'), index=False)
     if not client_refs:
         client_refs = set(links['domain'])
-    if links['authority'].isna().all():
-        notes.append(f'{metric} is blank on the Disavow Review tab: the backlinks export has page-level scores '
-                     f'only, not the linking domain\'s {metric}. Attach the referring domains export to fill it.')
+    if summary['authority_is_page_level']:
+        notes.append(f'{metric} on the Disavow Review tab is the highest PAGE-level score among each domain\'s linking '
+                     f'pages (the backlinks export has no domain-level score). Label it that way in the reply; '
+                     f'attach the referring domains export for the domain score.')
+    elif links['authority'].isna().all():
+        notes.append(f'{metric} is blank on the Disavow Review tab: the backlinks export has no authority score. '
+                     f'Attach the referring domains export to fill it.')
 
     # ------------------------------------------------ Semrush Backlink Audit (optional)
     tox = {}
@@ -430,7 +452,7 @@ def main():
                 'Referring Domain': dom, 'Example Linking URL': g['source_url'].iloc[0],
                 'Client URL Linked To': g['target_url'].mode().iloc[0], 'Anchor Text (most common)': top_anchor,
                 'Links from Domain': n, metric: auth, 'Domain Organic Traffic': traf,
-                'Dofollow?': 'Yes' if (~g['nofollow'].astype(bool)).any() else 'No',
+                'Dofollow?': dofollow_label(g),
                 'First Seen': first.strftime('%Y-%m-%d') if pd.notna(first) else '',
                 'Tool Risk Score': (t['score'] if t else None), 'Tool Risk Markers': '; '.join(sorted(t['markers'])) if t else '',
                 'In GSC Links Report?': ('Y' if dom in gsc else 'N') if gsc else '',
