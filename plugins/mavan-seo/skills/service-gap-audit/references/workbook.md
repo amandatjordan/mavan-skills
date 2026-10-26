@@ -37,7 +37,7 @@ Rows: every gap at Service or Sub-Service level, plus Brand / Device rows whose 
 Service Page Recommended, Current URL, Keyword, National Search Volume. One row per keyword.
 
 ### 4. Excluded Keywords
-Keyword, National Search Volume, Service Page Recommended, Exclusion Reason, Keep? (Y to add back) in yellow. Only keywords that would have counted for a Recommendations row. Sort place-name-rule rows first.
+Keyword, National Search Volume, Service Page Recommended, Exclusion Reason, Keep? (Y to add back) in yellow. Only keywords that would have counted for a Recommendations row. Sort Geo Modified rows first.
 
 ### 5. Gap List
 Priority (P1 red fill, P2 yellow, P3 green, Ask blue), Gap Type, Category, Service, Level, Service / Sub-Service / Brand, Offered Status, Offered Evidence, Coverage, Best Page, Content Words, Indexability, All Pages for Node ("path (Nw, indexability)"; ...), Competitor Volume, Recommendation (page brief for empty Service hubs), Client Confirmed (yellow, Yes / No / Planned dropdown), Notes (yellow). Sorted by Priority, Gap Type, Competitor Volume.
