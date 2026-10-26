@@ -2,7 +2,7 @@
 
 Builds synthetic exports with Semrush's column headers, runs prep.py and build.py with no --map and no
 hand-made CSVs, and checks the workbook. The only extra inputs are the ones a person or Composio supplies:
-config.json, the live status check (status.tsv, faked here) and the review decisions (decisions.json).
+config.json and the review decisions (decisions.json). Nothing is checked live.
 
 Run from the repo root:  python3 -m unittest discover -s tests/backlink-audit -v
 """
@@ -26,8 +26,7 @@ BACKLINK_HEADER = ['Page ascore', 'Source title', 'Source url', 'Target url', 'A
                    'First seen', 'Last seen', 'New link', 'Lost link']
 GAP_HEADER = ['Domain', 'Domain ascore', CLIENT] + COMPS + ['Matches']
 
-TARGETS = [HOME, f'{HOME}services/botox/', f'{HOME}services/', f'{HOME}old-botox-page/', f'{HOME}sevices/',
-           f'{HOME}blocked-page/', f'{HOME}redirected/']
+TARGETS = [HOME, f'{HOME}services/botox/', f'{HOME}services/']
 N_REAL, N_SPAM = 25, 60
 
 
@@ -45,7 +44,11 @@ def backlinks_rows():
         rows.append(link(f'https://spamnet{i}.xyz/dir/link-outreach-services-{10000 + i}/', HOME,
                          f'Premium Link Building Experts for Better Rankings {CLIENT}',
                          title='Premium Link Building Experts'))
-    rows.append(link('https://lostsite.com/old/', HOME, 'Example Med Spa', lost='true'))
+    # lost links: a real site, a domain that still links from another page, and a spam one (left out)
+    rows.append(link('https://lostsite.com/old/', f'{HOME}services/botox/', 'Example Med Spa', lost='true'))
+    rows.append(link('https://lostsite.com/other/', HOME, 'Example Med Spa', lost='true'))
+    rows.append(link('https://localsite1.com/old-post/', HOME, 'Example Med Spa', lost='true'))
+    rows.append(link('https://spamnet1.xyz/dir/link-outreach-services-1/', HOME, 'Premium Link Building', lost='true'))
     return rows
 
 
@@ -69,21 +72,6 @@ def write_csv(path, header, rows):
         w.writerows(rows)
 
 
-def fake_status(needed):
-    """What the Composio status check would return for the fixture's client URLs."""
-    out = []
-    for u in needed:
-        if u.endswith('/old-botox-page/') or u.endswith('/sevices/'):
-            out.append(f'{u}\t404\t\t')
-        elif u.endswith('/blocked-page/'):
-            out.append(f'{u}\t403\t\t')
-        elif u.endswith('/redirected/'):
-            out.append(f'{u}\t301\t{HOME}services/\t200')
-        else:
-            out.append(f'{u}\t200\t\t')
-    return '\n'.join(out) + '\n'
-
-
 class TwoFileSemrushAudit(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -99,13 +87,8 @@ class TwoFileSemrushAudit(unittest.TestCase):
             'safe_domains': []}))
         cls.prep = cls.run_py('prep.py', '--config', str(cls.work / 'config.json'), '--out', str(cls.work),
                               '--backlinks', str(cls.root / 'backlinks.csv'), '--gap', str(cls.root / 'gap.csv'))
-        needed = (cls.work / 'status_needed.txt').read_text().split()
-        (cls.work / 'status.tsv').write_text(fake_status(needed))
         (cls.work / 'decisions.json').write_text(json.dumps({
-            'broken': {
-                f'{HOME}old-botox-page/': {'target': f'{HOME}services/botox/', 'action': '301'},
-                f'{HOME}sevices/': {'target': f'{HOME}services/', 'action': 'typo'},
-                f'{HOME}blocked-page/': {'target': f'{HOME}services/', 'action': '301'}},
+            'lost': {'lostsite.com': {'priority': 'High', 'do_this': 'Ask them to restore the link.'}},
             'opportunities': {
                 # review step: every kept row of type Other needs a specific action
                 'frankfurtmedspa.com': {'type': 'Industry publication / blog'},
@@ -144,15 +127,22 @@ class TwoFileSemrushAudit(unittest.TestCase):
         opp = {r['Domain / Source']: r for r in rows if r['Type'] == 'Link opportunity'}
         self.assertEqual(opp['tampabaylocalnews.com']['AS'], 55)
 
-    def test_every_client_target_is_checked_live(self):
-        needed = set((self.work / 'status_needed.txt').read_text().split())
-        for t in TARGETS:
-            self.assertIn(t, needed)
+    def test_no_live_check_files(self):
+        self.assertFalse((self.work / 'status_needed.txt').exists())
+        self.assertNotIn('Composio', self.prep.stdout + self.build.stdout)
 
-    def test_broken_backlinks_derived_from_live_status(self):
+    def test_lost_backlinks_from_export(self):
         _, rows = self.tab('Recommendations')
-        broken = {r['Client URL Affected'] for r in rows if r['Type'] == 'Broken backlink'}
-        self.assertEqual(broken, {f'{HOME}old-botox-page/', f'{HOME}sevices/', f'{HOME}blocked-page/'})
+        lost = {r['Domain / Source']: r for r in rows if r['Type'] == 'Lost backlink'}
+        self.assertEqual(set(lost), {'lostsite.com', 'localsite1.com'})  # the spam network is left out
+        self.assertEqual(lost['lostsite.com']['Referring Domains or Competitors Linking'], 2)
+        self.assertEqual(lost['lostsite.com']['Priority'], 'High')
+        self.assertEqual(lost['lostsite.com']['Do This'], 'Ask them to restore the link.')
+        self.assertIn('still links', lost['localsite1.com']['What We Found'])
+        self.assertEqual(lost['localsite1.com']['Priority'], 'Low')
+        self.assertIsNone(lost['lostsite.com']['Target URL'])
+        summ = json.loads((self.work / 'prep_summary.json').read_text())
+        self.assertEqual(summ['lost_links'], 4)
 
     def test_two_tabs_recommendations_first(self):
         self.assertEqual(self.wb.sheetnames, ['Recommendations', 'Disavow Review'])
