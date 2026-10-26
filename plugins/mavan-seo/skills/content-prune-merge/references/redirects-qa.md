@@ -14,10 +14,12 @@ Columns: Source URL | Target URL | Notes (full URLs). They appear at the bottom 
    - Lands on a kept page in one hop: leave it off the tab (nothing to change). Lands on one after several hops: add it pointing straight at the final page, Notes `Chain removed (was A -> B -> C)`.
    - Lands on a page being merged or removed: repoint to that page's Suggested Target, following on until a kept page. Notes `Existing redirect - repointed (was X)`.
    - Lands on a 404 or missing page: suggest the closest kept page by topic, same treatment first. Notes start `SUGGESTED - check target`.
-2. **404s with demand**: every non-live URL with GSC impressions, GA4 sessions or internal links that returns 404 today. Suggest a target the same way, Notes `SUGGESTED - check target. Currently 404s; [the demand, e.g. 860 impressions for "vaser liposuction michigan"]`. Confirm the 404 with a live request when web access allows; otherwise say "per crawl".
+2. **404s with demand**: every non-live URL with GSC impressions, GA4 sessions or internal links that returns 404 today. Suggest a target the same way, Notes `SUGGESTED - check target. Currently 404s; [the demand, e.g. 860 impressions for "[treatment] [city]"]`. Confirm the 404 with a live request when web access allows; otherwise say "per crawl".
 3. **Junk folder wildcards**: one row per folder, Source `https://domain/folder/*`. Notes: "Junk folder wildcard - [what it is, how many]. Disable these archives in the SEO plugin so they do not regenerate".
 
-## QA (run before writing anything to the sheet)
+## QA (run once on the final set, before writing anything to the sheet)
+
+Do every check in code and list only what fails. Rerun only if the redirects change.
 
 Breaking issues first:
 
