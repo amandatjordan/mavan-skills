@@ -7,11 +7,10 @@ are printed back (see ia_emit).
 How to run (one COMPOSIO_REMOTE_WORKBENCH call per line; state persists between calls):
   1. The whole file, with CONFIG filled in.            -> defines everything, prints nothing big
   2. ia_ga4_properties()                               -> only if CONFIG['ga4_property'] is unknown
-  3. ia_months()                                       -> 16-month migration check table
-  4. ia_window('YYYY-MM-DD', 'YYYY-MM-DD')             -> pulls the analysis window (+ GA4)
-  5. ia_build()                                        -> builds tables, prints the part list
-  6. ia_emit('<table>', <part>)                        -> once per part listed by ia_build()
-  7. ia_pair_queries([(id_a, id_b), ...])              -> later, for the duplicate pairs kept
+  3. ia_window()                                       -> pulls the last 6 full months (+ GA4)
+  4. ia_build()                                        -> builds tables, prints the part list
+  5. ia_emit('<table>', <part>)                        -> once per part listed by ia_build()
+  6. ia_pair_queries([(id_a, id_b), ...])              -> later, for the duplicate pairs kept
 Every step saves to /mnt/files/ia/, so if the sandbox restarts, re-run step 1 and carry on.
 """
 import json, os, re, zlib, datetime as _dt
@@ -28,6 +27,8 @@ CONFIG = {
 IA_DIR = '/mnt/files/ia'
 os.makedirs(IA_DIR, exist_ok=True)
 CHUNK_CHARS = 24000
+WINDOW_MONTHS = 6          # the analysis window: this many full calendar months
+NOOWNER_MIN_IMPR = 100     # a search must reach this many impressions in the window to be listed
 
 
 # ---------- URL normalizing (keep identical to normalize() in scripts/common.py) ----------
@@ -92,7 +93,7 @@ def _gsc(dims, start, end):
         start_row += limit
 
 
-def _month_ranges(n=16):
+def _month_ranges(n=WINDOW_MONTHS):
     last = _dt.date.today() - _dt.timedelta(days=3)
     first_of_this = last.replace(day=1)
     out, end = [], first_of_this - _dt.timedelta(days=1)
@@ -103,43 +104,13 @@ def _month_ranges(n=16):
     return out[::-1]
 
 
-def ia_months():
-    """16 full months by page. Prints the migration-check table and a suggested window."""
-    months = _month_ranges()
-    with ThreadPoolExecutor(8) as ex:
-        res = list(ex.map(lambda m: _gsc(['page'], m[0], m[1]), months))
-    per = []
-    for (s, e), rows in zip(months, res):
-        agg = defaultdict(lambda: [0, 0])
-        for r in rows:
-            k = ia_key(r['keys'][0])
-            agg[k][0] += r.get('clicks', 0)
-            agg[k][1] += r.get('impressions', 0)
-        per.append({'month': s[:7], 'pages': agg})
-    _save('months_pages', [{'month': m['month'], 'pages': m['pages']} for m in per])
-    last_keys = set(per[-1]['pages'])
-    table = []
-    for m in per:
-        clicks = sum(v[0] for v in m['pages'].values())
-        impr = sum(v[1] for v in m['pages'].values())
-        gone = sum(v[1] for k, v in m['pages'].items() if k not in last_keys)
-        table.append({'month': m['month'], 'clicks': int(clicks), 'impressions': int(impr),
-                      'gone_impr': int(gone), 'gone_pct': round(gone / impr, 3) if impr else 0})
-    _save('monthly', table)
-    # suggestion: a migration is the month after the last month where 25%+ of impressions
-    # went to URLs that are dead now, provided later months sit under 10%
-    sug, hi = None, [i for i, t in enumerate(table) if t['gone_pct'] >= 0.25]
-    if hi and all(t['gone_pct'] < 0.10 for t in table[hi[-1] + 1:-1]) and hi[-1] + 1 < len(table):
-        sug = table[hi[-1] + 1]['month']
-    print('month | clicks | impressions | impr on URLs with none last month | share')
-    for t in table:
-        print(f"{t['month']} | {t['clicks']} | {t['impressions']} | {t['gone_impr']} | {t['gone_pct']:.0%}")
-    print('Suggested migration month:', sug or 'none detected (use the last 3 full months)')
-    print('Last 3 full months:', months[-3][0], 'to', months[-1][1])
-
-
-def ia_window(start, end):
-    """Pulls page totals, page+query and GA4 landing pages for the analysis window."""
+def ia_window(start=None, end=None):
+    """Pulls page totals, page+query and GA4 landing pages for the analysis window.
+    With no dates it uses the last 6 full calendar months (no migration check)."""
+    if not start or not end:
+        months = _month_ranges()
+        start, end = months[0][0], months[-1][1]
+    print(f'Analysis window: {start} to {end}')
     _save('window', {'start': start, 'end': end})
     s, e = _dt.date.fromisoformat(start), _dt.date.fromisoformat(end)
     spans, cur = [], s
@@ -172,7 +143,7 @@ def ia_window(start, end):
                 'property': CONFIG['ga4_property'],
                 'dateRanges': [{'startDate': start, 'endDate': end}],
                 'dimensions': [{'name': 'landingPage'}],
-                'metrics': [{'name': 'sessions'}, {'name': 'engagedSessions'}, {'name': 'keyEvents'}],
+                'metrics': [{'name': 'sessions'}, {'name': 'keyEvents'}],
                 'limit': 100000, 'offset': off})
             if err:
                 print('GA4 failed:', err)
@@ -229,7 +200,7 @@ def _clean(s):
 def ia_build():
     page_rows, pq, ga = _load('page_rows'), _load('pq'), _load('ga4')
     pages = defaultdict(lambda: {'c': 0, 'i': 0, 'pw': 0.0, 'tq': '', 'tqi': 0, 'nb': 0,
-                                 's': 0, 'es': 0, 'ke': 0})
+                                 's': 0, 'ke': 0})
     utm, raw_clicks, raw_impr = defaultdict(lambda: [0, 0]), 0, 0
     for r in page_rows:
         raw = r['keys'][0]
@@ -259,7 +230,7 @@ def ia_build():
             if not lp or lp.startswith('(not set)'):
                 continue
             p = pages[ia_key(lp)]
-            p['s'] += row[1]; p['es'] += row[2]; p['ke'] += row[3]
+            p['s'] += row[1]; p['ke'] += row[2]
 
     keys = sorted(pages, key=lambda k: (-pages[k]['i'], -pages[k]['s'], k))
     pid = {k: n for n, k in enumerate(keys)}
@@ -283,11 +254,12 @@ def ia_build():
             pairs.append([pid[a], pid[b], round(shared / denom, 3), n, int(shared)])
     pairs.sort(key=lambda x: -x[4])
 
-    # searches with no owner: 3+ pages show for it and no page gets half its impressions
+    # searches with no owner: 3+ pages show for it, no page gets half its impressions, and the
+    # search reaches NOOWNER_MIN_IMPR impressions in the window (smaller ones are noise)
     noowner = []
     for q, pm in q_pages.items():
         tot = sum(pm.values())
-        if len(pm) >= 3 and tot > 0 and max(pm.values()) / tot < 0.5:
+        if len(pm) >= 3 and tot >= NOOWNER_MIN_IMPR and max(pm.values()) / tot < 0.5:
             top = sorted(pm.items(), key=lambda x: -x[1])[:6]
             noowner.append([_clean(q), int(tot), len(pm), ';'.join(f'{pid[k]}:{int(v)}' for k, v in top)])
     noowner.sort(key=lambda x: -x[1])
@@ -313,7 +285,7 @@ def ia_build():
         p = pages[k]
         pos = round(p['pw'] / p['i'], 1) if p['i'] else ''
         page_tab.append([pid[k], k, int(p['c']), int(p['i']), pos, _clean(p['tq'])[:80], int(p['tqi']),
-                         int(p['nb']), int(p['s']), int(p['es']), int(p['ke'])])
+                         int(p['nb']), int(p['s']), int(p['ke'])])
 
     win = _load('window')
     meta = [
@@ -327,13 +299,10 @@ def ia_build():
         ['home_top_queries', '; '.join(f'{_clean(q)} ({int(i)})' for q, i in home_top)],
     ] + [['utm_home', f'{_clean(u)} ({int(v[0])} clicks, {int(v[1])} impr)']
          for u, v in sorted(utm.items(), key=lambda x: -x[1][0])[:5]]
-    monthly = [[t['month'], t['clicks'], t['impressions'], t['gone_impr'], t['gone_pct']]
-               for t in (_load('monthly') if os.path.exists(f'{IA_DIR}/monthly.json') else [])]
     tables = {
         'meta': (['key', 'value'], meta),
-        'monthly': (['month', 'clicks', 'impressions', 'gone_impr', 'gone_pct'], monthly),
         'pages': (['id', 'key', 'clicks', 'impressions', 'position', 'top_query', 'top_query_impr',
-                   'nonbrand_query_impr', 'ga4_sessions', 'ga4_engaged', 'ga4_key_events'], page_tab),
+                   'nonbrand_query_impr', 'ga4_sessions', 'ga4_key_events'], page_tab),
         'pairs': (['id_a', 'id_b', 'overlap', 'shared_queries', 'shared_impr'], pairs),
         'noowner': (['query', 'impressions', 'pages', 'top_pages'], noowner),
         'home': (['id', 'share_on_home_queries', 'shared_queries', 'nonbrand_query_impr'], home),
@@ -373,7 +342,7 @@ def _block(name, part, body, head, total):
 
 
 def ia_emit(*specs):
-    """Prints checksummed blocks, e.g. ia_emit('pages:1') or ia_emit('meta:1', 'monthly:1').
+    """Prints checksummed blocks, e.g. ia_emit('pages:1') or ia_emit('meta:1', 'home:1').
     Save the whole printed output, exactly as printed, to work/gsc/<anything>.txt."""
     parts = _load('parts')
     for spec in specs:
@@ -394,19 +363,3 @@ def ia_pair_queries(pairs, n=3):
         top = '; '.join(_clean(q)[:60] for _, q in sorted(shared, reverse=True)[:n])
         out.append(f'{a}|{b}|{top}')
     print(_block('pair_queries', 1, out, ['id_a', 'id_b', 'top_shared'], 1))
-
-
-def ia_crawl_split(not_live_ids):
-    """Exact SOP migration check: monthly impressions on URLs live in the crawl vs not.
-    not_live_ids = ids from the pages table whose URL is not a live 200 page in the crawl
-    (analyze.py prints the full call). URLs with no impressions in the window count as not
-    live. Save the printed block to work/gsc/monthly_split.txt."""
-    keys = _load('q_pages')['keys']
-    bad = {int(i) for i in not_live_ids}
-    live = {k for n, k in enumerate(keys) if n not in bad}
-    out = []
-    for m in _load('months_pages'):
-        impr = sum(v[1] for v in m['pages'].values())
-        off = sum(v[1] for k, v in m['pages'].items() if k not in live)
-        out.append(f"{m['month']}|{int(impr)}|{int(off)}|{round(off / impr, 3) if impr else 0}")
-    print(_block('monthly_split', 1, out, ['month', 'impressions', 'not_in_crawl_impr', 'not_in_crawl_pct'], 1))

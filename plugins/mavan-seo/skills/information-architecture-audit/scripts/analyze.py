@@ -58,6 +58,13 @@ CONTENT = {'Service', 'Service-like (no folder)', 'Concern', 'Blog', 'Location /
 KEEPER_RANK = {'Service': 0, 'Service-like (no folder)': 1, 'Concern': 2, 'Location / Area': 3, 'Blog': 5}
 FLOW_COLS = ['Home', 'Service hub', 'Service', 'Service-like', 'Concern hub', 'Concern', 'Location / Area', 'Blog hub',
              'Blog', 'Company / Info', 'Utility / Policy', 'Pagination', 'Query-string URL']
+NOOWNER_MIN_IMPR = 100  # a search with fewer impressions in the window is not listed
+# Words a person may use for a folder type in the confirmed mapping (decisions.json folder_types).
+HUB_BASE = {'service': 'Service', 'service hub': 'Service', 'concern': 'Concern', 'concern hub': 'Concern',
+            'blog': 'Blog', 'blog hub': 'Blog', 'location': 'Location', 'location / area': 'Location',
+            'location hub': 'Location', 'service-like (no folder)': 'Service-like (no folder)'}
+FLAT_TYPES = {'archive': 'Archive', 'gallery item': 'Gallery item', 'company / info': 'Company / Info',
+              'utility / policy': 'Utility / Policy', 'pagination': 'Pagination', 'query-string url': 'Query-string URL'}
 US_STATES = {'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'hi', 'id', 'il', 'in', 'ia', 'ks', 'ky', 'la',
              'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj', 'nm', 'ny', 'nc', 'nd', 'oh', 'ok',
              'or', 'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy', 'dc'}
@@ -104,6 +111,9 @@ class Classifier:
         self.city_words -= {'and', 'the'}
         self.main_city = set(words(cfg.get('city', ''))) - self.state_words
         self.folder_types = {k.strip('/').lower(): v for k, v in dec.get('folder_types', {}).items()}
+        # True once a person has confirmed the folder-to-type mapping (profile.py proposes it). Then folder
+        # names are never guessed: only the confirmed mapping decides a folder's type.
+        self.confirmed = bool(dec.get('mapping_confirmed'))
         self.overrides = dec.get('page_types', {})
         # folders that have children -> their in-folder parents act as hubs
         self.parents = set()
@@ -129,6 +139,11 @@ class Classifier:
             return 'Query-string URL', 'Rule 2: URL has a query string'
         if not s:
             return 'Unclassified', 'Not on the main domain'
+        if self.confirmed:
+            hit = self.classify_mapped(k, s)
+            if hit:
+                return hit
+            return self.root_rules(s[-1], h1, utility=True)
         f0 = s[0]
         if f0 in ARCHIVE_FOLDERS or (re.fullmatch(r'(19|20)\d\d', f0) and len(s) <= 3):
             return 'Archive', f'Rule 3: /{f0}/ CMS archive'
@@ -167,7 +182,52 @@ class Classifier:
                     why = f'Rule 6: /{f0}/ listing' if len(s) == 1 else f'Rule 6: /{f0}/ category page with pages under it'
                     return f'{ftype} hub', why
                 return ('Service-like (no folder)' if ftype == 'Service-like (no folder)' else ftype), f'Rule 6: inside /{f0}/'
-        # rule 7: root-level pages
+        return self.root_rules(slug, h1)
+
+    def classify_mapped(self, k, s):
+        """A page in a folder the person mapped. Returns None for root-level pages and for folders mapped
+        as Mixed, which fall through to the content rules."""
+        f0 = s[0]
+        two = f'{s[0]}/{s[1]}' if len(s) >= 2 else ''
+        if two and two in self.folder_types:  # a second-level folder mapped on its own ("folder/subfolder")
+            raw, tag, at_top = self.folder_types[two], two, len(s) == 2
+        else:
+            raw, tag, at_top = self.folder_types.get(f0), f0, len(s) == 1
+        if raw is None:
+            if len(s) == 1:
+                return None  # root-level page with no folder
+            return folder_label(f0), f'Folder /{f0}/ is not in the confirmed mapping'
+        low = str(raw).strip().lower()
+        if low == 'mixed':
+            return None
+        is_hub = at_top or k in self.parents
+        f0 = tag
+        if low in FLAT_TYPES:
+            t = FLAT_TYPES[low]
+            if t == 'Gallery item' and at_top:
+                return 'Company / Info', f'Confirmed mapping: /{f0}/ main gallery page'
+            return t, f'Confirmed mapping: /{f0}/ = {t}'
+        if low in HUB_BASE:
+            base = HUB_BASE[low]
+            if base == 'Location':
+                return ('Location hub' if is_hub else 'Location / Area'), \
+                    f'Confirmed mapping: /{f0}/ = Location' + (' hub' if is_hub else '')
+            if base == 'Service-like (no folder)':
+                return base, f'Confirmed mapping: /{f0}/ = {base}'
+            if is_hub:
+                return f'{base} hub', f'Confirmed mapping: /{f0}/ = {base}, ' + \
+                    ('listing page' if at_top else 'category page with pages under it')
+            return base, f'Confirmed mapping: /{f0}/ = {base}'
+        label = str(raw).strip()
+        if not label.endswith('(folder)'):
+            label += ' (folder)'
+        return label, f'Confirmed mapping: /{f0}/ is its own type'
+
+    def root_rules(self, slug, h1, utility=False):
+        """Content rules for root-level pages and folders mapped as Mixed."""
+        sw = set(words(slug))
+        if utility and (sw & UTILITY_WORDS or any(p in slug for p in UTILITY_PHRASES)):
+            return 'Utility / Policy', 'Content rule: utility/policy wording in the slug'
         if sw & COMPANY_WORDS:
             return 'Company / Info', 'Rule 7: company/info wording in the slug'
         toks = words(slug)
@@ -253,6 +313,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--work', default='work')
     ap.add_argument('--past', help='optional past prune decisions CSV (url, decision, target)')
+    ap.add_argument('--allow-unconfirmed', action='store_true',
+                    help='run without a confirmed folder mapping (folder types guessed from common names); '
+                         'for tests and unattended runs only')
     a = ap.parse_args()
     W = a.work
     A = os.path.join(W, 'analysis'); R = os.path.join(W, 'review')
@@ -261,18 +324,25 @@ def main():
     if not cfg:
         sys.exit(f'Missing {W}/config.json')
     dec = load_json(os.path.join(W, 'decisions.json'), {})
+    if not dec.get('mapping_confirmed') and not a.allow_unconfirmed:
+        sys.exit('The folder-to-type mapping has not been confirmed. Run folder_profile.py, show work/review/folder_mapping.md '
+                 'to the person and STOP until they confirm or correct it. Then put their mapping in work/decisions.json '
+                 'as "folder_types" and add "mapping_confirmed": true.')
     prep = load_json(os.path.join(W, 'prep_report.json'), {})
     crawl = pd.read_csv(os.path.join(W, 'crawl_pages.csv'), dtype={'url': str, 'key': str}, keep_default_na=False)
     links = pd.read_csv(os.path.join(W, 'links.csv'), keep_default_na=False)
     redir = pd.read_csv(os.path.join(W, 'redirects.csv'), keep_default_na=False)
     G = os.path.join(W, 'gsc')
     gsc = {n: pd.read_csv(os.path.join(G, f'{n}.csv'), keep_default_na=False)
-           for n in ['meta', 'monthly', 'pages', 'pairs', 'noowner', 'home', 'pair_queries', 'monthly_split']
+           for n in ['meta', 'pages', 'pairs', 'noowner', 'home', 'pair_queries']
            if os.path.exists(os.path.join(G, f'{n}.csv'))}
     has_gsc = 'pages' in gsc
     meta = dict(zip(gsc['meta'].key, gsc['meta'].value)) if 'meta' in gsc else {}
     utm_lines = gsc['meta'][gsc['meta'].key == 'utm_home'].value.tolist() if 'meta' in gsc else []
     notes = []
+    if not dec.get('mapping_confirmed'):
+        notes.append('The folder-to-type mapping was not confirmed by a person: folder types were guessed from common '
+                     'folder names. Treat the page types as unverified.')
 
     crawl['status'] = pd.to_numeric(crawl.status, errors='coerce')
     status_of = {}
@@ -310,7 +380,7 @@ def main():
     if has_gsc:
         gp = gsc['pages'].copy()
         for c in ['clicks', 'impressions', 'position', 'top_query_impr', 'nonbrand_query_impr', 'ga4_sessions',
-                  'ga4_engaged', 'ga4_key_events']:
+                  'ga4_key_events']:
             gp[c] = pd.to_numeric(gp[c], errors='coerce')
         gid = dict(zip(gp.id.astype(int), gp.key))
         gd = gp.set_index('key').to_dict('index')
@@ -431,8 +501,8 @@ def main():
         v = verdict_over.get((ka, kb), auto)
         e['verdict'] = v
         e['auto'] = auto
-        e['conf'] = conf(e)
-        if v == 'duplicate':
+        e['conf'] = 'Low' if v == 'review' else conf(e)  # 'review' = could not be judged: kept, but only as Review
+        if v in ('duplicate', 'review'):
             dup_pairs.append((ka, kb, e))
         elif v == 'city':
             city_rows.append((ka, kb, e))
@@ -541,6 +611,8 @@ def main():
     noowner_rows = []
     if 'noowner' in gsc:
         for r in gsc['noowner'].itertuples():
+            if num(r.impressions) < NOOWNER_MIN_IMPR:
+                continue
             pg = []
             for part in str(r.top_pages).split(';'):
                 if ':' in part:
@@ -768,7 +840,7 @@ def main():
             'clicks': g(k, 'clicks') if gsc_ok else '', 'impressions': g(k, 'impressions') if gsc_ok else '',
             'position': g(k, 'position', '') if gsc_ok else '', 'top_query': g(k, 'top_query', '') if gsc_ok else '',
             'top_query_impr': g(k, 'top_query_impr', '') if gsc_ok else '',
-            'ga4_sessions': g(k, 'ga4_sessions', '') if gsc_ok else '', 'ga4_engaged': g(k, 'ga4_engaged', '') if gsc_ok else '',
+            'ga4_sessions': g(k, 'ga4_sessions', '') if gsc_ok else '',
             'ga4_key_events': g(k, 'ga4_key_events', '') if gsc_ok else '',
             'dup_note': dup_of.get(k, {}).get('note', ''), 'action': action, 'target': target, 'wildcard': wild,
             'final_action': final_a, 'final_target': final_t,
@@ -908,11 +980,10 @@ def main():
         if srcs and srcs <= removing and not nav_in.get(k):
             orphan_risk.append(k)
 
-    window_ids_not_live = []
-    if has_gsc:
-        for i, k in gid.items():
-            if k not in live_keys:
-                window_ids_not_live.append(i)
+    # folders the confirmed mapping does not cover (their pages carry a "(folder)" type)
+    mapped = set(clf.folder_types)
+    unmapped_folders = sorted({segs(k)[0] for k in type_of if len(segs(k)) >= 2 and segs(k)[0] not in mapped}) \
+        if clf.confirmed else []
 
     blog_pages = P[P.type == 'Blog']
     outside = blog_pages[~blog_pages.path.str.startswith(blog_folder)] if blog_folder else blog_pages
@@ -946,9 +1017,10 @@ def main():
         'orphan_risk_after_removals': orphan_risk, 'notes': notes + prep.get('warnings', []),
         'unclassified': P[P.type == 'Unclassified'].path.tolist(),
         'other_folders': sorted({t for t in P.type if t.endswith('(folder)')}),
-        'window_ids_not_live': sorted(window_ids_not_live),
+        'mapping_confirmed': clf.confirmed, 'folder_mapping': dec.get('folder_types', {}),
+        'unmapped_folders': unmapped_folders,
         'pair_queries_needed': sorted({tuple(sorted(x)) for x in need_pq}),
-        'pair_queries_loaded': 'pair_queries' in gsc, 'monthly_split_loaded': 'monthly_split' in gsc,
+        'pair_queries_loaded': 'pair_queries' in gsc,
         'no_gsc_pages_with_impr': (int(sum(1 for k in gd if k not in live_keys and g(k, 'impressions') > 0)) if has_gsc else 0),
     }
     save_json(os.path.join(A, 'summary.json'), summary)
@@ -960,6 +1032,9 @@ def main():
     if summary['unclassified']:
         lines.append(f"\n## {len(summary['unclassified'])} Unclassified pages\nLabel them in decisions.json page_types, "
                      f"or leave them and list them in the chat summary: {', '.join(summary['unclassified'][:40])}")
+    if unmapped_folders:
+        lines.append('\n## Folders missing from the confirmed mapping\nAsk the person which type these are, then add them '
+                     'to folder_types in decisions.json: ' + ', '.join(f'/{f}/' for f in unmapped_folders))
     if summary['other_folders']:
         lines.append('\n## Other folders\nThese folders got their own type. If one is really a service, concern or blog '
                      'folder, set folder_types in decisions.json: ' + ', '.join(summary['other_folders']))
@@ -969,16 +1044,12 @@ def main():
             lines.append('\n## Top shared queries\nRun this in the Composio workbench and save the block to '
                          'work/gsc/pair_queries.txt, then re-run gsc_import.py and analyze.py:\n'
                          f"ia_pair_queries({sorted({tuple(sorted(x)) for x in need_pq})})")
-        if 'monthly_split' not in gsc:
-            lines.append('\n## Migration check (live vs not live in the crawl)\nRun this in the Composio workbench, '
-                         'save the block to work/gsc/monthly_split.txt, then re-run gsc_import.py:\n'
-                         f'ia_crawl_split({sorted(window_ids_not_live)})')
     n_check = sum(1 for x in pair_rows if x['verdict'] == 'check')
     lines.append(f"\n## Duplicate candidates: review/dup_candidates.csv ({len(pair_rows)} pairs; "
                  f"{len(dup_pairs)} duplicate, {len(city_rows)} city variant, {n_check} check, "
                  f"{len(pair_rows) - len(dup_pairs) - len(city_rows) - n_check} not)\n"
                  'Decide every "check" pair (one topic is the other plus words: a product line is a duplicate, '
-                 'a different treatment in the same area is not). Confirm every "duplicate" is the same treatment '
+                 'a different treatment in the same area is not; a pair you cannot judge from the table is "review"). Confirm every "duplicate" is the same treatment '
                  'and look down the "not" pairs with high overlap for synonyms (e.g. labiaplasty / labia reduction). '
                  'Fix with pair_verdicts, topics or synonyms in decisions.json. Unresolved "check" pairs count as not duplicates.')
     if orphan_risk:
