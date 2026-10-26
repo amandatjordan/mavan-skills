@@ -9,7 +9,6 @@ import unittest
 from pathlib import Path
 
 import pandas as pd
-from openpyxl import load_workbook
 
 import test_two_file_semrush as base
 from test_two_file_semrush import CLIENT, COMPS, HOME, SKILL, write_csv
@@ -19,7 +18,7 @@ import build  # noqa: E402
 
 
 class OptionalExportsAttached(unittest.TestCase):
-    """Same audit, plus referring domains, a comparison export and a broken-backlinks export."""
+    """Same audit, plus referring domains and a broken-backlinks export."""
 
     @classmethod
     def setUpClass(cls):
@@ -31,9 +30,6 @@ class OptionalExportsAttached(unittest.TestCase):
         write_csv(root / 'gap.csv', base.GAP_HEADER, base.gap_rows())
         doms = sorted({r[2].split('/')[2] for r in base.backlinks_rows()})
         write_csv(root / 'refdomains.csv', ['Domain', 'Domain ascore', 'Backlinks'], [[d, 40, 1] for d in doms])
-        write_csv(root / 'compare.csv', ['Target', 'Authority Score', 'Referring Domains', 'Backlinks'],
-                  [[CLIENT, 30, 500, 900], ['comp-one.com', 45, 1200, 4000], ['comp-two.com', 38, 800, 2500],
-                   ['comp-three.com', 41, 950, 3100]])
         write_csv(root / 'broken.csv', ['Source url', 'Target url', 'Response code'],
                   [['https://localsite3.com/blog/post-3/', f'{HOME}old-botox-page/', '404']])
         (work / 'config.json').write_text(json.dumps({
@@ -42,11 +38,10 @@ class OptionalExportsAttached(unittest.TestCase):
         cls.prep = base.TwoFileSemrushAudit.run_py(
             'prep.py', '--config', str(work / 'config.json'), '--out', str(work),
             '--backlinks', str(root / 'backlinks.csv'), '--gap', str(root / 'gap.csv'),
-            '--refdomains', str(root / 'refdomains.csv'), '--compare', str(root / 'compare.csv'),
-            '--broken', str(root / 'broken.csv'))
+            '--refdomains', str(root / 'refdomains.csv'), '--broken', str(root / 'broken.csv'))
         (work / 'status.tsv').write_text(base.fake_status((work / 'status_needed.txt').read_text().split()))
         (work / 'decisions.json').write_text(json.dumps({
-            'takeaways': ['a 1.', 'b 2.', 'c 3.'],
+            'takeaways': ['a legacy key: ignored now that there is no Rollup tab'],
             'broken': {f'{HOME}old-botox-page/': {'target': f'{HOME}services/botox/'},
                        f'{HOME}sevices/': {'target': f'{HOME}services/', 'action': 'typo'},
                        f'{HOME}blocked-page/': {'action': 'drop'}},
@@ -63,14 +58,6 @@ class OptionalExportsAttached(unittest.TestCase):
         self.assertEqual(self.prep.returncode, 0, self.prep.stdout + self.prep.stderr)
         self.assertEqual(self.build.returncode, 0, self.build.stdout + self.build.stderr)
         self.assertIn('All checks passed', self.build.stdout)
-
-    def test_comparison_export_fills_competitor_rows(self):
-        ws = load_workbook(self.out)['Competitor Rollup']
-        rows = [dict(zip([c.value for c in ws[1]], [c.value for c in r])) for r in ws.iter_rows(min_row=2)]
-        by = {r['Domain']: r for r in rows if r['Domain'] in [CLIENT] + COMPS}
-        self.assertEqual(by[CLIENT]['Referring Domains'], 500)
-        self.assertEqual(by['comp-one.com']['Referring Domains'], 1200)
-        self.assertEqual(by['comp-one.com']['Gap vs Client'], 700)
 
     def test_referring_domains_export_supplies_domain_authority(self):
         self.assertNotIn('is blank on the Disavow Review tab', self.prep.stdout)

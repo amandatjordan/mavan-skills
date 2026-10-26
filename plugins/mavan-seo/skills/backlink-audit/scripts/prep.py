@@ -3,17 +3,16 @@
 
 Usage (two exports are enough: client backlinks and the link gap):
   python prep.py --config work/config.json --out work --backlinks B.csv --gap G.csv [--gap G2.csv] \
-    [--refdomains R.csv] [--compare C.csv] [--broken BR.csv] [--audit SEMRUSH_AUDIT.csv] \
+    [--refdomains R.csv] [--broken BR.csv] [--audit SEMRUSH_AUDIT.csv] \
     [--gsc-links GSC.csv] [--gap-pages GP.csv] [--redirect-map MAP.csv] \
     [--map backlinks.anchor="Anchor text"]
 
-Everything else is derived: referring-domain counts, the client Rollup row and the anchor mix come from the
+Everything else is derived: referring-domain counts and the anchor mix come from the
 backlinks export, and broken backlinks come from a live status check of every client URL the backlinks point
 at (build.py reads status.tsv). The optional exports only add detail (see references/exports.md).
 
 Writes to --out:
   links.csv            every client backlink, normalized
-  rollup.csv           Competitor Rollup rows
   disavow.csv          flagged referring domains (Disavow Review candidates)
   noise.json           domains summarized as noise on the Disavow Review tab
   broken.csv           broken client URLs from a --broken export (empty without one; build.py derives them)
@@ -21,7 +20,7 @@ Writes to --out:
   gap_all.csv          every link-gap domain with the reason it was filtered (so decisions.json can add it back)
   redirect_map.json    planned redirects from --redirect-map
   status_needed.txt    every client URL to check live in the Composio workbench
-  prep_summary.json    counts and notes for the reviewer
+  prep_summary.json    counts and notes for the reviewer (client baseline counts, link-gap domains per competitor)
 """
 import argparse
 import os
@@ -64,16 +63,6 @@ SPEC = {
         'authority': (['Domain rating', 'DR', 'Domain ascore'], False),
         'code': (['Target HTTP code', 'HTTP code', 'Response code', 'Status code', 'Target status code'], False),
         'refdomains': (['Referring domains', 'Domains', 'Ref domains'], False),
-    },
-    'compare': {
-        'target': (['Target', 'Domain', 'URL', 'Website'], True),
-        'authority': (['Domain Rating', 'DR', 'Domain ascore', 'Authority Score', 'Ascore', 'AS'], False),
-        'refdomains': (['Ref domains All', 'Referring domains', 'Ref domains', 'Referring Domains'], False),
-        'dofollow_refdomains': (['Ref domains Dofollow', 'Dofollow referring domains', 'Dofollow ref domains'], False),
-        'backlinks': (['Total Backlinks', 'Backlinks', 'Backlinks All'], False),
-        'traffic': (['Total Traffic', 'Organic traffic', 'Organic Traffic', 'Traffic'], False),
-        'gained': (['New referring domains', 'Ref domains new', 'New ref domains'], False),
-        'lost': (['Lost referring domains', 'Ref domains lost', 'Lost ref domains'], False),
     },
     'gap': {
         'domain': (['Domain', 'Referring domain', 'Referring Domain'], True),
@@ -264,7 +253,7 @@ def main():
     ap.add_argument('--config', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--backlinks', required=True)
-    for f in ['refdomains', 'broken', 'compare', 'audit', 'gsc-links', 'redirect-map']:
+    for f in ['refdomains', 'broken', 'audit', 'gsc-links', 'redirect-map']:
         ap.add_argument('--' + f)
     ap.add_argument('--gap', action='append', default=[])
     ap.add_argument('--gap-pages', action='append', default=[])
@@ -497,8 +486,6 @@ def main():
 
     # ------------------------------------------------ link gap
     gap_rows = {}
-    shared = Counter()
-    client_in_gap = False  # True once any gap row shows the client linking (the Missing view never does)
     for path in a.gap:
         df, c = load(path, 'gap', ov)
         dcols = domain_cols(df, [client] + comps)
@@ -510,10 +497,6 @@ def main():
             dom = reg_domain(r[c['domain']])
             linked = [d for d in comps if d in dcols and num(r[dcols[d]]) > 0]
             client_has = client in dcols and num(r[dcols[client]]) > 0
-            if client_has:
-                client_in_gap = True
-                for d in linked:
-                    shared[d] += 1
             e = gap_rows.setdefault(dom, {'domain': dom, 'authority': float('nan'), 'traffic': float('nan'),
                                           'competitors': set(), 'client_links': False, 'evidence': ''})
             e['competitors'].update(linked)
@@ -533,75 +516,17 @@ def main():
             if d in gap_rows and not gap_rows[d]['evidence']:
                 gap_rows[d]['evidence'] = u
 
-    # ------------------------------------------------ rollup
-    # The client row comes from the backlinks export; competitor rows carry only their link-gap counts unless a
-    # comparison export (optional) adds authority, referring domains, backlinks and traffic for them.
-    nan = float('nan')
-    derived = {'rd': links['domain'].nunique(), 'backlinks': len(links),
-               'dof': links.loc[~links['nofollow'].astype(bool), 'domain'].nunique()}
-    by, cc = {}, {}
-    if a.compare:
-        df = read_table(a.compare)
-        if not any(canon(x) in [canon(x2) for x2 in df.columns] for x in SPEC['compare']['target'][0]):
-            dc = domain_cols(df, [client] + comps)
-            if len(dc) >= 2:  # metrics as rows, domains as columns: transpose
-                first = df.columns[0]
-                df = df.set_index(first).T.reset_index().rename(columns={'index': 'Target'})
-                df['Target'] = df['Target'].astype(str)
-        cc = resolve(df, SPEC['compare'], 'compare', ov)
-        for _, r in df.iterrows():
-            by[bare_domain(r[cc['target']])] = r
-    else:
-        summary['optional_not_attached'].append(
-            'competitor comparison (competitor Referring Domains, Backlinks, traffic and Gap vs Client stay blank)')
-    roll = []
-    for d in [client] + comps:
-        r = by.get(d)
-        if r is None and by:
-            r = next((v for k, v in by.items() if reg_domain(k) == reg_domain(d)), None)
-        if r is None and a.compare:
-            notes.append(f'Comparison export has no row for {d}.')
-        g = (lambda f, r=r: num(r[cc[f]]) if cc.get(f) else nan) if r is not None else (lambda f: nan)
-        rd, dof, bl = g('refdomains'), g('dofollow_refdomains'), g('backlinks')
-        if rd != rd and dof == dof:
-            notes.append('Comparison export has dofollow referring domains only; Referring Domains column uses them.')
-            rd = dof
-        if d == client:  # fill whatever the comparison lacks from the backlinks export
-            rd = derived['rd'] if rd != rd else rd
-            bl = derived['backlinks'] if bl != bl else bl
-            dof = derived['dof'] if dof != dof else dof
-        roll.append({'Domain': d, 'Client or Competitor': 'Client' if d == client else 'Competitor',
-                     metric: g('authority'), 'Referring Domains': rd, 'Backlinks': bl,
-                     'Dofollow Referring Domains': dof,
-                     '% Dofollow': (dof / rd) if (rd == rd and dof == dof and rd) else None,
-                     'Referring Domains Gained (90 days)': g('gained'), 'Referring Domains Lost (90 days)': g('lost'),
-                     'Organic Traffic (tool estimate)': g('traffic')})
-    roll = pd.DataFrame(roll)
-    crd = roll.loc[roll['Client or Competitor'] == 'Client', 'Referring Domains'].iloc[0]
+    # ------------------------------------------------ baseline counts for the report (there is no Rollup tab)
+    summary['client_referring_domains'] = int(links['domain'].nunique())
+    summary['client_backlinks'] = len(links)
+    summary['client_dofollow_referring_domains'] = int(links.loc[~links['nofollow'].astype(bool), 'domain'].nunique())
     gap_count = Counter()
     for e in gap_rows.values():
         if e['client_links'] or e['domain'] in client_refs:
             continue
         for d in e['competitors']:
             gap_count[d] += 1
-    roll['Domains Linking to Them but Not the Client'] = roll['Domain'].map(
-        lambda d: None if d == client else gap_count.get(d, 0))
-    # With the Missing view the client column is all zeros, so "shared" would read 0 for everyone: leave it blank.
-    roll['Shared Referring Domains with Client'] = roll['Domain'].map(
-        lambda d: None if d == client or not client_in_gap else shared.get(d, 0))
-    roll['Gap vs Client'] = roll.apply(lambda r: None if r['Domain'] == client else r['Referring Domains'] - crd, axis=1)
-    comp_rows = roll[roll['Client or Competitor'] != 'Client'].assign(
-        _g=lambda x: x['Domains Linking to Them but Not the Client'])
-    roll = pd.concat([roll[roll['Client or Competitor'] == 'Client'],
-                      comp_rows.sort_values(['Referring Domains', '_g'], ascending=False, na_position='last')
-                      .drop(columns='_g')])
-    blank = [k for k in roll.columns if roll[k].isna().all()]
-    if blank:
-        notes.append('Rollup columns left blank (not in the exports): ' + ', '.join(blank))
-    if not a.compare:
-        notes.append(f'Rollup client row is built from the backlinks export ({derived["rd"]:,} referring domains, '
-                     f'{derived["backlinks"]:,} backlinks); competitor rows show link-gap counts only.')
-    roll.to_csv(os.path.join(a.out, 'rollup.csv'), index=False)
+    summary['gap_domains_by_competitor'] = {d: gap_count.get(d, 0) for d in comps}
 
     # ------------------------------------------------ opportunities
     opp, removed, gap_all = [], Counter(), []
@@ -666,8 +591,10 @@ def main():
     save_json(os.path.join(a.out, 'prep_summary.json'), summary)
 
     print('\nSummary')
-    for k in ['disavow_candidates', 'noise_domains', 'client_target_urls', 'gap_domains', 'opportunities_kept']:
+    for k in ['client_referring_domains', 'client_backlinks', 'disavow_candidates', 'noise_domains',
+              'client_target_urls', 'gap_domains', 'opportunities_kept']:
         print(f'  {k}: {summary.get(k)}')
+    print(f'  link-gap domains per competitor (not linking to the client): {summary["gap_domains_by_competitor"]}')
     print(f'  opportunities removed: {dict(removed)}')
     if summary.get('anchor_mix'):
         print(f'  anchor mix: {summary["anchor_mix"]}')

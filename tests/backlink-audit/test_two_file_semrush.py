@@ -102,8 +102,6 @@ class TwoFileSemrushAudit(unittest.TestCase):
         needed = (cls.work / 'status_needed.txt').read_text().split()
         (cls.work / 'status.tsv').write_text(fake_status(needed))
         (cls.work / 'decisions.json').write_text(json.dumps({
-            'takeaways': ['Client has 25 real referring domains.', 'Three competitors share 6 gap domains.',
-                          '3 broken URLs have links pointing at them.'],
             'broken': {
                 f'{HOME}old-botox-page/': {'target': f'{HOME}services/botox/', 'action': '301'},
                 f'{HOME}sevices/': {'target': f'{HOME}services/', 'action': 'typo'},
@@ -156,20 +154,31 @@ class TwoFileSemrushAudit(unittest.TestCase):
         broken = {r['Client URL Affected'] for r in rows if r['Type'] == 'Broken backlink'}
         self.assertEqual(broken, {f'{HOME}old-botox-page/', f'{HOME}sevices/', f'{HOME}blocked-page/'})
 
-    def test_rollup_built_from_links_and_gap(self):
-        _, rows = self.tab('Competitor Rollup')
-        by = {r['Domain']: r for r in rows if r['Domain'] in [CLIENT] + COMPS}
-        self.assertEqual(set(by), {CLIENT, *COMPS})
-        live_domains = N_REAL + N_SPAM  # the lost link is not counted
-        self.assertEqual(by[CLIENT]['Referring Domains'], live_domains)
-        self.assertEqual(by[CLIENT]['Backlinks'], live_domains)
-        self.assertTrue(by['comp-one.com']['Domains Linking to Them but Not the Client'] > 0)
+    def test_two_tabs_recommendations_first(self):
+        self.assertEqual(self.wb.sheetnames, ['Recommendations', 'Disavow Review'])
 
-    def test_shared_domains_blank_when_gap_is_missing_view(self):
-        _, rows = self.tab('Competitor Rollup')
-        for r in rows:
-            if r['Domain'] in COMPS:
-                self.assertIsNone(r['Shared Referring Domains with Client'])
+    def test_template_columns(self):
+        rec_header, _ = self.tab('Recommendations')
+        self.assertEqual(list(rec_header), ['Priority', 'Type', 'Domain / Source', 'Client URL Affected', 'AS',
+                                            'Referring Domains or Competitors Linking', 'What We Found', 'Do This',
+                                            'Target URL', 'Evidence URL', 'Status'])
+        dis_header, _ = self.tab('Disavow Review')
+        self.assertEqual(list(dis_header), ['Referring Domain', 'Example Linking URL', 'Client URL Linked To',
+                                            'Anchor Text (most common)', 'Links from Domain', 'AS',
+                                            'Domain Organic Traffic', 'Dofollow?', 'First Seen', 'Tool Risk Score',
+                                            'Tool Risk Markers', 'In GSC Links Report?', 'Why Flagged',
+                                            'Pattern Group', 'Suggested Status', 'Final Decision', 'Reviewer Notes'])
+
+    def test_baseline_counts_for_the_report(self):
+        summ = json.loads((self.work / 'prep_summary.json').read_text())
+        live_domains = N_REAL + N_SPAM  # the lost link is not counted
+        self.assertEqual(summ['client_referring_domains'], live_domains)
+        self.assertEqual(summ['client_backlinks'], live_domains)
+        self.assertEqual(set(summ['gap_domains_by_competitor']), set(COMPS))
+        self.assertTrue(summ['gap_domains_by_competitor']['comp-one.com'] > 0)
+
+    def test_no_rollup_files_written(self):
+        self.assertFalse((self.work / 'rollup.csv').exists())
 
     def test_spam_network_collapsed_into_noise_row(self):
         _, rows = self.tab('Disavow Review')

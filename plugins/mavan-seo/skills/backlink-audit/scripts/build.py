@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the three-tab backlink audit workbook from prep.py output, status.tsv and decisions.json, then QA it.
+"""Build the two-tab backlink audit workbook (Recommendations, Disavow Review) from prep.py output, status.tsv and decisions.json, then QA it.
 
 Usage:
   python build.py --work work --out "CLIENT Backlink Audit Month YYYY.xlsx"
@@ -171,15 +171,6 @@ def main():
             needed.add(norm_url(u))
             return None
         return is_live(u, status)
-
-    # ------------------------------------------------ Competitor Rollup
-    roll = read(W, 'rollup.csv')
-    roll_rows = roll.to_dict('records')
-    take = dec.get('takeaways', [])
-    if not (3 <= len(take) <= 5):
-        problems.append(f'decisions.json "takeaways" has {len(take)} items; write 3 to 5.')
-    if roll.empty:
-        soft.append('Competitor Rollup is empty: re-run prep.py with the backlinks and link gap exports.')
 
     # ------------------------------------------------ Disavow Review
     dis = read(W, 'disavow.csv')
@@ -374,37 +365,7 @@ def main():
     # ------------------------------------------------ workbook
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Competitor Rollup'
-    rh = ['Domain', 'Client or Competitor', metric, 'Referring Domains', 'Backlinks', 'Dofollow Referring Domains',
-          '% Dofollow', 'Referring Domains Gained (90 days)', 'Referring Domains Lost (90 days)',
-          'Organic Traffic (tool estimate)', 'Domains Linking to Them but Not the Client',
-          'Shared Referring Domains with Client', 'Gap vs Client']
-    write_tab(ws, rh, roll_rows, {'Domain': 30, 'Client or Competitor': 16}, pct={'% Dofollow'},
-              nums=set(rh[3:]) - {'% Dofollow'})
-    if roll_rows:
-        ws.cell(row=2, column=1).font = Font(name='Arial', bold=True)
-    row = len(roll_rows) + 3
-    ws.cell(row=row, column=1, value='Takeaways').font = Font(name='Arial', bold=True)
-    for i, t in enumerate(take, 1):
-        c = ws.cell(row=row + i, column=1, value=t)
-        c.font = Font(name='Arial')
-        ws.merge_cells(start_row=row + i, start_column=1, end_row=row + i, end_column=len(rh))
-        c.alignment = Alignment(wrap_text=True, vertical='top')
-        ws.row_dimensions[row + i].height = 30
-
-    ws = wb.create_sheet('Disavow Review')
-    dh = ['Referring Domain', 'Example Linking URL', 'Client URL Linked To', 'Anchor Text (most common)',
-          'Links from Domain', metric, 'Domain Organic Traffic', 'Dofollow?', 'First Seen', 'Tool Risk Score',
-          'Tool Risk Markers', 'In GSC Links Report?', 'Why Flagged', 'Pattern Group', 'Suggested Status',
-          'Final Decision', 'Reviewer Notes']
-    write_tab(ws, dh, dis_rows, {'Referring Domain': 26, 'Example Linking URL': 40, 'Client URL Linked To': 34,
-                                 'Anchor Text (most common)': 26, 'Why Flagged': 50, 'Pattern Group': 28,
-                                 'Suggested Status': 22, 'Final Decision': 16, 'Reviewer Notes': 34,
-                                 'Tool Risk Markers': 30},
-              yellow={'Final Decision', 'Reviewer Notes'}, nums={'Links from Domain', 'Domain Organic Traffic'})
-    dropdown(ws, dh, 'Final Decision', FINAL, len(dis_rows))
-
-    ws = wb.create_sheet('Recommendations')
+    ws.title = 'Recommendations'
     ch = ['Priority', 'Type', 'Domain / Source', 'Client URL Affected', metric, 'Referring Domains or Competitors Linking',
           'What We Found', 'Do This', 'Target URL', 'Evidence URL', 'Status']
     write_tab(ws, ch, rec, {'Type': 16, 'Domain / Source': 26, 'Client URL Affected': 36, 'What We Found': 50,
@@ -417,10 +378,22 @@ def main():
             p.fill = PatternFill('solid', fgColor=PFILL[p.value])
     dropdown(ws, ch, 'Status', REC_STATUS, len(rec))
     dropdown(ws, ch, 'Priority', PRIORITIES, len(rec))
+
+    ws = wb.create_sheet('Disavow Review')
+    dh = ['Referring Domain', 'Example Linking URL', 'Client URL Linked To', 'Anchor Text (most common)',
+          'Links from Domain', metric, 'Domain Organic Traffic', 'Dofollow?', 'First Seen', 'Tool Risk Score',
+          'Tool Risk Markers', 'In GSC Links Report?', 'Why Flagged', 'Pattern Group', 'Suggested Status',
+          'Final Decision', 'Reviewer Notes']
+    write_tab(ws, dh, dis_rows, {'Referring Domain': 26, 'Example Linking URL': 40, 'Client URL Linked To': 34,
+                                 'Anchor Text (most common)': 26, 'Why Flagged': 50, 'Pattern Group': 28,
+                                 'Suggested Status': 22, 'Final Decision': 16, 'Reviewer Notes': 34,
+                                 'Tool Risk Markers': 30},
+              yellow={'Final Decision', 'Reviewer Notes'}, nums={'Links from Domain', 'Domain Organic Traffic'})
+    dropdown(ws, dh, 'Final Decision', FINAL, len(dis_rows))
     wb.save(a.out)
 
     # ------------------------------------------------ report
-    counts = {'rollup': len(roll_rows), 'disavow_review': len(dis_rows),
+    counts = {'disavow_review': len(dis_rows),
               'broken_backlinks': sum(1 for x in rec if x['Type'] == 'Broken backlink'),
               'link_opportunities': len(orows), 'opportunities_over_cap': extra, 'already_fixed': fixed}
     save_json(os.path.join(W, 'build_summary.json'), counts)

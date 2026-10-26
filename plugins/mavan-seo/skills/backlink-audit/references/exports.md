@@ -18,10 +18,10 @@ Semrush Backlink Gap takes 5 domains, so with more than 4 competitors there are 
 
 | What | How |
 | --- | --- |
-| Client referring domains, backlink counts, dofollow referring domains | Counted from the backlinks export (the Rollup client row) |
+| Client referring domains, backlink counts, dofollow referring domains | Counted from the backlinks export (reported in the reply as the baseline for the next audit) |
 | Anchor mix | Computed from the backlinks `Anchor` column |
 | Broken backlinks | Every client URL the backlinks point at is checked live (`work/status_needed.txt`, references/composio.md); build.py lists the ones that answer 404, 410, 5xx, or 403 while the homepage answers 200. Tool broken-link exports lag, so they are not asked for |
-| Competitor link counts in the Rollup | Counted from the gap export |
+| Link-gap domains per competitor | Counted from the gap export |
 
 ## Optional
 
@@ -30,7 +30,6 @@ Each one only adds detail. Use it if the person already has it; don't make them 
 | prep.py flag | What it adds | Ahrefs | Semrush |
 | --- | --- | --- | --- |
 | `--refdomains` | The linking domain's authority on Disavow Review and Recommendations. Semrush backlinks rows carry a page score, not the domain's AS, so this column is blank on Semrush without it (Ahrefs backlinks rows have DR) | Site Explorer > Referring domains > Export | Backlink Analytics > Referring Domains > Export |
-| `--compare` | Competitor authority, referring domains, backlinks and traffic, and Gap vs Client, on the Rollup. Without it the competitor rows show only their link-gap counts | Batch Analysis > Export | Backlink Analytics compare view or Bulk Analysis > Export |
 | `--audit` | Tool Risk Score and Markers on Disavow Review | none | Backlink Audit > Audit tab > Export |
 | `--gsc-links` | Fills "In GSC Links Report?" on Disavow Review | Search Console > Links > Export external links > Latest links, or Top linking sites | same |
 | `--redirect-map` | Planned redirects, so broken-backlink targets match them | The client's prune & merge Redirects tab, or IA audit Redirects tab, as CSV | same |
@@ -44,15 +43,14 @@ People rarely name exports clearly. Open the header row of each file (read the f
 - Backlinks: one row per link, with a referring page URL and a target URL.
 - Link gap: one row per referring domain, plus one column per domain (the header contains the domain). Semrush adds `Domain ascore` and `Matches`.
 - Referring domains: one row per domain, no target URL.
-- Comparison: one row per domain (client and competitors) with DR/AS, referring domains, backlinks. Semrush's compare view can come out with metrics as rows and domains as columns; prep.py transposes that.
 - Broken: Ahrefs has referring page + target URL + target HTTP code; Semrush Indexed Pages has one row per client URL with a response code and a domains count.
 
 ## Encoding and column names
 
 Ahrefs offers UTF-8 or UTF-16 CSV; Semrush uses comma CSV; GSC uses UTF-8 CSV. `read_table()` handles all of them.
 
-prep.py prints, for each file, which column it used for each field and which fields it could not find. If a field maps to the wrong column, or a needed field is missing because the tool renamed it, re-run with `--map label.field="Exact column name"` (labels: backlinks, refdomains, broken, compare, gap, gap_pages, audit, gsc_links, redirect_map; fields are listed in `SPEC` at the top of prep.py). Required fields stop the run with the list of columns found.
+prep.py prints, for each file, which column it used for each field and which fields it could not find. If a field maps to the wrong column, or a needed field is missing because the tool renamed it, re-run with `--map label.field="Exact column name"` (labels: backlinks, refdomains, broken, gap, gap_pages, audit, gsc_links, redirect_map; fields are listed in `SPEC` at the top of prep.py). Required fields stop the run with the list of columns found.
 
 ## Export limits
 
-Plans cap export rows. If a backlinks export has a round number of rows (1,000, 10,000, 50,000, 100,000) treat it as capped and say so in the notes: the Disavow Review tab only covers what was exported, and the Rollup client counts come from it too.
+Plans cap export rows. If a backlinks export has a round number of rows (1,000, 10,000, 50,000, 100,000) treat it as capped and say so in the notes: the Disavow Review tab only covers what was exported, and the client counts in the reply come from it too.
