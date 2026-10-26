@@ -4,7 +4,7 @@ Everything the audit needs is in this skill. A written copy of the process may e
 
 ## Goal
 
-Show how the client's backlink profile compares with the competitors they actually lose to, and turn that into a short list of work: links to win (sites that link to competitors but not to the client), links being wasted (backlinks pointing at client URLs that error), and links that look risky. The output is one workbook: Competitor Rollup, Disavow Review, Recommendations.
+Show how the client's backlink profile compares with the competitors they actually lose to, and turn that into a short list of work: links to win (sites that link to competitors but not to the client), links being wasted (backlinks pointing at client URLs that error), and links that look risky. The output is one workbook with two tabs: Recommendations, then Disavow Review.
 
 ## Disavow rule
 
@@ -22,7 +22,7 @@ The manual actions result always comes from the person: the Search Console API (
 
 ## Competitors
 
-3 to 5 sites that compete for the client's main service keywords in the client's market. Leave out directories, aggregators and national brands (Yelp, RealSelf, Healthline, WebMD, chains with hundreds of locations): their link profiles aren't something a local business can copy. If the person gives a competitor that looks like one of these, say so and ask whether to keep it. If they give no competitors, ask; you can suggest candidates from the client's top non-brand queries in Search Console (Composio) by searching them and noting who ranks.
+3 to 5 sites that compete for the client's main service keywords in the client's market. Leave out directories, aggregators and national brands (Yelp, RealSelf, Healthline, WebMD, chains with hundreds of locations): their link profiles aren't something a local business can copy. If the person gives a competitor that looks like one of these, say so and ask whether to keep it. If they give no competitors, ask; you can suggest candidates by searching the client's top service keywords plus city and noting who ranks in the top 5.
 
 ## After delivery: what the person reviews
 
@@ -45,12 +45,12 @@ Put these next steps in the final reply so the person knows what's left for them
 
 **Link opportunities.** For each High and Medium row: is it relevant (same market or industry, or a local site the client's patients read)? Attainable (directories, locators, associations and chambers are quick; editorial links need a pitch)? Why do competitors have it (open their linking page: a sponsorship, membership, quote or listing tells you what to ask for)? Worth it (skip sites that only sell links, even if competitors are on them)? Change Priority where judgment differs, delete rows that fail, and give each kept row an owner.
 
-**Re-run** quarterly, or after any migration or prune & merge. Compare referring domains with this audit's Rollup and check Manual Actions every time.
+**Re-run** quarterly, or after any migration or prune & merge. Compare the client's referring domains with the baseline in this audit's reply and check Manual Actions every time.
 
 ## Things to watch out for
 
 - Tool scores aren't Google. Semrush risk scores and low DR/AS are reasons to look closer, never to disavow on their own.
 - Don't mix tools. DR (Ahrefs) and AS (Semrush) are different scales.
-- Tool data is stale: broken backlink reports lag, so every URL is checked live before it goes in the workbook.
+- Tool data is stale: broken backlink reports lag, so the audit doesn't use them. It checks every client URL the backlinks point at live, and only URLs that fail that check go in the workbook.
 - Uploading a disavow file replaces the old one.
 - Never recommend buying links, even when every competitor has them. Paid links are what causes manual actions.
