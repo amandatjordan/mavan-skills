@@ -133,24 +133,3 @@ def save_json(path, obj):
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(obj, f, indent=1, ensure_ascii=False)
 
-
-def load_status(work):
-    """work/status.tsv rows: url, status, final_url, final_status (from the Composio workbench check)."""
-    p = os.path.join(work, 'status.tsv')
-    out = {}
-    if not os.path.exists(p):
-        return out
-    for line in open(p, encoding='utf-8'):
-        parts = line.rstrip('\n').split('\t')
-        if len(parts) < 2 or parts[0] in ('url', '') or parts[0].startswith('##'):
-            continue
-        parts += [''] * (4 - len(parts))
-        out[norm_url(parts[0])] = {'status': parts[1], 'final_url': norm_url(parts[2]) if parts[2] else '',
-                                   'final_status': parts[3]}
-    return out
-
-
-def is_live(url, status):
-    """True when the URL itself answers 200 (no redirect)."""
-    s = status.get(norm_url(url))
-    return bool(s) and s['status'] == '200' and (not s['final_url'] or s['final_url'] == norm_url(url))

@@ -10,10 +10,9 @@ prep.py makes the first pass with pattern lists. These are the judgment calls it
    "realsite.com": {"drop": true},
    "notflagged.com": {"pattern_group": "Added on review", "why_flagged": "Hidden link in footer of a hacked page", "status": "Review closer"}
  },
- "broken": {
-   "https://client.com/old-botox-page/": {"target": "https://client.com/services/botox/", "action": "301", "note": ""},
-   "https://client.com/sevices/": {"target": "https://client.com/services/", "action": "typo"},
-   "https://client.com/2019/promo/": {"action": "drop"}
+ "lost": {
+   "realsite.com": {"priority": "High", "do_this": "Ask them to restore the link on their providers page.", "found": "Listed us as a provider in 2025."},
+   "junkdirectory.info": {"include": false}
  },
  "opportunities": {
    "tampabaynews.com": {"type": "Local news / media", "do_this": "Pitch ...", "target": "https://client.com/services/botox/",
@@ -25,17 +24,14 @@ prep.py makes the first pass with pattern lists. These are the judgment calls it
 
 Keys are domains (registrable, no www) or normalized URLs (https, no www, trailing slash), as they appear in prep.py's CSVs.
 
-## Broken backlinks
+## Lost backlinks
 
-Broken URLs are not taken from a tool export. build.py checks every client URL the backlinks point at against status.tsv and lists the ones that answer 404, 410 or 5xx (after redirects), or 403 while the homepage answers 200, in `work/broken_found.csv` with the referring domains and the strongest linking page. A 429, an error, or a 403 when the homepage is blocked too is treated as bot protection: those URLs are named in a warning, not listed. Open the 403 ones in a browser before keeping them.
+Lost links come from the backlinks export: the rows it marks as lost (Semrush `Lost link`, Ahrefs `Lost`). Nothing is checked live. `work/lost.csv` has one row per lost link with the linking domain and page, the client URL it pointed at, the anchor, the authority, the last-seen date, whether the domain is noise, and whether the domain still links to the client from another page. build.py makes one Recommendations row per linking domain and leaves out noise and junk domains and anything on the Disavow Review tab.
 
-Every broken URL needs a target (or `"action": "drop"` when the old URL was junk nobody needs, e.g. a test page with one link from a scraper).
-
-- build.py fills the target from the redirect map when one was attached. Keep it unless it's wrong.
-- Otherwise pick the closest live page by topic: the same treatment or service, then its hub, then the homepage as a last resort. If two pages are equally close, pick the one with the more specific topic match.
-- `action`: `301` (default); `restore` when the page had content for a service the client still offers (say why in `note`); `typo` when the link points at a misspelling or wrong case of a real URL.
-- The target must answer 200 without a redirect. build.py checks it against status.tsv.
-- If a prune & merge is planned, the target must not be a page that's being merged or removed.
+- `include: false` for domains that aren't worth asking: spam directories, link sellers, scrapers prep.py didn't catch.
+- `priority`: build.py's default is High for authority 40+, Medium for 20-39, Low otherwise, and Low when the domain still links from another page (often a directory that reshuffled its listing pages). Semrush page scores are low, so set the priority by judgment: a relevant local or industry site that dropped the client is worth more than its score.
+- `do_this`: the default says to check why it was lost in the tool and ask for it back if the page moved or the listing changed. Write a specific one for High rows.
+- Target URL stays blank: these rows are outreach, not redirects. The client URL the link pointed at is in Client URL Affected.
 
 ## Link opportunities
 
@@ -43,7 +39,7 @@ For each kept domain, check the type guess (domain-name keywords only, so it's o
 
 - `include: false` for: sites that sell links (prices for "guest posts", "write for us" marketplaces), irrelevant national sites with no way in, competitors' own other sites, anything spammy. Even when every competitor has the link.
 - **Relevant** means: local (the client's city or state), specific to the client's field (med-spa, health, beauty), a provider locator, an association, or a generic local-business citation. Generic marketplaces and review platforms with AS 40+ and 1 competitor are Low.
-- **Gap list cleanup.** prep.py auto-removes spam TLDs (.shop .store .space .site .online .website .xyz .icu .sbs .cfd and similar) and SEO-tool names. It does NOT remove words like "directory" or "listing": they hide real citations, so review those separately. Before classifying, fetch the homepage title of every surviving gap domain (in the Composio workbench, same request as the status check). A site that blocks the fetch goes in the notes as unverified, not guessed.
+- **Gap list cleanup.** prep.py auto-removes spam TLDs (.shop .store .space .site .online .website .xyz .icu .sbs .cfd and similar) and SEO-tool names. It does NOT remove words like "directory" or "listing": they hide real citations, so review those separately. Classify from the domain name and group similar domains together; don't visit sites. When the name doesn't say what the site is, keep the type guess or Other and say so in `found`.
 - **Domain-level gap export (Semrush).** Client URL Affected and Evidence URL are blank on opportunities. That is expected, not a question for the person.
 - Add domains linking to only 1 competitor (prep.py drops them below 40 DR/AS) when they're local or industry-relevant: set them in `opportunities` with a type, and build.py adds the row from the gap export. The same works for a domain prep.py dropped as junk (spam TLDs such as .shop .store .xyz, or seo/backlink/checker/serp in the name) if it is real. It can't add a domain that already links to the client, is a competitor, or is on the Disavow Review tab. Domains not in the gap export fail the build.
 - `do_this`: one or two short, concrete actions. Defaults exist per type; write a specific one for High rows and for every Other row. Never recommend buying links.

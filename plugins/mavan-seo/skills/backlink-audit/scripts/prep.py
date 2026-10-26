@@ -3,23 +3,20 @@
 
 Usage (two exports are enough: client backlinks and the link gap):
   python prep.py --config work/config.json --out work --backlinks B.csv --gap G.csv [--gap G2.csv] \
-    [--refdomains R.csv] [--broken BR.csv] [--audit SEMRUSH_AUDIT.csv] \
-    [--gsc-links GSC.csv] [--gap-pages GP.csv] [--redirect-map MAP.csv] \
+    [--refdomains R.csv] [--audit SEMRUSH_AUDIT.csv] [--gsc-links GSC.csv] [--gap-pages GP.csv] \
     [--map backlinks.anchor="Anchor text"]
 
-Everything else is derived: referring-domain counts and the anchor mix come from the
-backlinks export, and broken backlinks come from a live status check of every client URL the backlinks point
-at (build.py reads status.tsv). The optional exports only add detail (see references/exports.md).
+Everything else is derived from the exports: referring-domain counts and the anchor mix come from the live
+backlinks, and lost backlinks from the rows the backlinks export marks as lost (Semrush "Lost link",
+Ahrefs "Lost"). No live site checks. The optional exports only add detail (see references/exports.md).
 
 Writes to --out:
   links.csv            every client backlink, normalized
   disavow.csv          flagged referring domains (Disavow Review candidates)
   noise.json           domains summarized as noise on the Disavow Review tab
-  broken.csv           broken client URLs from a --broken export (empty without one; build.py derives them)
+  lost.csv             backlinks the export marks as lost (one row per lost link)
   opportunities.csv    link-gap domains after filtering, with competitors linking and a type guess
   gap_all.csv          every link-gap domain with the reason it was filtered (so decisions.json can add it back)
-  redirect_map.json    planned redirects from --redirect-map
-  status_needed.txt    every client URL to check live in the Composio workbench
   prep_summary.json    counts and notes for the reviewer (client baseline counts, link-gap domains per competitor)
 """
 import argparse
@@ -48,7 +45,9 @@ SPEC = {
         'sitewide': (['Sitewide'], False),
         'first_seen': (['First seen', 'First Seen'], False),
         'lang': (['Language'], False),
-        'lost': (['Lost status', 'Lost link', 'Lost'], False),
+        'lost': (['Lost link', 'Lost', 'Lost status'], False),
+        'lost_reason': (['Lost reason', 'Lost status', 'Reason'], False),
+        'last_seen': (['Last seen', 'Last Seen', 'Lost date'], False),
     },
     'refdomains': {
         'domain': (['Domain', 'Referring domain', 'Root domain'], True),
@@ -57,13 +56,6 @@ SPEC = {
         'links': (['Links to target', 'Backlinks', 'Links'], False),
         'dofollow': (['Dofollow links', 'Dofollow'], False),
         'first_seen': (['First seen'], False),
-    },
-    'broken': {
-        'source_url': (['Referring page URL', 'Source url', 'Source URL'], False),
-        'target_url': (['Target URL', 'Target url', 'URL', 'Page URL'], True),
-        'authority': (['Domain rating', 'DR', 'Domain ascore'], False),
-        'code': (['Target HTTP code', 'HTTP code', 'Response code', 'Status code', 'Target status code'], False),
-        'refdomains': (['Referring domains', 'Domains', 'Ref domains'], False),
     },
     'gap': {
         'domain': (['Domain', 'Referring domain', 'Referring Domain'], True),
@@ -82,10 +74,6 @@ SPEC = {
     },
     'gsc_links': {
         'page': (['Linking page', 'Linking pages URL', 'Site', 'Top linking sites', 'Linking site'], True),
-    },
-    'redirect_map': {
-        'source': (['Source URL', 'Source', 'From'], True),
-        'target': (['Target URL', 'Target', 'To'], True),
     },
 }
 
@@ -264,7 +252,7 @@ def main():
     ap.add_argument('--config', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--backlinks', required=True)
-    for f in ['refdomains', 'broken', 'audit', 'gsc-links', 'redirect-map']:
+    for f in ['refdomains', 'audit', 'gsc-links']:
         ap.add_argument('--' + f)
     ap.add_argument('--gap', action='append', default=[])
     ap.add_argument('--gap-pages', action='append', default=[])
@@ -313,13 +301,18 @@ def main():
         if c['first_seen'] else pd.NaT,
         'lang': col(df, c['lang']).fillna('') if c['lang'] else '',
         'lost': col(df, c['lost']).fillna('') if c['lost'] else '',
+        'lost_reason': col(df, c['lost_reason']).fillna('') if c['lost_reason'] and c['lost_reason'] != c['lost'] else '',
+        'last_seen': col(df, c['last_seen']).fillna('') if c['last_seen'] else '',
     })
     if c['lost']:
         lost = links['lost'].astype(str).str.strip().str.lower()
-        dropped = (~lost.isin(['', 'false', '0', 'no', 'live', 'active'])).sum()
-        if dropped:
-            links = links[lost.isin(['', 'false', '0', 'no', 'live', 'active'])]
-            notes.append(f'Dropped {dropped:,} lost links from the backlinks export (export live links only).')
+        is_live_row = lost.isin(['', 'false', '0', 'no', 'live', 'active'])
+        lost_raw = links[~is_live_row].copy()
+        links = links[is_live_row]
+    else:
+        lost_raw = links.iloc[0:0].copy()
+        notes.append('The backlinks export has no lost-link column, so there are no lost backlinks to list. '
+                     'Export all links (live and lost) to include them.')
     links['domain'] = links['source_url'].map(reg_domain)
     links = links[links['domain'] != client]
     links['authority'] = links['authority'].fillna(links['domain'].map(ref_auth))
@@ -466,45 +459,21 @@ def main():
     summary['disavow_candidates'] = len(dis)
     summary['noise_domains'] = len(noise_domains)
 
-    # ------------------------------------------------ broken backlinks
-    rmap = {}
-    if a.redirect_map:
-        df, c = load(a.redirect_map, 'redirect_map', ov)
-        rmap = {norm_url(s): norm_url(t) for s, t in zip(df[c['source']], df[c['target']]) if '*' not in str(s)}
-    br_rows = []
-    if a.broken:
-        df, c = load(a.broken, 'broken', ov)
-        b = pd.DataFrame({'target': col(df, c['target_url'], norm_url), 'code': col(df, c['code']),
-                          'authority': col(df, c['authority'], num),
-                          'source': col(df, c['source_url']) if c['source_url'] else None,
-                          'refdomains': col(df, c['refdomains'], num)})
-        b = b[b['target'].map(reg_domain) == reg_domain(client)]
-        for tgt, g in b.groupby('target'):
-            if c['source_url']:
-                g = g.assign(domain=g['source'].map(reg_domain))
-                g['authority'] = g['authority'].fillna(g['domain'].map(ref_auth))
-                best = g.sort_values('authority', ascending=False).iloc[0]
-                n_dom, best_dom, best_auth, ev = g['domain'].nunique(), best['domain'], best['authority'], best['source']
-            else:
-                n_dom = g['refdomains'].max()
-                best_dom, best_auth, ev = '', float('nan'), ''
-                if len(links):
-                    lk = links[links['target_url'] == tgt]
-                    if len(lk):
-                        bl = lk.sort_values('authority', ascending=False).iloc[0]
-                        best_dom, best_auth, ev = bl['domain'], bl['authority'], bl['source_url']
-                        n_dom = max(n_dom if n_dom == n_dom else 0, lk['domain'].nunique())
-            br_rows.append({'url': tgt, 'code': str(g['code'].iloc[0] or ''), 'refdomains': int(n_dom or 0),
-                            'best_domain': best_dom, 'best_authority': best_auth, 'evidence': ev,
-                            'map_target': rmap.get(tgt, '')})
-    else:
-        summary['optional_not_attached'].append('broken backlinks (derived: build.py finds them from the live status '
-                                                'of every client URL the backlinks point at)')
-    br = pd.DataFrame(br_rows, columns=['url', 'code', 'refdomains', 'best_domain', 'best_authority', 'evidence',
-                                        'map_target'])
-    br.sort_values(['refdomains', 'best_authority'], ascending=False).to_csv(os.path.join(a.out, 'broken.csv'), index=False)
-    save_json(os.path.join(a.out, 'redirect_map.json'), rmap)
-    summary['broken_urls_from_export'] = len(br)
+    # ------------------------------------------------ lost backlinks (from the backlinks export)
+    lost_raw['domain'] = lost_raw['source_url'].map(reg_domain)
+    lost_raw = lost_raw[(lost_raw['domain'] != client) & lost_raw['target_url'].map(lambda u: reg_domain(u) == client)]
+    lost_raw['authority'] = lost_raw['authority'].fillna(lost_raw['domain'].map(ref_auth)).fillna(
+        lost_raw['page_authority'])
+    live_domains = set(links['domain'])
+    lost_out = pd.DataFrame({
+        'domain': lost_raw['domain'], 'source_url': lost_raw['source_url'], 'target_url': lost_raw['target_url'],
+        'anchor': lost_raw['anchor'], 'title': lost_raw['title'], 'authority': lost_raw['authority'],
+        'last_seen': lost_raw['last_seen'], 'reason': lost_raw['lost_reason'],
+        'noise': lost_raw['domain'].map(lambda d: d in set(noise_domains) or is_noise(d) or junk_domain(d)),
+        'still_links': lost_raw['domain'].isin(live_domains)})
+    lost_out.sort_values('authority', ascending=False).to_csv(os.path.join(a.out, 'lost.csv'), index=False)
+    summary['lost_links'] = int(len(lost_out))
+    summary['lost_referring_domains'] = int(lost_out['domain'].nunique())
 
     # ------------------------------------------------ link gap
     gap_rows = {}
@@ -602,19 +571,12 @@ def main():
                                  'branded_or_url_pct': round(100 * isbrand.mean(), 1),
                                  'commercial_pct': round(100 * iscomm.mean(), 1)}
 
-    # ------------------------------------------------ URLs to check live
-    # Every client URL a backlink points at: build.py finds the broken ones from these results.
-    targets = {t for t in links['target_url'] if t and reg_domain(t) == reg_domain(client)}
-    need = targets | set(br['url']) | set(x for x in br['map_target'] if x) | {f'https://{client}/'}
-    with open(os.path.join(a.out, 'status_needed.txt'), 'w') as f:
-        f.write('\n'.join(sorted(need)) + '\n')
-    summary['client_target_urls'] = len(targets)
     summary['notes'] = notes
     save_json(os.path.join(a.out, 'prep_summary.json'), summary)
 
     print('\nSummary')
     for k in ['client_referring_domains', 'client_backlinks', 'disavow_candidates', 'noise_domains',
-              'client_target_urls', 'gap_domains', 'opportunities_kept']:
+              'lost_links', 'lost_referring_domains', 'gap_domains', 'opportunities_kept']:
         print(f'  {k}: {summary.get(k)}')
     print(f'  link-gap domains per competitor (not linking to the client): {summary["gap_domains_by_competitor"]}')
     print(f'  opportunities removed: {dict(removed)}')
@@ -626,8 +588,7 @@ def main():
         print('  NOTE:', n)
     if summary['optional_not_attached']:
         print('  Not attached (optional):', '; '.join(summary['optional_not_attached']))
-    print(f'\nNext: check the {len(need)} URLs in {a.out}/status_needed.txt in the Composio workbench '
-          f'(references/composio.md) and save the result as {a.out}/status.tsv')
+    print(f'\nNext: review {a.out}/lost.csv, disavow.csv and opportunities.csv, write decisions.json, run build.py')
 
 
 if __name__ == '__main__':

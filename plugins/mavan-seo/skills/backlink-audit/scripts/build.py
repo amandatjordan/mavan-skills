@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Build the two-tab backlink audit workbook (Recommendations, Disavow Review) from prep.py output, status.tsv and decisions.json, then QA it.
+"""Build the two-tab backlink audit workbook (Recommendations, Disavow Review) from prep.py output and
+decisions.json, then QA it.
 
 Usage:
   python build.py --work work --out "CLIENT Backlink Audit Month YYYY.xlsx"
 
-Broken backlinks need no export: every client URL the backlinks point at is checked live (status.tsv), and the ones
-that answer 404, 410, 5xx, or 403 while the homepage answers 200, are listed as broken.
+Lost backlinks come from the rows the backlinks export marks as lost (lost.csv). Nothing is checked live.
 
-Prints "All checks passed" or a numbered list of problems. Fix each one in decisions.json (or by
-re-running the status check) and run again; never hand-edit the workbook.
+Prints "All checks passed" or a numbered list of problems. Fix each one in decisions.json and run again;
+never hand-edit the workbook.
 """
 import argparse
 import math
@@ -22,7 +22,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import is_live, load_json, load_status, norm_url, reg_domain, bare_domain, save_json  # noqa: E402
+from common import load_json, norm_url, bare_domain, save_json  # noqa: E402
 from prep import OPP_TYPES, default_priority, dofollow_label, guess_type  # noqa: E402
 
 PRIORITIES = ['High', 'Medium', 'Low']
@@ -102,55 +102,8 @@ def dropdown(ws, header, col_name, values, n):
     dv.add(f'{letter}2:{letter}{n + 1}')
 
 
-BROKEN_COLS = ['url', 'code', 'refdomains', 'refdomains_total', 'best_domain', 'best_authority', 'evidence', 'map_target']
 # Gap domains prep.py filtered out that decisions.json may still add back (a person's call, not a safety rule).
 OVERRIDABLE = {'one competitor, low authority', 'junk domain (spam TLD or SEO-tool name)'}
-
-
-def derive_broken(links, status, client, rmap, needed, noise=()):
-    """Broken client URLs found from the live status of every URL the backlinks point at.
-
-    Broken = 404, 410, 5xx, or 403 while the homepage answers 200 (checked after following redirects, so a
-    redirect to a 404 counts). 429, errors, and 403 when the homepage is blocked too are bot protection or
-    timeouts: they are reported as unchecked, not as broken. Returns (DataFrame like broken.csv, warnings).
-    """
-    if links.empty:
-        return pd.DataFrame(columns=BROKEN_COLS), []
-    home_url = norm_url(f'https://{client}/')
-    home = status.get(home_url)
-    if home is None:
-        needed.add(home_url)
-    walled = home is not None and home['status'] in ('403', '429', 'ERR', '')
-    host = reg_domain(client)
-    rows, unchecked, forbidden = [], [], []
-    mine = links[links['target_url'].map(lambda u: reg_domain(u) == host)]
-    for t, g in mine.groupby('target_url'):
-        st = status.get(norm_url(t))
-        if st is None:
-            needed.add(norm_url(t))
-            continue
-        code = st['final_status'] or st['status']
-        if code in ('', '429', 'ERR') or (code == '403' and walled):
-            unchecked.append(t)
-            continue
-        if code == '403':
-            forbidden.append(t)
-        elif not (code in ('404', '410') or code.startswith('5')):
-            continue
-        real = g[~g['domain'].isin(noise)]  # priority counts real referring domains, not noise networks
-        best = (real if not real.empty else g).sort_values('authority', ascending=False, na_position='last').iloc[0]
-        rows.append({'url': t, 'code': code, 'refdomains': real['domain'].nunique(),
-                     'refdomains_total': g['domain'].nunique(), 'best_domain': best['domain'],
-                     'best_authority': best['authority'], 'evidence': best['source_url'],
-                     'map_target': rmap.get(t, '')})
-    warns = []
-    if forbidden:
-        warns.append(f'{len(forbidden)} client URL(s) answer 403 while the homepage answers 200, so they are listed '
-                     f'as broken. Open a few in a browser to confirm, e.g. {", ".join(forbidden[:3])}.')
-    if unchecked:
-        warns.append(f'{len(unchecked)} client URL(s) could not be checked (403/429/error, likely bot protection) and '
-                     f'are NOT listed as broken. Open them in a browser, e.g. {", ".join(unchecked[:3])}.')
-    return pd.DataFrame(rows, columns=BROKEN_COLS), warns
 
 
 def main():
@@ -165,14 +118,7 @@ def main():
     metric = summ.get('metric', 'DR')
     client = bare_domain(cfg['domain'])
     unnatural = cfg['manual_action'] == 'unnatural-to'
-    status = load_status(W)
-    problems, needed, soft = [], set(), []
-
-    def live(u):
-        if norm_url(u) not in status:
-            needed.add(norm_url(u))
-            return None
-        return is_live(u, status)
+    problems, soft = [], []
 
     # ------------------------------------------------ Disavow Review
     dis = read(W, 'disavow.csv')
@@ -229,68 +175,41 @@ def main():
         problems.append('Manual action is "Unnatural links to your site" but no row is a disavow candidate. '
                         'Mark the domains that match Google\'s examples in decisions.json.')
 
-    # ------------------------------------------------ Recommendations: broken backlinks
-    br = read(W, 'broken.csv')
-    rmap = load_json(os.path.join(W, 'redirect_map.json'), {}) or {}
-    derived_br, derived_warns = derive_broken(links, status, client, rmap, needed, noise)
-    soft.extend(derived_warns)
-    export_urls = set(br['url']) if 'url' in br else set()
-    br = pd.concat([br, derived_br[~derived_br['url'].isin(export_urls)]], ignore_index=True) if not derived_br.empty else br
-    all_broken = {norm_url(x) for x in br['url']} if 'url' in br else set()
-    if 'url' in br:  # for the reviewer: everything build.py treats as a broken backlink, with who links to it
-        br.to_csv(os.path.join(W, 'broken_found.csv'), index=False)
-    bd = dec.get('broken', {})
-    rec, fixed, broken_seen = [], [], set()
-    for r in br.to_dict('records'):
-        u = norm_url(r['url'])
-        if u in broken_seen:
-            problems.append(f'Broken URL listed twice: {u}')
-        broken_seen.add(u)
-        st = status.get(u)
-        if st is None:
-            needed.add(u)
-            continue
-        if st['status'] == '200' or st['final_status'] == '200':
-            fixed.append(u + (f' (redirects to {st["final_url"]})' if st['final_url'] and st['final_url'] != u else ''))
-            continue
-        o = bd.get(u) or bd.get(r['url'], {})
-        if o.get('action') == 'drop':
-            continue
-        tgt = norm_url(o.get('target') or (r['map_target'] if not blank(r.get('map_target')) else ''))
-        if not tgt:
-            problems.append(f'Broken URL {u} has no target: add it to decisions.json "broken" (who links to it: broken_found.csv).')
-            continue
-        ok = live(tgt)
-        if ok is False:
-            problems.append(f'Broken URL {u}: target {tgt} does not answer 200 without a redirect. Pick another target.')
-        if tgt in all_broken:
-            problems.append(f'Broken URL {u}: target {tgt} is itself a broken URL.')
-        act = o.get('action', '301')
-        src = r.get('best_domain') if not blank(r.get('best_domain')) else 'the linking site'
-        if act == 'restore':
-            do = f'Restore the page or 301 to {tgt}.'
-        elif act == 'typo':
-            do = f'301 the typo URL to {tgt}; optionally ask {src} to fix the link.'
-        else:
-            do = f'301 redirect to {tgt}.'
-        if not blank(r.get('map_target')) and norm_url(r['map_target']) == tgt:
-            do += ' (per prune & merge map)'
-        if o.get('note'):
-            do += ' ' + o['note']
-        n = int(r['refdomains'] or 0)
-        auth = r.get('best_authority')
-        pr = o.get('priority') or ('High' if n >= 5 or (not blank(auth) and auth >= 40) else
-                                   'Medium' if n >= 2 or (not blank(auth) and auth >= 20) else 'Low')
-        code = '' if blank(r.get('code')) else str(r['code']).replace('.0', '')
-        tot = 0 if blank(r.get('refdomains_total')) else int(r['refdomains_total'])
-        total_note = f' ({tot} counting noise domains)' if tot > n else ''
-        found = f'Returns {st["final_status"] or st["status"] or code or "an error"}; {n} referring domain{"s link" if n != 1 else " links"} here{total_note}'
-        if not blank(r.get('best_domain')):
-            found += f', strongest {r["best_domain"]}' + ('' if blank(auth) else f' ({metric} {auth:.0f})')
-        rec.append({'Priority': pr, 'Type': 'Broken backlink', 'Domain / Source': clean(r.get('best_domain')),
-                    'Client URL Affected': u, metric: auth, 'Referring Domains or Competitors Linking': n,
-                    'What We Found': found + '.', 'Do This': do, 'Target URL': tgt,
-                    'Evidence URL': clean(r.get('evidence'))})
+    # ------------------------------------------------ Recommendations: lost backlinks
+    # One row per linking domain that lost a link to the client. Noise and junk domains are left out.
+    lost = read(W, 'lost.csv')
+    ld = dec.get('lost', {})
+    rec = []
+    dis_names = {r['Referring Domain'] for r in dis_rows}
+    if not lost.empty:
+        lost = lost[~lost['domain'].isin(noise | dis_names)]
+        lost = lost[~lost['noise'].astype(str).str.lower().eq('true') | lost['domain'].isin(ld)]
+        for d, g in lost.groupby('domain'):
+            o = ld.get(d, {})
+            if o.get('include') is False or o.get('drop'):
+                continue
+            g = g.sort_values('authority', ascending=False, na_position='last')
+            best = g.iloc[0]
+            auth = best['authority']
+            n = len(g)
+            target = g['target_url'].mode().iloc[0]
+            still = str(best.get('still_links')).lower() == 'true'
+            when = '' if blank(best.get('last_seen')) else f' Last seen {str(best["last_seen"])[:10]}.'
+            why = '' if blank(best.get('reason')) else f' Reason in the export: {best["reason"]}.'
+            found = (f'{n} lost link{"s" if n != 1 else ""} from {d} to the client.{when}{why}'
+                     + (' The domain still links to the client from other pages.' if still else ''))
+            if o.get('found'):
+                found += ' ' + o['found']
+            do = o.get('do_this') or (
+                'Check why it was lost in the tool. If the page moved or the listing changed, ask the site to '
+                'restore the link; if the page is gone, skip it.')
+            pr = o.get('priority') or ('Low' if still else
+                                       'High' if not blank(auth) and auth >= 40 else
+                                       'Medium' if not blank(auth) and auth >= 20 else 'Low')
+            rec.append({'Priority': pr, 'Type': 'Lost backlink', 'Domain / Source': d,
+                        'Client URL Affected': norm_url(target), metric: auth,
+                        'Referring Domains or Competitors Linking': n, 'What We Found': found, 'Do This': do,
+                        'Target URL': None, 'Evidence URL': clean(best['source_url'])})
 
     # ------------------------------------------------ Recommendations: link opportunities
     opp = read(W, 'opportunities.csv')
@@ -334,8 +253,6 @@ def main():
         if t not in HOME_TYPES and not o.get('target') and t != 'Other':
             o_note = 'target defaults to the homepage; point editorial links at the matching service page'
             soft.append(f'Opportunity {d} ({t}): {o_note}.')
-        if live(tgt) is False:
-            problems.append(f'Opportunity {d}: target {tgt} does not answer 200 without a redirect.')
         if d in dis_domains:
             problems.append(f'Opportunity {d} is also on the Disavow Review tab.')
         comps = r['competitors'] if not blank(r['competitors']) else ''
@@ -356,15 +273,8 @@ def main():
     for x in rec:
         if x['Priority'] not in PRIORITIES:
             problems.append(f'{x["Domain / Source"] or x["Client URL Affected"]}: priority "{x["Priority"]}" invalid.')
-    rec.sort(key=lambda x: (porder.get(x['Priority'], 9), 0 if x['Type'] == 'Broken backlink' else 1,
+    rec.sort(key=lambda x: (porder.get(x['Priority'], 9), 0 if x['Type'] == 'Lost backlink' else 1,
                             -(x[metric] if not blank(x[metric]) else -1)))
-
-    if needed:
-        p = os.path.join(W, 'status_needed.txt')
-        with open(p, 'w') as f:
-            f.write('\n'.join(sorted(needed)) + '\n')
-        problems.insert(0, f'{len(needed)} URLs have no live status yet. Check them in the Composio workbench, add '
-                           f'the lines to {W}/status.tsv and run build.py again. They are listed in {p}.')
 
     # ------------------------------------------------ workbook
     wb = Workbook()
@@ -398,14 +308,12 @@ def main():
 
     # ------------------------------------------------ report
     counts = {'disavow_review': len(dis_rows),
-              'broken_backlinks': sum(1 for x in rec if x['Type'] == 'Broken backlink'),
-              'link_opportunities': len(orows), 'opportunities_over_cap': extra, 'already_fixed': fixed}
+              'lost_backlinks': sum(1 for x in rec if x['Type'] == 'Lost backlink'),
+              'link_opportunities': len(orows), 'opportunities_over_cap': extra}
     save_json(os.path.join(W, 'build_summary.json'), counts)
     print(f'Saved {a.out}')
     for k, v in counts.items():
         print(f'  {k}: {len(v) if isinstance(v, list) else v}')
-    if fixed:
-        print('  Already fixed (dropped):', '; '.join(fixed[:20]))
     if soft:
         print(f'\n{len(soft)} warnings (not blocking; review them):')
         for w in soft[:15]:

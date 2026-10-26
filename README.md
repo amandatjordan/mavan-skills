@@ -8,7 +8,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | `internal-linking-audit` | Finds internal linking opportunities for priority pages and builds the implementation sheet | Internal Linking Audit |
 | `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
-| `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and recommends broken-backlink fixes and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
+| `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and lists lost backlinks to win back and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
 
 ## Layout
 

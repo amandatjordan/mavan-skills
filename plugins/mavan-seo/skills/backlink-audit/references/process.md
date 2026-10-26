@@ -4,13 +4,13 @@ Everything the audit needs is in this skill. A written copy of the process may e
 
 ## Goal
 
-Show how the client's backlink profile compares with the competitors they actually lose to, and turn that into a short list of work: links to win (sites that link to competitors but not to the client), links being wasted (backlinks pointing at client URLs that error), and links that look risky. The output is one workbook with two tabs: Recommendations, then Disavow Review.
+Show how the client's backlink profile compares with the competitors they actually lose to, and turn that into a short list of work: links to win (sites that link to competitors but not to the client), links lost recently (backlinks the tool marks as lost), and links that look risky. The output is one workbook with two tabs: Recommendations, then Disavow Review.
 
 ## Disavow rule
 
 Nothing is disavowed unless Google Search Console shows a manual action for **Unnatural links to your site**. Ahrefs and Semrush risk scores are not a reason to disavow: Google ignores most spammy links on its own, and disavowing good links by mistake can hurt rankings. With no manual action, sketchy links are reviewed and monitored, never disavowed.
 
-The manual actions result always comes from the person: the Search Console API (and so Composio) can't read it. Record it in config.json as:
+The manual actions result always comes from the person: the Search Console API can't read it. Record it in config.json as:
 
 | Person reports | `manual_action` | What it means |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ Put these next steps in the final reply so the person knows what's left for them
 4. Build the disavow .txt from the Disavow rows. Uploading replaces any existing disavow file, so download the current one first and merge its entries in.
 5. Upload it in Search Console's disavow links tool, then file a reconsideration request: what was found, what was removed, what was disavowed.
 
-**Broken backlinks.** Confirm each target is the best topical match, not just the homepage. If the client has a planned redirect map (e.g. from a prune & merge), add these redirects to it so there's one map, and check for chains. For High rows from strong sites, also ask the linking site to update the link: a direct link beats a redirect. A week after the redirects go live, check each one 301s to its target in one hop.
+**Lost backlinks.** Open each kept row's Evidence URL and check in the tool why the link was lost. If the page moved, the listing changed, or the client URL it pointed at changed, ask the site to restore or update the link. If the linking page is gone, delete the row. If the client URL it pointed at is now a 404, add a redirect to the client's redirect map.
 
 **Link opportunities.** For each High and Medium row: is it relevant (same market or industry, or a local site the client's patients read)? Attainable (directories, locators, associations and chambers are quick; editorial links need a pitch)? Why do competitors have it (open their linking page: a sponsorship, membership, quote or listing tells you what to ask for)? Worth it (skip sites that only sell links, even if competitors are on them)? Change Priority where judgment differs, delete rows that fail, and give each kept row an owner.
 
@@ -51,6 +51,6 @@ Put these next steps in the final reply so the person knows what's left for them
 
 - Tool scores aren't Google. Semrush risk scores and low DR/AS are reasons to look closer, never to disavow on their own.
 - Don't mix tools. DR (Ahrefs) and AS (Semrush) are different scales.
-- Tool data is stale: broken backlink reports lag, so the audit doesn't use them. It checks every client URL the backlinks point at live, and only URLs that fail that check go in the workbook.
+- Tool data lags: a link marked lost may already be back, and the audit checks nothing live. Confirm in the tool before reaching out.
 - Uploading a disavow file replaces the old one.
 - Never recommend buying links, even when every competitor has them. Paid links are what causes manual actions.
