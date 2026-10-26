@@ -34,7 +34,7 @@ Apply in order; write the rule used in Page Type Reason.
    - A long-slug page that is NOT listed on the blog is a page, not a post: Service, reason "Root-level, long slug but not on the blog - check".
    - Otherwise a short slug naming a service or containing a city = Service, reason `Root-level, no folder match`.
    - Anything else = Other, reason `No rule matched - check`.
-5. If the IA audit All Pages tab is attached and the person asked to use it, use its type, mapped to the values above, reason "From IA audit".
+5. If the IA audit All Pages tab is attached, use its type for any URL it covers instead, mapped to the values above, reason "From IA audit".
 
 **Reason wording drives the sheet:** the Area formula tags any reason containing `Root-level` or `No rule matched` as *Check page type*. Use those words only for slug-rule guesses (rule 4), never for folder-map or site-signal types.
 

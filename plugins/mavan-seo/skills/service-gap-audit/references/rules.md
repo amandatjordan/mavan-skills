@@ -1,6 +1,6 @@
 # Service Gap Audit rules
 
-Thresholds are first-test defaults (agelesscdga.com, Oct 2026): **thin** < 300 content words, **light** < 600, Sub-Service confirm at competitor volume >= 5,000, "is it offered?" at >= 20,000. Write them in the Read Me.
+Thresholds are first-test defaults (agelesscdga.com, Oct 2026): **thin** < 300 content words, **light** < 600, Sub-Service confirm at competitor volume >= 5,000, "is it offered?" at >= 5,000. Write them in the Read Me.
 
 ## Keyword classification
 
@@ -63,12 +63,12 @@ Never create a gap for a node whose Status / Notes says "Do not flag" or "NOT US
 | Indexability blocker | Best page is not indexable | P1 |
 | Empty / thin page | Best page indexable and < thin | P1 |
 | Missing page (offered) | Confirmed or Likely, coverage is meta / gallery / none | P1 if Confirmed and volume >= 5,000, else P2 |
-| No Service page (brand pages only) | Service with only brand / sub-service pages (keep the list of those pages for the Recommendations tab) | P2 if volume >= 20,000, else P3 |
-| Missing page (blog only) | Only blog posts | P2 if volume >= 20,000, else P3 |
+| No Service page (brand pages only) | Service with only brand / sub-service pages (keep the list of those pages for the Recommendations tab) | P2 if volume >= 5,000, else P3 |
+| Missing page (blog only) | Only blog posts | P2 if volume >= 5,000, else P3 |
 | Section, no page | Only an H2 section | P3 |
 | Light page | Best page indexable, thin <= words < light | P3 |
 | Confirm Sub-Service, then page | Unknown (parent offered), volume >= 5,000 | P2 |
-| Ask client: not offered? | Service, No evidence, volume >= 20,000, fits practice type, not Beauty Services | Ask |
+| Ask client: not offered? | Service, No evidence, volume >= 5,000, fits practice type, not Beauty Services | Ask |
 
 Volume here = competitor volume for the node: Service = all its keywords; Sub-Service = keywords with that Sub-Service (any brand); Brand = keywords with that brand.
 
@@ -100,7 +100,6 @@ If a GSC queries export is attached, add "Client GSC Impressions": the sum of im
 
 The competitor list is full of other cities ("botox miami"). Keep the client's service-area cities; exclude a keyword when either rule fires:
 
-1. **Known city / state / ZIP**: the Filters tab's Known city / state / ZIP pattern matches, or the keyword contains a 5-digit number.
-2. **Place-name rule**, only for keywords with volume <= 1,000. Remove near-me phrases, split into words. A word is **recognized** if it is in the Filters tab's Common query words, is a word from a taxonomy match term (or starts with one 4+ letters long), contains 8+ letters and contains a 6+ letter match-term word, contains a digit, is a close misspelling (difflib ratio >= 0.8) of a 5+ letter known word, or is a lowercase entry in an English dictionary (`/usr/share/hunspell/en_US.dic` when present; strip common suffixes -s, -es, -ies, -ed, -ing, -ly, -er, -est). The rule fires when the keyword contains no Grammar words, and its unrecognized words are 1 to 3 consecutive words at the start or the end, and at least one word is recognized.
+Place detection is precomputed in the bundled All Keywords tab: **Geo Modified = Y** marks a keyword that names a US city, state, ZIP or other place (matched against a gazetteer, with ambiguous single words such as "spring" or "temple" left unflagged; Geo Check shows "Place found" or "Review"). Exclude Geo Modified = Y keywords unless the place is one of the client's service-area cities. Near Me keywords are kept. Only when the person attached a different keyword list, flag places yourself: match a US city / state / country gazetteer, treat a 5-digit number as a ZIP, and leave ordinary words alone.
 
-Record each excluded keyword with its reason: "Other market (known city / state)" or "Other market (place-name rule, review)". Neighborhoods made of ordinary words ("river north") get through; the QA step catches the ones that matter.
+Record each excluded keyword with its reason: "Other market (Geo Modified)". Neighborhoods made of ordinary words ("river north") get through; the QA step catches the ones that matter.

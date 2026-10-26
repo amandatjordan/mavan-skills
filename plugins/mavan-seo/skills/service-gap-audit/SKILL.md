@@ -15,7 +15,7 @@ Work only from files: the crawl export, the bundled taxonomy, and anything the p
 
 - **Crawl export** (CSV, internal HTML URLs, every status code). Sitebulb: URL, HTTP Status Code, Indexable Status, Title, Meta Description, H1, H2, H2 (second), No. Content Words, and the canonical URL column if exported. Screaming Frog: Address, Status Code, Indexability, Indexability Status, Title 1, Meta Description 1, H1-1, H2-1, H2-2, Word Count, Canonical Link Element 1. Ask for it if missing.
 - **Client facts**: domain, practice type (medspa, surgical, or both), service-area cities. Ask in one question for whatever the request doesn't give.
-- **Taxonomy**: `$SKILL/references/service-taxonomy.xlsx`. Tabs: Taxonomy (match terms per Service / Sub-Service / Brand / Device / Concern), Filters (exclusion, city/state, modifier patterns, place-name word lists), All Keywords (the competitor keyword list with US national volume, already classified). If the person attaches a newer taxonomy or keyword list, use theirs and say so.
+- **Taxonomy**: `$SKILL/references/service-taxonomy.xlsx`. Tabs: Taxonomy (match terms per Service / Sub-Service / Brand / Device / Concern), Filters (exclusion and modifier patterns), Service Rollup, All Keywords (the competitor keyword list with US national volume, already classified, with Geo Modified / Place / Geo Check columns), Local Intent. If the person attaches a newer taxonomy or keyword list, use theirs and say so.
 - **Optional**: a Search Console queries export (CSV from the GSC web UI).
 
 ## Vocabulary
