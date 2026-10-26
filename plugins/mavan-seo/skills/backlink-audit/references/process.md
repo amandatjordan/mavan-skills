@@ -51,6 +51,6 @@ Put these next steps in the final reply so the person knows what's left for them
 
 - Tool scores aren't Google. Semrush risk scores and low DR/AS are reasons to look closer, never to disavow on their own.
 - Don't mix tools. DR (Ahrefs) and AS (Semrush) are different scales.
-- Tool data is stale: broken backlink reports lag, so every URL is checked live before it goes in the workbook.
+- Tool data is stale: broken backlink reports lag, so the audit doesn't use them. It checks every client URL the backlinks point at live, and only URLs that fail that check go in the workbook.
 - Uploading a disavow file replaces the old one.
 - Never recommend buying links, even when every competitor has them. Paid links are what causes manual actions.

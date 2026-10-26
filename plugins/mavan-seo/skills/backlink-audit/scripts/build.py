@@ -4,6 +4,9 @@
 Usage:
   python build.py --work work --out "CLIENT Backlink Audit Month YYYY.xlsx"
 
+Broken backlinks need no export: every client URL the backlinks point at is checked live (status.tsv), and the ones
+that answer 404, 410, 5xx, or 403 while the homepage answers 200, are listed as broken.
+
 Prints "All checks passed" or a numbered list of problems. Fix each one in decisions.json (or by
 re-running the status check) and run again; never hand-edit the workbook.
 """
@@ -20,7 +23,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import is_live, load_json, load_status, norm_url, reg_domain, bare_domain, save_json  # noqa: E402
-from prep import OPP_TYPES  # noqa: E402
+from prep import OPP_TYPES, default_priority, guess_type  # noqa: E402
 
 PRIORITIES = ['High', 'Medium', 'Low']
 STATUSES_DIS = ['Monitor', 'Review closer', 'Disavow candidate - matches manual action']
@@ -99,6 +102,55 @@ def dropdown(ws, header, col_name, values, n):
     dv.add(f'{letter}2:{letter}{n + 1}')
 
 
+BROKEN_COLS = ['url', 'code', 'refdomains', 'best_domain', 'best_authority', 'evidence', 'map_target']
+# Gap domains prep.py filtered out that decisions.json may still add back (a person's call, not a safety rule).
+OVERRIDABLE = {'one competitor, low authority', 'junk domain (spam TLD or SEO-tool name)'}
+
+
+def derive_broken(links, status, client, rmap, needed):
+    """Broken client URLs found from the live status of every URL the backlinks point at.
+
+    Broken = 404, 410, 5xx, or 403 while the homepage answers 200 (checked after following redirects, so a
+    redirect to a 404 counts). 429, errors, and 403 when the homepage is blocked too are bot protection or
+    timeouts: they are reported as unchecked, not as broken. Returns (DataFrame like broken.csv, warnings).
+    """
+    if links.empty:
+        return pd.DataFrame(columns=BROKEN_COLS), []
+    home_url = norm_url(f'https://{client}/')
+    home = status.get(home_url)
+    if home is None:
+        needed.add(home_url)
+    walled = home is not None and home['status'] in ('403', '429', 'ERR', '')
+    host = reg_domain(client)
+    rows, unchecked, forbidden = [], [], []
+    mine = links[links['target_url'].map(lambda u: reg_domain(u) == host)]
+    for t, g in mine.groupby('target_url'):
+        st = status.get(norm_url(t))
+        if st is None:
+            needed.add(norm_url(t))
+            continue
+        code = st['final_status'] or st['status']
+        if code in ('', '429', 'ERR') or (code == '403' and walled):
+            unchecked.append(t)
+            continue
+        if code == '403':
+            forbidden.append(t)
+        elif not (code in ('404', '410') or code.startswith('5')):
+            continue
+        best = g.sort_values('authority', ascending=False, na_position='last').iloc[0]
+        rows.append({'url': t, 'code': code, 'refdomains': g['domain'].nunique(), 'best_domain': best['domain'],
+                     'best_authority': best['authority'], 'evidence': best['source_url'],
+                     'map_target': rmap.get(t, '')})
+    warns = []
+    if forbidden:
+        warns.append(f'{len(forbidden)} client URL(s) answer 403 while the homepage answers 200, so they are listed '
+                     f'as broken. Open a few in a browser to confirm, e.g. {", ".join(forbidden[:3])}.')
+    if unchecked:
+        warns.append(f'{len(unchecked)} client URL(s) could not be checked (403/429/error, likely bot protection) and '
+                     f'are NOT listed as broken. Open them in a browser, e.g. {", ".join(unchecked[:3])}.')
+    return pd.DataFrame(rows, columns=BROKEN_COLS), warns
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--work', required=True)
@@ -127,12 +179,13 @@ def main():
     if not (3 <= len(take) <= 5):
         problems.append(f'decisions.json "takeaways" has {len(take)} items; write 3 to 5.')
     if roll.empty:
-        problems.append('Competitor Rollup is empty: attach the competitor comparison export and re-run prep.py.')
+        soft.append('Competitor Rollup is empty: re-run prep.py with the backlinks and link gap exports.')
 
     # ------------------------------------------------ Disavow Review
     dis = read(W, 'disavow.csv')
     noise = set(load_json(os.path.join(W, 'noise.json'), []) or []) | set(dec.get('noise', []))
     dd = dec.get('disavow', {})
+    noise -= {d for d, o in dd.items() if not o.get('drop')}  # a domain added on review is not noise
     links = read(W, 'links.csv')
     dis_rows = []
     seen = set()
@@ -185,6 +238,14 @@ def main():
 
     # ------------------------------------------------ Recommendations: broken backlinks
     br = read(W, 'broken.csv')
+    rmap = load_json(os.path.join(W, 'redirect_map.json'), {}) or {}
+    derived_br, derived_warns = derive_broken(links, status, client, rmap, needed)
+    soft.extend(derived_warns)
+    export_urls = set(br['url']) if 'url' in br else set()
+    br = pd.concat([br, derived_br[~derived_br['url'].isin(export_urls)]], ignore_index=True) if not derived_br.empty else br
+    all_broken = {norm_url(x) for x in br['url']} if 'url' in br else set()
+    if 'url' in br:  # for the reviewer: everything build.py treats as a broken backlink, with who links to it
+        br.to_csv(os.path.join(W, 'broken_found.csv'), index=False)
     bd = dec.get('broken', {})
     rec, fixed, broken_seen = [], [], set()
     for r in br.to_dict('records'):
@@ -204,12 +265,12 @@ def main():
             continue
         tgt = norm_url(o.get('target') or (r['map_target'] if not blank(r.get('map_target')) else ''))
         if not tgt:
-            problems.append(f'Broken URL {u} has no target: add it to decisions.json "broken".')
+            problems.append(f'Broken URL {u} has no target: add it to decisions.json "broken" (who links to it: broken_found.csv).')
             continue
         ok = live(tgt)
         if ok is False:
             problems.append(f'Broken URL {u}: target {tgt} does not answer 200 without a redirect. Pick another target.')
-        if tgt in broken_seen or tgt in set(norm_url(x) for x in br['url']):
+        if tgt in all_broken:
             problems.append(f'Broken URL {u}: target {tgt} is itself a broken URL.')
         act = o.get('action', '301')
         src = r.get('best_domain') if not blank(r.get('best_domain')) else 'the linking site'
@@ -228,7 +289,7 @@ def main():
         pr = o.get('priority') or ('High' if n >= 5 or (not blank(auth) and auth >= 40) else
                                    'Medium' if n >= 2 or (not blank(auth) and auth >= 20) else 'Low')
         code = '' if blank(r.get('code')) else str(r['code']).replace('.0', '')
-        found = f'Returns {st["status"] or code or "an error"}; {n} referring domain{"s link" if n != 1 else " links"} here'
+        found = f'Returns {st["final_status"] or st["status"] or code or "an error"}; {n} referring domain{"s link" if n != 1 else " links"} here'
         if not blank(r.get('best_domain')):
             found += f', strongest {r["best_domain"]}' + ('' if blank(auth) else f' ({metric} {auth:.0f})')
         rec.append({'Priority': pr, 'Type': 'Broken backlink', 'Domain / Source': clean(r.get('best_domain')),
@@ -242,7 +303,27 @@ def main():
     dis_domains = {r['Referring Domain'] for r in dis_rows}
     home = f'https://{client}/'
     orows = []
-    for r in opp.to_dict('records'):
+    gap_by = {r['domain']: r for r in read(W, 'gap_all.csv').to_dict('records')}
+    opp_records = opp.to_dict('records')
+    have = {r['domain'] for r in opp_records}
+    for d, o in od.items():  # domains added on review (e.g. one-competitor sites that prep.py dropped)
+        if d in have or o.get('include') is False:
+            continue
+        g = gap_by.get(d)
+        if g is None:
+            problems.append(f'decisions.json opportunities adds {d}, which is not in the link gap export.')
+            continue
+        why = '' if blank(g['removed_reason']) else g['removed_reason']
+        if why and why not in OVERRIDABLE:
+            problems.append(f'decisions.json opportunities adds {d}, which was filtered out as "{why}" and can\'t be added.')
+            continue
+        t = o.get('type') or guess_type(d)
+        n = int(g['n_competitors'] or 0)
+        opp_records.append({'domain': d, 'authority': g['authority'], 'traffic': g['traffic'], 'n_competitors': n,
+                            'competitors': '' if blank(g['competitors']) else g['competitors'], 'type_guess': t,
+                            'priority': default_priority(n, g['authority'], t),
+                            'evidence': '' if blank(g['evidence']) else g['evidence']})
+    for r in opp_records:
         d = r['domain']
         o = od.get(d, {})
         if o.get('include') is False:
