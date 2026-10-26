@@ -19,9 +19,8 @@ Brand terms are lowercase. If the GA4 property is unknown, append `ia_ga4_proper
 
 ## 3. Pull the data (one workbench call each)
 
-1. `ia_months()`: 16 months by page. Prints a monthly table and a suggested window. A migration shows up as months where a large share of impressions sits on URLs that no longer get any. Use the period after the migration as the window; with no migration, the last 3 full months it prints.
-2. `ia_window('YYYY-MM-DD', 'YYYY-MM-DD')`: page totals, page + query (paginated until short of 25,000 rows), GA4 landing pages. If GA4 fails, it says so and carries on.
-3. `ia_build()`: builds the tables and prints the `ia_emit(...)` calls needed to bring them back, grouped so each call stays under the output limit.
+1. `ia_window()`: the last 6 full calendar months (it prints the dates; there is no migration check). Pulls page totals, page + query (paginated until short of 25,000 rows, one slice per month so the slices run in parallel), and GA4 landing pages with sessions and key events. If GA4 fails, it says so and carries on.
+2. `ia_build()`: builds the tables and prints the `ia_emit(...)` calls needed to bring them back, grouped so each call stays under the output limit. Searches with no owner page are kept only when they reach 100 impressions in the window.
 
 Composio prints a response-schema preview the first time a tool runs in a call; ignore it.
 
@@ -33,11 +32,10 @@ Run each printed `ia_emit(...)` call. Save its output, exactly as printed, from 
 python $SKILL/scripts/gsc_import.py --dir work/gsc
 ```
 
-Every block carries a row count and checksum. A block that fails was copied wrong: run that `ia_emit` again and save it again over the bad file. Done when it prints "Loaded" for meta, monthly, pages, pairs, noowner and home, with no PROBLEMS.
+Every block carries a row count and checksum. A block that fails was copied wrong: run that `ia_emit` again and save it again over the bad file. Done when it prints "Loaded" for meta, pages, pairs, noowner and home, with no PROBLEMS.
 
-## 5. Follow-ups from analyze.py
+## 5. Follow-up from analyze.py
 
-analyze.py's `next_steps.md` prints two more workbench calls. Run each and save its block to `work/gsc/` the same way, then re-run gsc_import.py and analyze.py:
+analyze.py's `next_steps.md` prints one more workbench call. Run it and save its block to `work/gsc/` the same way, then re-run gsc_import.py and analyze.py:
 
-- `ia_crawl_split([...])`: the migration check split into URLs live in the crawl vs not, for the Read Me table. It needs the crawl, which Composio can't see, so analyze.py passes it the ids of pages that aren't live.
 - `ia_pair_queries([...])`: top shared searches for the duplicate and city-variant pairs. Rounds add up, so after a later review round you only run it for the new pairs.

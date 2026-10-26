@@ -22,22 +22,22 @@ A TL;DR for the strategist: one row per fix, short and direct. fill.py sorts the
 - An area name must not sit inside another area name ("Service URLs" inside "Deep service URLs"): the Pages formula matches parts of names, so it would count both. fill.py stops on this.
 - **where**: the tab and filter that shows the pages.
 - **covers**: which required topics the row answers. Every topic needs a row, even when the answer is Pass: `junk_pages`, `blogs_outside_path`, `services_outside_path`, `duplicates`, `no_owner`, `menu_zero_clicks`, `prune`, `redirect_links`, `overlapping_browse`, `city_pages`, `service_depth`, `traffic_baseline` (Info).
-- Blogs outside the blog path: name the blog folder the site uses, or "no blog folder exists", and recommend one consistent folder with 301s, done in the same release as other URL changes so links are only updated once.
+- Blogs outside the blog path: name the blog folder the person confirmed in the folder mapping, or "no blog folder exists", and recommend one consistent folder with 301s, done in the same release as other URL changes so links are only updated once.
 - Linking from blogs to service pages is fine. Never recommend adding links to blog posts; that isn't a goal of this audit, and fill.py stops on it.
 
 ## readme
 
 ```json
-"readme": {"window_reason": "...", "other_cities": "...", "ga4_missing": "...", "missing": "...", "side_observations": "..."}
+"readme": {"other_cities": "...", "ga4_missing": "...", "missing": "...", "side_observations": "..."}
 ```
 
-All optional; fill.py writes the rest of the Read Me from the data. Set `window_reason` when the window isn't the last 3 full months (a migration), naming the migration month. `other_cities` says where the cities came from. `missing` adds to the notes analyze.py collects. `side_observations` is for anything worth knowing that's outside the audit's scope.
+All optional; fill.py writes the rest of the Read Me from the data, including the window (the last 6 full months). `other_cities` says where the cities came from. `missing` adds to the notes analyze.py collects. `side_observations` is for anything worth knowing that's outside the audit's scope.
 
 ## tab notes and section text
 
 ```json
 "tab_notes": {"Retarget Links": "None found for this site, so there is nothing to do here."},
-"path_summary": "74 blogs sit at the root instead of /blog/; 107 service pages sit outside /services/.",
+"path_summary": "74 blogs sit at the root instead of in the blog folder; 107 service pages sit outside the service folder.",
 "link_flow_note": "Most body links come from blogs and point at other blogs, not service pages."
 ```
 

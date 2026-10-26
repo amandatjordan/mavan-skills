@@ -9,9 +9,13 @@ Reads work/config.json, work/decisions.json (recommendations, Read Me notes, tab
 CSVs analyze.py wrote. Tabs, header text, hover notes, dropdowns, colours and formulas come from
 the template; every section is rebuilt by copying the template's own row styles, so sections can
 grow past the rows the template reserves without overwriting the next section.
+Only values go into data cells. The only formulas in the template are All Pages column C (Area)
+and Recommendations column F (Pages); before saving, the script checks that no dropdown, conditional
+format or hover note was lost and that no other cell holds a formula.
 Exits with status 1 and lists the problems if any check fails; no file is written then.
 """
 import argparse
+import collections
 import os
 import re
 import sys
@@ -35,13 +39,14 @@ REQUIRED_TOPICS = {
     'prune': 'prune candidates', 'redirect_links': 'links pointing to redirects/404s',
     'overlapping_browse': 'overlapping ways to browse the same services', 'city_pages': 'city/location pages',
     'service_depth': 'service URL depth', 'traffic_baseline': 'traffic baseline (Info)'}
-AREA_FORMULA = ('=IF($A{r}="","",_xlfn.TEXTJOIN(", ",TRUE,IF(OR(AD{r}="Merge then Redirect",AD{r}="Review"),"Duplicate pages",""),'
+AREA_FORMULA = ('=IF($A{r}="","",_xlfn.TEXTJOIN(", ",TRUE,IF(OR(AC{r}="Merge then Redirect",AC{r}="Review"),"Duplicate pages",""),'
                 'IF(AND(D{r}="Blog",LEFT(B{r},6)<>"/blog/",LEFT(B{r},7)<>"/blogs/",LEFT(B{r},10)<>"/articles/",'
-                'LEFT(B{r},6)<>"/news/",LEFT(B{r},11)<>"/resources/"),"Blog URLs",""),IF(AD{r}="Prune candidate",'
+                'LEFT(B{r},6)<>"/news/",LEFT(B{r},11)<>"/resources/"),"Blog URLs",""),IF(AC{r}="Prune candidate",'
                 '"Prune candidates",""),IF(AND(O{r}="Yes",N(U{r})=0),"Menu cleanup",""),IF(D{r}="Location / Area",'
                 '"City pages",""),IF(AND(OR(D{r}="Service",LEFT(D{r},12)="Service-like"),N(J{r})>=5),'
-                '"Deep service URLs",""),AH{r}))')
+                '"Deep service URLs",""),AG{r}))')
 REC_FORMULA = '=IF(C{r}="","",COUNTIF(\'All Pages\'!C:C,"*"&C{r}&"*"))'
+FORMULA_COLUMNS = {('All Pages', 'C'), ('Recommendations', 'F')}  # the only formulas the template holds
 
 
 def csv(work, name):
@@ -172,6 +177,43 @@ def how_to_line(ws, sentence=''):
     c.value = base
 
 
+# ---------------------------------------------------------------- integrity
+def snapshot(wb):
+    """Dropdowns, conditional format rules and hover notes in the workbook, as multisets, plus any cell
+    that holds a formula outside the two formula columns."""
+    dv, cf, notes, stray = collections.Counter(), collections.Counter(), collections.Counter(), []
+    for ws in wb.worksheets:
+        for d in ws.data_validations.dataValidation:
+            dv[(ws.title, d.type, str(d.formula1))] += 1
+        for rng in ws.conditional_formatting:
+            for rule in rng.rules:
+                cf[(ws.title, rule.type, rule.operator, str(rule.formula))] += 1
+        for row in ws.iter_rows():
+            for c in row:
+                if c.comment:
+                    notes[(ws.title, c.comment.text)] += 1
+                if isinstance(c.value, str) and c.value.startswith('=') and (ws.title, c.column_letter) not in FORMULA_COLUMNS:
+                    stray.append(f'{ws.title}!{c.coordinate}')
+    return {'dropdowns': dv, 'conditional formats': cf, 'hover notes': notes}, stray
+
+
+def integrity_errors(before, after, stray_after):
+    errs = []
+    for what in before:
+        lost = before[what] - after[what]
+        extra = after[what] - before[what]
+        if lost:
+            errs.append(f'{sum(lost.values())} {what} from the template are missing after filling, e.g. '
+                        f'{next(iter(lost))[0]}: {str(next(iter(lost))[1:])[:80]}')
+        if extra:
+            errs.append(f'{sum(extra.values())} {what} appeared that the template did not have, e.g. '
+                        f'{next(iter(extra))[0]}: {str(next(iter(extra))[1:])[:80]}')
+    if stray_after:
+        errs.append('Formulas in cells that are not Area (All Pages column C) or Pages (Recommendations column F): '
+                    + ', '.join(stray_after[:8]))
+    return errs
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
@@ -258,16 +300,21 @@ def main():
                 warns.append(f'Existing redirect {r.source} ends at {r.target}, which is not a live page.')
     if sm.get('nav_share', 0) and sm['nav_share'] >= 0.95:
         errors.append('95%+ of links are Nav: link classification failed. Fix it in prep.py before filling.')
+    if not sm.get('mapping_confirmed'):
+        warns.append('The folder-to-type mapping was not confirmed by a person; page types are unverified.')
+    if sm.get('unmapped_folders'):
+        warns.append('Folders missing from the confirmed mapping: ' + ', '.join(sm['unmapped_folders'][:10]))
     if sm.get('pairs_to_check'):
         warns.append(f'{sm["pairs_to_check"]} duplicate pair(s) still marked "check"; they are treated as not duplicates.')
     if sm.get('has_gsc') and not sm.get('pair_queries_loaded') and sm.get('pair_queries_needed'):
         warns.append('Top shared queries were not loaded (ia_pair_queries); that column will be blank.')
-    if sm.get('has_gsc') and not sm.get('monthly_split_loaded'):
-        warns.append('The exact live/not-live monthly split was not loaded (ia_crawl_split); the Read Me uses the '
-                     'stand-in (URLs with no impressions in the last month).')
 
     # ---------------- write
     wb = load_workbook(a.template)
+    before, stray_before = snapshot(wb)
+    if stray_before:
+        errors.append('The template has formulas outside All Pages column C and Recommendations column F '
+                      f'({", ".join(stray_before[:6])}); use the current template.')
     client = cfg.get('client', 'Client')
 
     # Read Me
@@ -279,17 +326,11 @@ def main():
     lc = sm.get('link_classes') or {}
     if sm.get('has_gsc'):
         win = f"{meta.get('window_start')} to {meta.get('window_end')}"
-        auto_reason = f'{win}: the last 3 full months.'
-        sp_path = os.path.join(W, 'gsc', 'monthly_split.csv')
-        if os.path.exists(sp_path):
-            spx = pd.read_csv(sp_path)
-            auto_reason += (f' No migration: impressions on URLs that are not live in the crawl were at most '
-                            f'{spx.not_in_crawl_pct.max():.1%} in any of the 16 months (table below).')
-        window_text = rd_notes.get('window_reason') or auto_reason
+        window_text = f'{win}: the last 6 full calendar months.'
         totals = (f"{int(float(meta.get('clicks', 0))):,} clicks, {int(float(meta.get('impressions', 0))):,} impressions, "
                   f"{meta.get('page_rows')} page rows, {meta.get('page_query_rows')} page+query rows (after joining URL variants). "
                   f"Brand searches excluded from query analysis: {int(float(meta.get('brand_query_impr', 0))):,} impressions.")
-        ga4 = (f"{meta.get('ga4_property')}, dimension landingPage, metrics sessions, engagedSessions, keyEvents "
+        ga4 = (f"{meta.get('ga4_property')}, dimension landingPage, metrics sessions, keyEvents "
                f"({meta.get('ga4_rows')} landing pages)" if meta.get('ga4_property') else 'GA4 not available: ' +
                rd_notes.get('ga4_missing', 'no GA4 property was found for this domain.'))
         prop = meta.get('site_url', '')
@@ -311,15 +352,17 @@ def main():
         12: ga4,
         13: 'Every URL lowercased, query strings (?...) and fragments (#...) removed, forced to https and non-www, '
             'trailing slash added (not on files). Rows that became the same URL were added together.',
-        14: 'In order: 1 "/" = Home. 2 ?page= or /page/N/ = Pagination; other query strings = Query-string URL. '
-            '3 /tag/, /category/, /author/ and date folders = Archive. 4 entries inside gallery folders = Gallery item '
-            '(the main gallery page = Company / Info). 5 privacy, terms, HIPAA, thank-you, sitemap, test = Utility / Policy. '
-            '6 folders: /services/ = Service (hub for the listing and for category pages with pages under them), '
-            '/concerns/ or /conditions/ = Concern, blog folders = Blog, /locations/ = Location; other folders are named '
-            'after the folder. 7 root pages: company words = Company / Info; business words + city only = Location / Area; '
-            'question-word slug, 6+ word slug, blog wording (vs, benefits, guide, tips, cost, explained, what to expect, '
-            'reasons, aftercare, before and after, myths) or a question H1 = Blog; other short slugs = Service-like (no '
-            'folder); anything left = Unclassified. Reviewer corrections are marked "Set by reviewer".',
+        14: (('Folder-to-type mapping confirmed by a person: ' if sm.get('mapping_confirmed') else
+              'Folder-to-type mapping NOT confirmed (folder types were guessed from common folder names): ') +
+             ('; '.join(f'/{f.strip("/")}/ = {t}' for f, t in (sm.get('folder_mapping') or {}).items()) or 'none') + '. '
+             'In order: 1 "/" = Home. 2 ?page= or /page/N/ = Pagination; other query strings = Query-string URL. '
+             '3 the index page of a mapped folder = that folder\'s hub type; any other page in a mapped folder takes the '
+             'folder\'s type. 4 folders mapped as Mixed and root-level pages use content rules: utility wording (privacy, '
+             'terms, HIPAA, thank-you, sitemap, test) = Utility / Policy; company words = Company / Info; business words '
+             '+ city only = Location / Area; question-word slug, 6+ word slug, blog wording (vs, benefits, guide, tips, '
+             'cost, explained, what to expect, reasons, aftercare, before and after, myths) or a question H1 = Blog; '
+             'other short slugs = Service-like (no folder); anything left = Unclassified. Reviewer corrections are marked '
+             '"Set by reviewer".'),
         15: 'Classified from the CSS path / link path, not the crawler location label: menu, nav, header, mega menu and '
             'accordion containers = Nav; footer = Footer; breadcrumbs = Breadcrumb; everything else = Body. Fragments '
             'removed; each link counted once per linking page + target page. Counts: ' +
@@ -328,27 +371,14 @@ def main():
             'shared search the smaller of the two pages\' impressions, summed, divided by the smaller page\'s total '
             'non-brand query impressions. Kept at 0.30+ with 2+ shared searches; also pages with the same H1 after '
             'removing cities and filler words. A true duplicate needs the same treatment. High = 0.50+ with 3+ shared '
-            'searches, Medium = other search overlap, Low = same H1 only. Keeper: service page, then concern, then '
-            'blog; main city first; then most impressions.',
+            'searches, Medium = other search overlap, Low = same H1 only or a pair that could not be judged. Keeper: '
+            'service page, then concern, then blog; main city first; then most impressions. Searches with no owner '
+            'page: 3+ treatments, no page holding half the impressions, and at least 100 impressions in the window.',
         17: '; '.join([x for x in [*sm.get('notes', []), rd_notes.get('missing', '')] if x]) or 'Nothing missing.',
         18: rd_notes.get('side_observations', 'None.'),
     }
     for r, txt in readme.items():
         ws.cell(r, 2).value = txt
-    split = pd.read_csv(os.path.join(W, 'gsc', 'monthly_split.csv')) if os.path.exists(os.path.join(W, 'gsc', 'monthly_split.csv')) else None
-    monthly = pd.read_csv(os.path.join(W, 'gsc', 'monthly.csv')) if os.path.exists(os.path.join(W, 'gsc', 'monthly.csv')) else None
-    mrows = []
-    if monthly is not None:
-        sp = dict(zip(split.month, zip(split.not_in_crawl_impr, split.not_in_crawl_pct))) if split is not None else {}
-        for r in monthly.itertuples():
-            off, pct = sp.get(r.month, (r.gone_impr, r.gone_pct))
-            mrows.append([r.month, r.clicks, r.impressions, off, pct])
-        if split is None:
-            ws.cell(9, 2).value = str(ws.cell(9, 2).value) + (' (Monthly table: "not in crawl" is estimated as URLs '
-                                                               'with no impressions in the last full month.)')
-    pm = Proto(ws, 23, 5)
-    write_sections(ws, 23, [{'data': pm, 'rows': mrows, 'empty_text': 'Search Console data not available.'}])
-
     # Recommendations
     ws = wb['Recommendations']
     order = {p: i for i, p in enumerate(PRIORITIES)}
@@ -369,23 +399,23 @@ def main():
 
     # All Pages
     ws = wb['All Pages']
-    pa = Proto(ws, 3, 34)
+    pa = Proto(ws, 3, 33)
     has_past = len(P) and (P.past_decision != '').any()
     rows = []
     for r in P.itertuples():
         rows.append([r.url, r.path, None, r.type, r.why, r.topic, r.status, r.indexable, r.crawl_depth, r.path_depth,
                      r.title, r.h1, r.h2, r.words, r.in_nav, r.nav_in, r.menu_links, r.body_in, r.body_in_arch,
                      r.footer_in, r.clicks, r.impressions, r.position, r.top_query, r.top_query_impr, r.ga4_sessions,
-                     r.ga4_engaged, r.ga4_key_events, r.dup_note, r.action, r.target, r.final_action, r.final_target,
+                     r.ga4_key_events, r.dup_note, r.action, r.target, r.final_action, r.final_target,
                      r.extra_area])
     write_sections(ws, 3, [{'data': pa, 'rows': rows, 'formula': ('C', AREA_FORMULA)}])
     if has_past:
-        hdr = Proto(ws, 2, 34)
+        hdr = Proto(ws, 2, 33)
         for j, name in enumerate(['Past decision', 'Past target', 'Match?']):
-            c = ws.cell(2, 35 + j); c._style = copy(hdr.cells[29][1]); c.value = name
+            c = ws.cell(2, 34 + j); c._style = copy(hdr.cells[28][1]); c.value = name
         for i, r in enumerate(P.itertuples(), 3):
             for j, val in enumerate([r.past_decision, r.past_target, r.match]):
-                c = ws.cell(i, 35 + j); c._style = copy(pa.cells[29][1]); c.value = v(val)
+                c = ws.cell(i, 34 + j); c._style = copy(pa.cells[28][1]); c.value = v(val)
 
     # Page Type Summary
     ws = wb['Page Type Summary']
@@ -518,6 +548,10 @@ def main():
                 if isinstance(c.value, str) and '{Company}' in c.value:
                     errors.append(f'{wsx.title}!{c.coordinate} still says {{Company}}')
 
+    # ---------------- integrity: nothing the template carried may be lost
+    after, stray_after = snapshot(wb)
+    errors.extend(integrity_errors(before, after, stray_after))
+
     # ---------------- report
     print('Area counts on All Pages (what the Recommendations Pages column will show):')
     for ar, n in sorted(area_count.items(), key=lambda x: -x[1]):
@@ -537,7 +571,7 @@ def main():
         return
     out = a.out or f'{client} Information Architecture Audit.xlsx'
     wb.save(out)
-    print(f'\nAll checks passed. Saved {out}')
+    print(f'\nAll checks passed (template dropdowns, conditional formats and hover notes intact). Saved {out}')
 
 
 if __name__ == '__main__':
