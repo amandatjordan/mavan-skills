@@ -29,10 +29,11 @@ Apply in order; write the rule used in Page Type Reason.
    - Linked from Body links on a hub page for the client's concerns or conditions = Concern / Condition. Reason: "Listed on the [hub name] hub".
 4. **Slug rules for the remaining root-level pages:**
    - Contact, privacy, terms, HIPAA, thank-you, sitemap, login, cart, checkout, account, financing, shop, packages, memberships, booking, events, policies, and any other page that exists for users rather than search = Not for SEO (contact, legal, etc.). About, team, reviews = Other.
-   - Pages named for an area the client serves (`/areas-we-serve/`, `/{city}/`, `/{city}-{business type}/`, `/{service}-{city}/`) = Service Area / Location.
+   - Pages named for an area the client serves (`/areas-we-serve/`, `/{city}/`, `/{city}-{business type}/`) = Service Area / Location. A service-plus-city slug follows the city-in-slug bullet below.
    - Blog Post if ANY: slug starts with a question word (what, how, why, can, is, are, does, do, should, when, which, where, who); slug has 6+ words; slug or H1 uses blog wording (vs, versus, benefits, guide, tips, cost, explained, what to expect, reasons, aftercare, before and after, myths); the H1 is a question. Reason starts "Root-level, slug reads like a post".
    - A long-slug page that is NOT listed on the blog is a page, not a post: Service, reason "Root-level, long slug but not on the blog - check".
-   - Otherwise a short slug naming a service or containing a city = Service, reason `Root-level, no folder match`.
+   - A city in the slug always wins: a slug containing a city or area name (the client's main city, the cities on the folder map's location pages, or any place name the person confirmed) is Service Area / Location even when it also names a service (`/botox-denver/`). Reason `Root-level, city in slug`.
+   - Otherwise a short slug naming a service with no city in it = Service, reason `Root-level, no folder match`.
    - Anything else = Other, reason `No rule matched - check`.
 5. If the IA audit All Pages tab is attached, use its type for any URL it covers instead, mapped to the values above, reason "From IA audit".
 
@@ -64,7 +65,7 @@ Start with `Suggested because: ` and one short sentence, then flags joined with 
 - `0 clicks, under 50 impressions`
 - `[City]-style city copy of [URL]`: the same service has a page per city (the formula looks for `city copy of`; keep those words exactly).
 - `Already redirected to by [N] old URL(s)`: from the redirects export.
-- `In main menu`: linked from a Nav-class link (menu by CSS/link path, not the crawler's location label).
+- `In main menu`: linked from a Nav-class link (menu by CSS/link path, not the crawler's location label). The sheet only counts it toward the Menu cleanup Area on Merge/Remove rows, and `Already redirected to by` toward Old redirects likewise; on a Keep row they are plain information.
 
 Other flags (plain words, not read by formulas): "Only linked from blog pagination", "Canonical points to [URL] which 404s - fix the canonical", "Uppercase duplicate of [URL]", "If the URL changes, update anything redirecting to it" (every Repurpose row), "No GSC or GA4 data in the window".
 
