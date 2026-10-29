@@ -11,7 +11,7 @@ One row per crawled URL. With Search Console data, sorted by GSC Clicks (highest
 | URL | As exported |
 | Review Needed | "Yes" (shaded) or "No". Filter on Yes to see every page a person must look at |
 | Why Review | Each reason on its own line, in plain words (rules.md § When a person must review a page). Blank when Review Needed is No |
-| Matched Taxonomy Entry | "Level: Entry (Parent)", e.g. "Sub-Service: Lip Filler (Dermal Filler)", or "Not matched" |
+| Page Topic | What the page is about, as decided in SKILL.md Step 3, e.g. "dermabrasion; facial sanding" |
 | Current Page Title | Title Tag as exported |
 | Current H1 | H1 as exported |
 | Suggested Page Title | Empty, yellow, for the writer |
@@ -19,7 +19,7 @@ One row per crawled URL. With Search Console data, sorted by GSC Clicks (highest
 | Update to Include | Up to 5 lines, `keyword - volume`, highest volume first. The header carries a note that volume is competitor-ranked and for ranking only |
 | GSC Clicks | Clicks in the date range (0 when GSC has no row). Only with Search Console data |
 | GSC Impressions | Impressions in the date range. Only with Search Console data |
-| Matching Notes | Information only, joined with " \| ": which field matched (path, H1 or title), entries whose keywords were also used because they have no page in the crawl, and "No GSC data" |
+| Matching Notes | Information only, joined with " \| ": the taxonomy's entry for the page and the field it matched (or that the topic says the guess was wrong), entries whose keywords were also offered because they have no page in the crawl, and "No GSC data" |
 
 ## 2. Recommendations
 
@@ -43,6 +43,10 @@ One row per crawled URL, in export order: URL, Page Path, H1, Title Tag, and wit
 `build.py` prints PASS or FAIL for each and exits non-zero on a FAIL:
 - Every crawled URL appears once in Data and once in Review.
 - Update to Include has at most 5 lines, sorted by volume, with no duplicate keywords.
-- Pages that are not matched have no keywords.
-- Every page with no match or no keywords is marked Review Needed = Yes.
+- Every page has a topic.
+- Every page with no keywords is marked Review Needed = Yes.
 - Every Recommendations row names crawled URLs.
+
+## Missing-keywords file
+
+When a topic term has few or no keywords in the list, `build.py` also writes `<workbook name>_missing_keywords.csv` next to the workbook: Topic, Keywords found in the list, Pages (URL). It is for Amanda, to add keywords to the taxonomy. It is not a tab.
