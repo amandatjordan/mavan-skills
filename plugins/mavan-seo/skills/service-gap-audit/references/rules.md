@@ -1,6 +1,6 @@
 # Service Gap Audit rules
 
-Thresholds are first-test defaults (agelesscdga.com, Oct 2026): **thin** < 300 content words, **light** < 600, Sub-Service confirm at competitor volume >= 5,000, "is it offered?" at >= 5,000. Write them in the Read Me.
+Thresholds are first-test defaults (agelesscdga.com, Oct 2026): **thin** < 300 content words, **light** < 600, volume tiers High >= 5,000, Medium 2,000 to 4,999, Low < 2,000 (see Gaps and priority). Write them in the Read Me.
 
 ## Keyword classification
 
@@ -58,17 +58,19 @@ Skip nodes whose Practice Type doesn't fit the client (Surgical for a medspa-onl
 
 Never create a gap for a node whose Status / Notes says "Do not flag" or "NOT US-approved".
 
-| Gap Type | When | Priority |
-| --- | --- | --- |
-| Indexability blocker | Best page is not indexable | P1 |
-| Empty / thin page | Best page indexable and < thin | P1 |
-| Missing page (offered) | Confirmed or Likely, coverage is meta / gallery / none | P1 if Confirmed and volume >= 5,000, else P2 |
-| No Service page (brand pages only) | Service with only brand / sub-service pages (keep the list of those pages for the Recommendations tab) | P2 if volume >= 5,000, else P3 |
-| Missing page (blog only) | Only blog posts | P2 if volume >= 5,000, else P3 |
-| Section, no page | Only an H2 section | P3 |
-| Light page | Best page indexable, thin <= words < light | P3 |
-| Confirm Sub-Service, then page | Unknown (parent offered), volume >= 5,000 | P2 |
-| Ask client: not offered? | Service, No evidence, volume >= 5,000, fits practice type, not Beauty Services | Ask |
+**Volume tier** (competitor volume for the node): **High** >= 5,000, **Medium** 2,000 to 4,999, **Low** < 2,000. Zero volume is labeled **No data** and ranks as Low.
+
+| Gap Type | When | High | Medium | Low / No data |
+| --- | --- | --- | --- | --- |
+| Indexability blocker | Best page is not indexable | P1 | P1 | P1 |
+| Empty / thin page | Best page indexable and < thin | P1 | P1 | P1 |
+| Missing page (offered) | Confirmed or Likely, coverage is meta / gallery / none | P1 | P2 | P3 |
+| No Service page (brand pages only) | Service with only brand / sub-service pages (keep the list of those pages for the Recommendations tab) | P2 | P3 | P3 |
+| Missing page (blog only) | Only blog posts | P2 | P3 | P3 |
+| Section, no page | Only an H2 section | P3 | P3 | P3 |
+| Light page | Best page indexable, thin <= words < light | P3 | P3 | P3 |
+| Confirm Sub-Service, then page | Unknown (parent offered) | P2 | not flagged | not flagged |
+| Ask client: not offered? | Service, No evidence, fits practice type, not Beauty Services | Ask | skip | skip |
 
 Volume here = competitor volume for the node: Service = all its keywords; Sub-Service = keywords with that Sub-Service (any brand); Brand = keywords with that brand.
 
@@ -81,7 +83,7 @@ For each **Empty / thin page** Service row, the Recommendation is a brief, built
 4. Sections for each Confirmed or Likely Sub-Service, each linking to its own page once built.
 5. Sub-Services to confirm with the client.
 6. Brand pages to compare and link.
-7. Modifier sections with competitor volume >= 1,000 for that Service, with the volume.
+7. Modifier sections with competitor volume >= 1,000 for that Service, with the volume. The bundled All Keywords tab has no Modifier, Spanish or Informational columns: flag them in code with the Filters tab patterns (Modifier and Flag rows) on the lowercased keyword.
 
 Other gap types get one-line recommendations (see the example workbook's Gap List).
 
