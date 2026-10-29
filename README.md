@@ -9,7 +9,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
 | `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and lists lost backlinks to win back and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
-| `service-page-title-h1-review` | From a crawl export of the service pages and Search Console clicks and impressions (Composio), matches each page to the bundled service taxonomy and lists the top 5 keywords by volume to work into its Title Tag and H1, with a Recommendations tab for implied pages missing from the crawl | Service Page H1 & Title Tag Review |
+| `service-page-title-h1-review` | From a crawl export of the service pages, works out what each page is about and its target keywords from the path, H1 and title, ranks them by Search Console impressions when Composio is connected (otherwise lists them without numbers), flags the pages a person must review (keywords missing from the title and H1, no location in the Title Tag or H1, blanks), | Service Page H1 & Title Tag Review |
 
 ## Layout
 
@@ -61,7 +61,7 @@ The whole plugin is also attached to each release as `mavan-seo.plugin`, for upl
 2. Raise `version` in `plugins/mavan-seo/.claude-plugin/plugin.json`.
 3. Open a pull request. Once it merges to `main`, the team gets it on the next sync, and the **Release skill downloads** workflow publishes a new release with fresh ZIPs. Raise the version on every change, or the release keeps the old version number.
 
-To update the service taxonomy, edit `plugins/mavan-seo/skills/service-gap-audit/references/service-taxonomy.xlsx` (add the brand, device or service with its match terms on the Taxonomy tab) and open a pull request like any other change. `service-page-title-h1-review` bundles its own copy so its ZIP works on its own: copy the updated file over `plugins/mavan-seo/skills/service-page-title-h1-review/references/service-taxonomy.xlsx` in the same pull request.
+To update the service taxonomy, edit `plugins/mavan-seo/skills/service-gap-audit/references/service-taxonomy.xlsx` (add the brand, device or service with its match terms on the Taxonomy tab) and open a pull request like any other change.
 
 Keep executables in a skill's `scripts/` folder; organization sync rejects a plugin with a top-level `bin/` directory.
 
