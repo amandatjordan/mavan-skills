@@ -348,9 +348,9 @@ def cmd_build(args):
 
     gcols = ["GSC Clicks", "GSC Impressions"] if gsc is not None else []
     head = (["URL", "Review Needed", "Why Review", "Page Topic", "Current Page Title", "Current H1",
-             "Suggested Page Title", "Suggested H1", "Update to Include"] + gcols + ["Notes"])
+             "Suggested Page Title", "Suggested H1", "Suggested Keywords"] + gcols + ["Notes"])
     width = {"URL": 45, "Review Needed": 11, "Why Review": 42, "Page Topic": 28, "Current Page Title": 40,
-             "Current H1": 36, "Suggested Page Title": 40, "Suggested H1": 36, "Update to Include": 38,
+             "Current H1": 36, "Suggested Page Title": 40, "Suggested H1": 36, "Suggested Keywords": 38,
              "GSC Clicks": 11, "GSC Impressions": 13, "Notes": 40}
     ordered = sorted(pages, key=lambda x: (-x["clicks"], -x["impr"], x["url"])) if gsc is not None else pages
 
@@ -360,7 +360,7 @@ def cmd_build(args):
     review = []
     for p in ordered:
         row = [p["url"], "Yes" if p["flags"] else "No", "\n".join(t for _, t in p["flags"]), p["topic"],
-               p["title"], p["h1"], None, None, "\n".join(line(k, v) for k, v in p["lines"])]
+               p["title"], p["h1"], None, None, ", ".join(line(k, v) for k, v in p["lines"])]
         if gsc is not None:
             row += [p["clicks"], p["impr"]]
         row.append(" | ".join(p["notes"]))
@@ -377,7 +377,7 @@ def cmd_build(args):
             "the queries Search Console reports." if gsc is not None else
             "Target keywords chosen from the page's path, H1 and title, most important first. Not validated against "
             "search data: no Search Console access, so there are no numbers.")
-    ws.cell(1, head.index("Update to Include") + 1).comment = Comment(note, "Mavan")
+    ws.cell(1, head.index("Suggested Keywords") + 1).comment = Comment(note, "Mavan")
     for cell in ws[get_column_letter(2)][1:]:
         if cell.value == "Yes":
             cell.fill = PatternFill("solid", fgColor="F8CBAD")
@@ -396,7 +396,7 @@ def cmd_build(args):
 
     checks = [("Every crawled URL once in Data and once in Review",
                len(data) == len(review) == len(crawl_keys) and {norm_url(r[0]) for r in review} == crawl_keys),
-              ("Update to Include: at most 5 keywords, no duplicates",
+              ("Suggested Keywords: at most 5 keywords, no duplicates",
                all(len(p["lines"]) <= 5 and len({dedupe_key(k) for k, _ in p["lines"]}) == len(p["lines"]) for p in pages)),
               ("With Search Console data, keywords are ordered by impressions",
                all([v for _, v in p["lines"]] == sorted([v for _, v in p["lines"]], reverse=True)
