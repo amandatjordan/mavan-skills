@@ -16,7 +16,7 @@ One row per crawled URL. With Search Console data, sorted by GSC Clicks (highest
 | Current H1 | H1 as exported |
 | Suggested Page Title | Empty, yellow, for the writer |
 | Suggested H1 | Empty, yellow, for the writer |
-| Update to Include | Up to 5 keywords, one per line. With Search Console: `keyword - impressions`, highest first. Without: the keyword only, in the AI's order. The header carries a note saying what the numbers are (or that there are none) |
+| Suggested Keywords | Up to 5 keywords separated by commas (`keyword, keyword`). With Search Console: `keyword - impressions, keyword - impressions`, highest first. Without: the keyword only, in the AI's order. The header carries a note saying what the numbers are (or that there are none) |
 | GSC Clicks | Clicks in the date range (0 when GSC has no row). Only with Search Console data |
 | GSC Impressions | Impressions in the date range. Only with Search Console data |
 | Notes | Information only, e.g. "No GSC data for this page" |
@@ -29,7 +29,7 @@ One row per crawled URL, in export order: URL, Page Path, H1, Title Tag, and wit
 
 `build.py` prints PASS or FAIL for each and exits non-zero on a FAIL:
 - Every crawled URL appears once in Data and once in Review.
-- Update to Include has at most 5 keywords with no duplicates.
+- Suggested Keywords has at most 5 keywords with no duplicates.
 - With Search Console data, keywords are ordered by impressions.
 - Every page has a topic.
 - Every page with no keywords is marked Review Needed = Yes.

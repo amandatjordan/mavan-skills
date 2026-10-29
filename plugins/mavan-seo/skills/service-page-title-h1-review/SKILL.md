@@ -7,7 +7,7 @@ description: Run Mavan's Service Page H1 & Title Tag Review from a Sitebulb or S
 
 This skill carries the whole process and does not need the written SOP; a copy in a project management tool is documentation for people.
 
-For every service page it shows the current Title Tag and H1, leaves Suggested Page Title and Suggested H1 empty for the writer, and fills "Update to Include" with the target keywords for that page. **You decide what each page is about and which keywords it should target, using SEO common sense and what you know about the service.** Do not write titles or H1s.
+For every service page it shows the current Title Tag and H1, leaves Suggested Page Title and Suggested H1 empty for the writer, and fills "Suggested Keywords" with the target keywords for that page. **You decide what each page is about and which keywords it should target, using SEO common sense and what you know about the service.** Do not write titles or H1s.
 
 Work only from the export and, when it is connected, Search Console through Composio. **Never visit the live site or use any tool to get page content.** Use no tool, dependency, fallback or extra step beyond those named here without asking the person first and explaining why it is needed. If a step is unreliable, expensive or needs workarounds, stop and tell the person. Assume nothing about the site (industry, URL structure, locations, brands, column names). Every number, count and join is done by `scripts/build.py`; never type or estimate a number.
 
