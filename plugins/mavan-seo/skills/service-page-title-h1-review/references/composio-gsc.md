@@ -6,7 +6,7 @@ This is the only use of Composio in this skill. It pulls clicks and impressions 
 
 ## 1. Find the tool and the property
 
-Call `COMPOSIO_SEARCH_TOOLS` (use case: query Search Console search analytics by page). Its connection status lists the Search Console properties. If there is no active Search Console connection, stop and tell the person Composio needs Google Search Console connected with an account that has access to the client's property. Do not substitute another source.
+Call `COMPOSIO_SEARCH_TOOLS` (use case: query Search Console search analytics by page). Its connection status lists the Search Console properties. If there is no active Search Console connection, tell the person Composio needs Google Search Console connected with an account that has access to the client's property, and build the workbook without clicks and impressions (SKILL.md Step 1). Do not substitute another source.
 
 Do not assume the tool name or the property. Use the tool Composio returns, and show the person the property you will use (and whether it is a domain or URL-prefix property) next to the date range, and wait for a yes.
 

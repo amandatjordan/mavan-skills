@@ -4,24 +4,26 @@
 
 ## 1. Review
 
-One row per crawled URL, sorted by GSC Clicks (highest first), then GSC Impressions.
+One row per crawled URL. With Search Console data, sorted by GSC Clicks (highest first), then GSC Impressions. Without it, in export order.
 
 | Column | Content |
 | --- | --- |
 | URL | As exported |
-| Matched Taxonomy Entry | "Level: Entry (Parent)", e.g. "Sub-Service: Lip Filler (Dermal Filler)", or "Needs review" |
+| Review Needed | "Yes" (shaded) or "No". Filter on Yes to see every page a person must look at |
+| Why Review | Each reason on its own line, in plain words (rules.md § When a person must review a page). Blank when Review Needed is No |
+| Matched Taxonomy Entry | "Level: Entry (Parent)", e.g. "Sub-Service: Lip Filler (Dermal Filler)", or "Not matched" |
 | Current Page Title | Title Tag as exported |
 | Current H1 | H1 as exported |
 | Suggested Page Title | Empty, yellow, for the writer |
 | Suggested H1 | Empty, yellow, for the writer |
 | Update to Include | Up to 5 lines, `keyword - volume`, highest volume first. The header carries a note that volume is competitor-ranked and for ranking only |
-| GSC Clicks | Clicks in the date range (0 when GSC has no row) |
-| GSC Impressions | Impressions in the date range |
-| Notes | Joined with " \| ": what matched (path, H1 or title), the Needs review reason, entries whose keywords were also used, "No keywords found in taxonomy", "No GSC data", "Blank H1", "Blank Title Tag" |
+| GSC Clicks | Clicks in the date range (0 when GSC has no row). Only with Search Console data |
+| GSC Impressions | Impressions in the date range. Only with Search Console data |
+| Matching Notes | Information only, joined with " \| ": which field matched (path, H1 or title), entries whose keywords were also used because they have no page in the crawl, and "No GSC data" |
 
 ## 2. Recommendations
 
-One row per implied page missing from the crawl (rules.md § Implied entries), Service first, then Sub-Service, then Brand / Device.
+One row per implied page missing from the crawl (rules.md § Implied entries and missing pages), Service first, then Sub-Service, then Brand / Device.
 
 | Column | Content |
 | --- | --- |
@@ -34,12 +36,13 @@ With no rows, the tab holds one row: "None" and "No implied page is missing from
 
 ## 3. Data
 
-One row per crawled URL, in export order: URL, Page Path, H1, Title Tag, GSC Clicks, GSC Impressions.
+One row per crawled URL, in export order: URL, Page Path, H1, Title Tag, and with Search Console data GSC Clicks and GSC Impressions.
 
 ## QA
 
 `build.py` prints PASS or FAIL for each and exits non-zero on a FAIL:
 - Every crawled URL appears once in Data and once in Review.
 - Update to Include has at most 5 lines, sorted by volume, with no duplicate keywords.
-- Needs review rows have no keywords.
+- Pages that are not matched have no keywords.
+- Every page with no match or no keywords is marked Review Needed = Yes.
 - Every Recommendations row names crawled URLs.

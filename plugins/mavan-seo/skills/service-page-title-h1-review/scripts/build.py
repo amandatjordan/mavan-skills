@@ -2,11 +2,13 @@
 """Service Page H1 & Title Tag Review.
 
   python build.py inspect --crawl export.csv --out work
-  python build.py build   --crawl export.csv --gsc work/gsc --out review.xlsx
+  python build.py build   --crawl export.csv --out review.xlsx [--gsc work/gsc] [--cities "City, City"]
 
 inspect: shows which export columns will be used and writes work/urls.txt (the crawled URLs, for the GSC filter).
 build:   matches every page to the Service Taxonomy, builds each page's keyword pool, picks the top 5 by volume,
-         merges the saved GSC rows, builds the three-tab workbook and runs the QA checks.
+         flags the pages a person should review, builds the three-tab workbook and runs the QA checks.
+         --gsc is optional: without it the workbook has no clicks or impressions and keeps the export order.
+         --cities is optional: without it the city check is skipped.
 Every count, match and join happens here. Rules: references/rules.md.
 """
 import argparse
@@ -14,6 +16,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from collections import defaultdict
 from urllib.parse import unquote, urlsplit
 
@@ -251,8 +254,9 @@ def resolve_page(p, entries):
                     if len(top) == 1:
                         return top[0], field, ""
                     names = "; ".join(sorted(e.label for e in top))
-                    return None, field, f"Needs review: {len(top)} {lvl} entries match ({names})"
-    return None, "", "Needs review: no taxonomy match"
+                    return None, field, (f"Could not pick one taxonomy entry: {len(top)} {lvl} entries match "
+                                         f"({names}). Choose the right one and its keywords by hand")
+    return None, "", "Could not match this page to the taxonomy. Choose its service and keywords by hand"
 
 
 def implied_entries(entry, entries):
@@ -295,6 +299,22 @@ def top5(items):
             best[k] = cand
     ranked = sorted(best.values())[:5]
     return [(t, -v) for v, _, t in ranked]
+
+
+def tokens(s):
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+    return re.findall(r"[a-z0-9]+", s)
+
+
+def term_key(term):
+    """Same folding as dedupe_key, so 'med spa', 'medspa' and 'med-spa' (and a plural) are one term."""
+    return dedupe_key("".join(tokens(term)))
+
+
+def phrase_keys(text, maxn=6):
+    """Every run of up to maxn consecutive words in the text, as term keys. A term is 'in' the text if its key is here."""
+    t = tokens(text)
+    return {dedupe_key("".join(t[i:j])) for i in range(len(t)) for j in range(i + 1, min(len(t), i + maxn) + 1)}
 
 
 # ------------------------------------------------------------------- workbook
@@ -352,8 +372,12 @@ def cmd_inspect(args):
 def cmd_build(args):
     pages, cols, dups = load_crawl(args)
     entries, pools = load_taxonomy(args.taxonomy)
-    gsc = load_gsc(args.gsc)
+    gsc = load_gsc(args.gsc) if args.gsc else None
+    cities = [c.strip() for c in (args.cities or "").split(",") if c.strip()]
+    city_keys = {term_key(c) for c in cities}
     print(f"Pages: {len(pages)} (duplicates skipped {dups}); taxonomy entries: {len(entries)}")
+    print("GSC: " + ("used" if gsc is not None else "not used (no --gsc): no clicks or impressions, export order"))
+    print("City check: " + (", ".join(cities) if cities else "skipped (no --cities)"))
 
     # 1. match each page to one taxonomy entry
     for p in pages:
@@ -364,10 +388,10 @@ def cmd_build(args):
     recs = {}
     unresolved = defaultdict(set)
     for p in pages:
-        p["notes"], p["lines"] = [], []
+        p["notes"], p["lines"], p["flags"] = [], [], []  # notes = how it was matched; flags = a person must look
         e = p["entry"]
         if not e:
-            p["notes"].append(p["reason"])
+            p["flags"].append(("unmatched", p["reason"]))
             continue
         items = list(pools.get(e.key, []))
         found, missing = implied_entries(e, entries)
@@ -387,36 +411,56 @@ def cmd_build(args):
             p["notes"].append("Also used keywords of entries with no page in the crawl: " + "; ".join(added))
         p["lines"] = top5(items)
         if not p["lines"]:
-            p["notes"].append("No keywords found in taxonomy")
+            p["flags"].append(("nokeywords", "No keywords found in the taxonomy. Choose them by hand"))
 
-    # 3. merge GSC
-    matched_gsc = 0
+    # 3. what the current Title Tag and H1 already say
     for p in pages:
-        g = gsc.get(p["key"])
-        p["clicks"], p["impr"] = (int(g[0]), int(g[1])) if g else (0, 0)
-        if g:
-            matched_gsc += 1
-        else:
-            p["notes"].append("No GSC data")
         if not p["h1"]:
-            p["notes"].append("Blank H1")
+            p["flags"].append(("blankh1", "Blank H1"))
         if not p["title"]:
-            p["notes"].append("Blank Title Tag")
-    rate = matched_gsc / len(pages) if pages else 0
-    crawl_keys = {p["key"] for p in pages}
-    extra = sum(1 for k in gsc if k not in crawl_keys)
-    print(f"GSC rows matched to crawled pages: {matched_gsc}/{len(pages)} ({rate:.0%}); GSC rows not in crawl: {extra}")
-    if rate < 0.5:
-        print("WARNING: under half the pages matched a GSC row. Check the property, the date range and the URL form "
-              "(http/https, www, trailing slash) before trusting the metrics.")
+            p["flags"].append(("blanktitle", "Blank Title Tag"))
+        have = phrase_keys(p["title"]) | phrase_keys(p["h1"])
+        if p["lines"] and not any(term_key(t) in have for t, _ in p["lines"]):
+            p["flags"].append(("notrep", "None of the top keywords appear in the Title Tag or H1"))
+        if city_keys and not (city_keys & have):
+            p["flags"].append(("nocity", "No city in the Title Tag or H1"))
 
-    # 4. workbook
+    # 4. merge GSC (optional)
+    crawl_keys = {p["key"] for p in pages}
+    if gsc is not None:
+        matched_gsc = 0
+        for p in pages:
+            g = gsc.get(p["key"])
+            p["clicks"], p["impr"] = (int(g[0]), int(g[1])) if g else (0, 0)
+            if g:
+                matched_gsc += 1
+            else:
+                p["notes"].append("No GSC data")
+        rate = matched_gsc / len(pages) if pages else 0
+        extra = sum(1 for k in gsc if k not in crawl_keys)
+        print(f"GSC rows matched to crawled pages: {matched_gsc}/{len(pages)} ({rate:.0%}); GSC rows not in crawl: {extra}")
+        if rate < 0.5:
+            print("WARNING: under half the pages matched a GSC row. Check the property, the date range and the URL form "
+                  "(http/https, www, trailing slash) before trusting the metrics.")
+
+    # 5. workbook
+    gcols = ["GSC Clicks", "GSC Impressions"] if gsc is not None else []
+    head = (["URL", "Review Needed", "Why Review", "Matched Taxonomy Entry", "Current Page Title", "Current H1",
+             "Suggested Page Title", "Suggested H1", "Update to Include"] + gcols + ["Matching Notes"])
+    width = {"URL": 45, "Review Needed": 11, "Why Review": 42, "Matched Taxonomy Entry": 30, "Current Page Title": 40,
+             "Current H1": 36, "Suggested Page Title": 40, "Suggested H1": 36, "Update to Include": 38,
+             "GSC Clicks": 11, "GSC Impressions": 13, "Matching Notes": 45}
+    ordered = sorted(pages, key=lambda x: (-x["clicks"], -x["impr"], x["url"])) if gsc is not None else pages
     review = []
-    for p in sorted(pages, key=lambda x: (-x["clicks"], -x["impr"], x["url"])):
+    for p in ordered:
         e = p["entry"]
-        review.append([p["url"], f"{e.level}: {e.label}" if e else "Needs review", p["title"], p["h1"], None, None,
-                       "\n".join(f"{t} - {v:,}" for t, v in p["lines"]), p["clicks"], p["impr"],
-                       " | ".join(p["notes"])])
+        row = [p["url"], "Yes" if p["flags"] else "No", "\n".join(t for _, t in p["flags"]),
+               f"{e.level}: {e.label}" if e else "Not matched", p["title"], p["h1"], None, None,
+               "\n".join(f"{t} - {v:,}" for t, v in p["lines"])]
+        if gsc is not None:
+            row += [p["clicks"], p["impr"]]
+        row.append(" | ".join(p["notes"]))
+        review.append(row)
     rec_rows = []
     order = {"Service": 0, "Sub-Service": 1, "Brand / Device": 2}
     for r in sorted(recs.values(), key=lambda r: (order[r["entry"].level], r["entry"].label)):
@@ -425,35 +469,41 @@ def cmd_build(args):
                          f"Implied by the {', '.join(labels)} page; no crawled page maps to {r['entry'].label}."])
     if not rec_rows:
         rec_rows = [["None", "", "", "No implied page is missing from the crawl."]]
-    data = [[p["url"], p["path"], p["h1"], p["title"], p["clicks"], p["impr"]] for p in pages]
+    dhead = ["URL", "Page Path", "H1", "Title Tag"] + gcols
+    data = [[p["url"], p["path"], p["h1"], p["title"]] + ([p["clicks"], p["impr"]] if gsc is not None else [])
+            for p in pages]
 
     wb = Workbook()
-    ws = add_sheet(wb, True, "Review",
-                   ["URL", "Matched Taxonomy Entry", "Current Page Title", "Current H1", "Suggested Page Title",
-                    "Suggested H1", "Update to Include", "GSC Clicks", "GSC Impressions", "Notes"],
-                   review, [45, 30, 40, 36, 40, 36, 38, 11, 13, 45],
+    ws = add_sheet(wb, True, "Review", head, review, [width[h] for h in head],
                    numeric=("GSC Clicks", "GSC Impressions"), yellow=("Suggested Page Title", "Suggested H1"))
-    ws["G1"].comment = Comment("Volume comes from competitor rankings, often in other markets. Use it to rank "
-                               "keywords against each other, not as demand for this client.", "Mavan")
+    ws.cell(1, head.index("Update to Include") + 1).comment = Comment(
+        "Volume comes from competitor rankings, often in other markets. Use it to rank keywords against each "
+        "other, not as demand for this client.", "Mavan")
+    for cell in ws[get_column_letter(2)][1:]:
+        if cell.value == "Yes":
+            cell.fill = PatternFill("solid", fgColor="F8CBAD")
     add_sheet(wb, False, "Recommendations", ["Recommended Page", "Level", "Implied By (URL)", "Reason"],
               rec_rows, [38, 16, 55, 70])
-    add_sheet(wb, False, "Data", ["URL", "Page Path", "H1", "Title Tag", "GSC Clicks", "GSC Impressions"],
-              data, [45, 36, 36, 40, 11, 13], numeric=("GSC Clicks", "GSC Impressions"))
+    add_sheet(wb, False, "Data", dhead, data, [{"URL": 45, "Page Path": 36, "H1": 36, "Title Tag": 40, "GSC Clicks": 11,
+                                                "GSC Impressions": 13}[h] for h in dhead],
+              numeric=("GSC Clicks", "GSC Impressions"))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     wb.save(args.out)
     print(f"Saved {args.out}")
 
-    # 5. summary and QA
+    # 6. summary and QA
     by_level = defaultdict(int)
     for p in pages:
-        by_level[p["entry"].level if p["entry"] else "Needs review"] += 1
+        by_level[p["entry"].level if p["entry"] else "Not matched"] += 1
     print("Pages by matched level:", dict(by_level))
-    reasons = defaultdict(int)
-    for p in pages:
-        if not p["entry"]:
-            reasons[p["reason"]] += 1
-    for r, n in reasons.items():
+    for r, n in sorted(((r, sum(1 for p in pages if not p["entry"] and p["reason"] == r))
+                        for r in {p["reason"] for p in pages if not p["entry"]})):
         print(f"  {n} x {r}")
+    by_flag = defaultdict(int)
+    for p in pages:
+        for code, _ in p["flags"]:
+            by_flag[code] += 1
+    print(f"Review Needed = Yes on {sum(1 for p in pages if p['flags'])} of {len(pages)} pages; flags: {dict(by_flag)}")
     real_recs = [r for r in rec_rows if r[0] != "None"]
     print(f"Recommendations: {len(real_recs)}")
     for n, labels in unresolved.items():
@@ -469,7 +519,9 @@ def cmd_build(args):
         if len(vols) > 5 or vols != sorted(vols, reverse=True) or len(keys) != len(set(keys)):
             ok = False
     checks.append(("Update to Include: at most 5 lines, highest volume first, no duplicates", ok))
-    checks.append(("Needs review rows have no keywords", all(not p["lines"] for p in pages if not p["entry"])))
+    checks.append(("Unmatched pages have no keywords", all(not p["lines"] for p in pages if not p["entry"])))
+    checks.append(("Every page with no match or no keywords is marked Review Needed = Yes",
+                   all(p["flags"] for p in pages if not p["entry"] or not p["lines"])))
     checks.append(("Every Recommendations row names crawled URLs",
                    all(norm_url(u) in crawl_keys for r in recs.values() for u in r["by"])))
     failed = False
@@ -490,7 +542,8 @@ def main():
         sp.add_argument("--title-col")
         sp.add_argument("--out", required=True, help="inspect: work folder. build: output .xlsx path")
         if name == "build":
-            sp.add_argument("--gsc", required=True, help="folder (or file) of saved GSC rows, .json or .csv")
+            sp.add_argument("--gsc", help="folder (or file) of saved GSC rows, .json or .csv. Optional: without it the workbook has no clicks or impressions")
+            sp.add_argument("--cities", help="the client's city or service-area cities, comma separated. Optional: without it the city check is skipped")
             sp.add_argument("--taxonomy", default=DEFAULT_TAXONOMY)
     args = ap.parse_args()
     cmd_inspect(args) if args.cmd == "inspect" else cmd_build(args)
