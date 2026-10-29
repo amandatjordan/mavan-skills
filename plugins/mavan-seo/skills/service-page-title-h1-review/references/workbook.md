@@ -1,6 +1,6 @@
 # Service Page H1 & Title Tag Review workbook
 
-`scripts/build.py` builds it. Arial throughout, header row dark blue with white bold text, frozen header, an Excel table (filters) on every tab, wrapped text, `#,##0` on clicks and impressions. Yellow marks the columns the writer fills in. Exactly three tabs, in this order, and nothing added to them.
+`scripts/build.py` builds it. Arial throughout, header row dark blue with white bold text, frozen header, an Excel table (filters) on every tab, wrapped text, `#,##0` on clicks and impressions. Yellow marks the columns the writer fills in. Exactly two tabs, in this order, and nothing added to them.
 
 ## 1. Review
 
@@ -21,11 +21,7 @@ One row per crawled URL. With Search Console data, sorted by GSC Clicks (highest
 | GSC Impressions | Impressions in the date range. Only with Search Console data |
 | Notes | Information only, e.g. "No GSC data for this page" |
 
-## 2. Recommendations
-
-One row per obvious missing page from `work/recommendations.tsv`: Recommended Page, Implied By (URL), Reason. With no rows, one row: "None" and "No obvious missing page."
-
-## 3. Data
+## 2. Data
 
 One row per crawled URL, in export order: URL, Page Path, H1, Title Tag, and with Search Console data GSC Clicks and GSC Impressions.
 

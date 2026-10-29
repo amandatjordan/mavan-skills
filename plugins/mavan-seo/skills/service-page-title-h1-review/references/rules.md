@@ -16,10 +16,6 @@
 - Keywords are ranked by that number, highest first; keywords with 0 and pages with no Search Console data keep the AI's order. The top 5 are kept.
 - A page's GSC Clicks and Impressions are the sums of its saved query rows, so they leave out the queries Search Console hides.
 
-## Recommendations
-
-Only obvious missing pages the AI wrote to `work/recommendations.tsv`, each naming crawled URLs. Nothing is searched for.
-
 ## When a person must review a page
 
 A page is **Review Needed = Yes** when any of these is true, and Why Review lists each in plain words.
@@ -28,7 +24,7 @@ A page is **Review Needed = Yes** when any of these is true, and Why Review list
 | --- | --- |
 | No keywords | The AI gave no keywords for the page. Choose them by hand |
 | Keywords not represented | None of the top keywords appears in the current Title Tag or H1. A keyword appears when its words are in the Title Tag or the H1 as an exact phrase, ignoring case, spaces, hyphens, accents and a plural "s" |
-| No city | The person gave the client's city or service-area cities and none appears in the Title Tag or the H1. Skipped when no city was given |
+| No location | The person gave the client's city or service-area cities and none appears in the Title Tag, or none appears in the H1. Checked separately: "No location in Title Tag" and "No location in H1". Skipped when no city was given |
 | Blank H1 / Blank Title Tag | The export has no H1 or no Title Tag for the page |
 
 A page with some of its top keywords already in the title is not flagged: the writer works the missing ones in.

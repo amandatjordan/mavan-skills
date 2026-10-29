@@ -3,13 +3,13 @@
 
   python build.py inspect --crawl export.csv --out work
   python build.py build   --crawl export.csv --keywords work/keywords.tsv --out review.xlsx
-                          [--recs work/recommendations.tsv] [--gsc work/gsc] [--cities "City, City"]
+                          [--gsc work/gsc] [--cities "City, City"]
 
 inspect: shows which export columns are used, writes work/urls.txt (for the Search Console filter) and
          work/pages.tsv (one compact line per page, for the AI to read).
 build:   takes the AI's topic and target keywords for every page, ranks them by Search Console impressions when
          --gsc is given (otherwise keeps the AI's order and shows no numbers), flags the pages a person should
-         review, builds the three-tab workbook and runs the QA checks.
+         review, builds the two-tab workbook and runs the QA checks.
 The AI decides what each page is about and which keywords it should target. Every number, count and join happens
 here; the AI never types a number. Rules: references/rules.md.
 """
@@ -224,24 +224,6 @@ def read_keywords(path, pages):
     return out
 
 
-def read_recs(path, crawl_keys):
-    """work/recommendations.tsv: recommended page <TAB> implied-by URL(s), ';' separated <TAB> reason."""
-    rows = []
-    if not path:
-        return rows
-    with open(path, encoding="utf-8-sig") as fh:
-        for line in fh:
-            parts = [x.strip() for x in line.rstrip("\n").split("\t")]
-            if len(parts) < 3 or not parts[0] or parts[0].lower() == "recommended page":
-                continue
-            urls = [u.strip() for u in parts[1].split(";") if u.strip()]
-            bad = [u for u in urls if norm_url(u) not in crawl_keys]
-            if not urls or bad:
-                sys.exit(f"{path}: '{parts[0]}' must name crawled URLs. Not in the crawl: {bad or 'none given'}")
-            rows.append([parts[0], "\n".join(urls), parts[2]])
-    return rows
-
-
 def rank_keywords(kws, page_queries):
     """-> [(keyword, impressions or None)]. With Search Console data (page_queries is a dict), a keyword's
     impressions are the page's queries that contain all its words; ranked by impressions, ties and zeros keep the
@@ -325,7 +307,6 @@ def cmd_build(args):
         p["id"] = i
     kw = read_keywords(args.keywords, pages)
     crawl_keys = {p["key"] for p in pages}
-    recs = read_recs(args.recs, crawl_keys)
     gsc = load_gsc(args.gsc) if args.gsc else None
     cities = [c.strip() for c in (args.cities or "").split(",") if c.strip()]
     city_keys = {term_key(c) for c in cities}
@@ -351,8 +332,10 @@ def cmd_build(args):
         have = phrase_keys(p["title"]) | phrase_keys(p["h1"])
         if p["lines"] and not any(term_key(k) in have for k, _ in p["lines"]):
             p["flags"].append(("notrep", "None of the top keywords appear in the Title Tag or H1"))
-        if city_keys and not (city_keys & have):
-            p["flags"].append(("nocity", "No city in the Title Tag or H1"))
+        if city_keys:
+            for label, text in (("Title Tag", p["title"]), ("H1", p["h1"])):
+                if text and not (city_keys & phrase_keys(text)):
+                    p["flags"].append(("nocity", f"No location in {label}"))
 
     if gsc is not None:
         matched = sum(1 for p in pages if p["key"] in gsc)
@@ -382,7 +365,6 @@ def cmd_build(args):
             row += [p["clicks"], p["impr"]]
         row.append(" | ".join(p["notes"]))
         review.append(row)
-    rec_rows = recs or [["None", "", "No obvious missing page."]]
     dhead = ["URL", "Page Path", "H1", "Title Tag"] + gcols
     data = [[p["url"], p["path"], p["h1"], p["title"]] + ([p["clicks"], p["impr"]] if gsc is not None else [])
             for p in pages]
@@ -399,7 +381,6 @@ def cmd_build(args):
     for cell in ws[get_column_letter(2)][1:]:
         if cell.value == "Yes":
             cell.fill = PatternFill("solid", fgColor="F8CBAD")
-    add_sheet(wb, False, "Recommendations", ["Recommended Page", "Implied By (URL)", "Reason"], rec_rows, [38, 55, 70])
     add_sheet(wb, False, "Data", dhead, data, [{"URL": 45, "Page Path": 36, "H1": 36, "Title Tag": 40, "GSC Clicks": 11,
                                                 "GSC Impressions": 13}[h] for h in dhead],
               numeric=("GSC Clicks", "GSC Impressions"))
@@ -412,7 +393,6 @@ def cmd_build(args):
         for code, _ in p["flags"]:
             by_flag[code] += 1
     print(f"Review Needed = Yes on {sum(1 for p in pages if p['flags'])} of {len(pages)} pages; flags: {dict(by_flag)}")
-    print(f"Recommendations: {len(recs)}")
 
     checks = [("Every crawled URL once in Data and once in Review",
                len(data) == len(review) == len(crawl_keys) and {norm_url(r[0]) for r in review} == crawl_keys),
@@ -442,7 +422,6 @@ def main():
         sp.add_argument("--out", required=True, help="inspect: work folder. build: output .xlsx path")
         if name == "build":
             sp.add_argument("--keywords", required=True, help="work/keywords.tsv: the AI's topic and target keywords per page")
-            sp.add_argument("--recs", help="work/recommendations.tsv: obvious missing pages. Optional")
             sp.add_argument("--gsc", help="folder (or file) of saved GSC page + query rows, .json or .csv. Optional: without it there are no numbers")
             sp.add_argument("--cities", help="the client's city or service-area cities, comma separated. Optional: without it the city check is skipped")
     args = ap.parse_args()

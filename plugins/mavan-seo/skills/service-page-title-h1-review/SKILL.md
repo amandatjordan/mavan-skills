@@ -1,6 +1,6 @@
 ---
 name: service-page-title-h1-review
-description: Run Mavan's Service Page H1 & Title Tag Review from a Sitebulb or Screaming Frog export of the service pages. Works out what each page is about, chooses its target keywords from the path, H1 and title, ranks them by Search Console impressions when Composio is connected (otherwise lists them without numbers), and builds a three-tab workbook (Review, Recommendations, Data) with a Review Needed flag. Use for service page title tag and H1 reviews or rewrites.
+description: Run Mavan's Service Page H1 & Title Tag Review from a Sitebulb or Screaming Frog export of the service pages. Works out what each page is about, chooses its target keywords from the path, H1 and title, ranks them by Search Console impressions when Composio is connected (otherwise lists them without numbers), and builds a two-tab workbook (Review, Data) with a Review Needed flag (including a missing location in the Title Tag or H1). Use for service page title tag and H1 reviews or rewrites.
 ---
 
 # Service Page H1 & Title Tag Review (Mavan SOP)
@@ -16,7 +16,7 @@ Work only from the export and, when it is connected, Search Console through Comp
 ## What you need
 
 - **Crawl export** (CSV or xlsx) of the service pages only, with the URL, H1 and Title Tag. Screaming Frog: Address, H1-1, Title 1. Sitebulb: URL, H1, Title. Ask for it if missing, and do not add or remove pages.
-- **The client's city, or service-area cities**, for the city check (a page whose Title Tag and H1 name none of them is flagged). If the person does not know them, take them from the Title Tags if they are plainly there and say so; otherwise skip the check and say so.
+- **The client's city, or service-area cities**, for the city check (a page whose Title Tag or H1 names none of them is flagged, each separately). If the person does not know them, take them from the Title Tags if they are plainly there and say so; otherwise skip the check and say so.
 - **Search Console** (optional): the property (domain or URL-prefix) and a date range. Default: the 90 days ending 3 days before today. Needs Composio with Google Search Console connected, and the person's yes. **Without it the workbook still builds: the keywords are listed in your order of importance with no numbers.**
 
 Ask for whatever the request does not give in one question.
@@ -47,24 +47,22 @@ Read `work/pages.tsv` and write `work/keywords.tsv`, one line per page, tab sepa
 - A category or hub page ("Face", "Men", "Procedures") targets the category term, not its procedures.
 - Do not invent numbers or claim volume. If you are unsure what a page is about, say so in the topic ("unclear: Providing DefenAge Skincare") and give your best keywords; the person will see the topic.
 
-If a page clearly implies a page that is missing from the crawl (for example a brand page whose parent service page is not in the export), write it to `work/recommendations.tsv`: recommended page, implied-by URL(s) separated by `;`, reason, tab separated. Only obvious cases; never hunt for gaps.
-
 Done when every page has a topic and keywords.
 
 ## Step 4: Build the workbook
 
 ```
-python $SKILL/scripts/build.py build --crawl EXPORT.csv --keywords work/keywords.tsv --recs work/recommendations.tsv --cities "CITY, CITY" --gsc work/gsc --out DOMAIN_service_page_title_h1_review.xlsx
+python $SKILL/scripts/build.py build --crawl EXPORT.csv --keywords work/keywords.tsv --cities "CITY, CITY" --gsc work/gsc --out DOMAIN_service_page_title_h1_review.xlsx
 ```
 
-Leave out `--gsc` when Search Console is not used, `--cities` when the city check is skipped, and `--recs` when there are none. Read what it prints: the Review Needed count by reason and how many GSC pages matched.
+Leave out `--gsc` when Search Console is not used, `--cities` when the city check is skipped. Read what it prints: the Review Needed count by reason and how many GSC pages matched.
 
 Done when the script prints PASS for every check, the GSC match rate (if used) is not flagged by a WARNING or you have explained it, and you have opened 5 Review rows (include a Review Needed = Yes row) and agree that each Page Topic is what the page is about and the keywords belong to it.
 
 ## Step 5: Report
 
 Send the workbook and reply in a few sentences:
-- Pages processed, how many are Review Needed and the main reasons, and how many Recommendations.
+- Pages processed, how many are Review Needed and the main reasons (including how many lack a location in the Title Tag or H1).
 - Whether Search Console was used. Without it, say the keywords have no numbers and are not validated against search data, and that connecting Search Console and re-running ranks them.
 - Pages whose topic you were unsure of, so the person can check them.
 - The next human step: review the Yes rows, then the writer fills Suggested Page Title and Suggested H1 and adds the location.

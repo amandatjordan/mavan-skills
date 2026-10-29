@@ -9,7 +9,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
 | `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and lists lost backlinks to win back and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
-| `service-page-title-h1-review` | From a crawl export of the service pages, works out what each page is about and its target keywords from the path, H1 and title, ranks them by Search Console impressions when Composio is connected (otherwise lists them without numbers), flags the pages a person must review (keywords missing from the title and H1, no city, blanks), and adds a Recommendations tab for obvious missing pages | Service Page H1 & Title Tag Review |
+| `service-page-title-h1-review` | From a crawl export of the service pages, works out what each page is about and its target keywords from the path, H1 and title, ranks them by Search Console impressions when Composio is connected (otherwise lists them without numbers), flags the pages a person must review (keywords missing from the title and H1, no location in the Title Tag or H1, blanks), | Service Page H1 & Title Tag Review |
 
 ## Layout
 
