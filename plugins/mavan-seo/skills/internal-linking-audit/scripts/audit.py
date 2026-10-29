@@ -5,22 +5,27 @@
       Normalises Sitebulb or Screaming Frog exports into work/. Without --body-regex it prints the
       link-path patterns so you can pick the one that means "inside the main content".
   python audit.py candidates --base https://example.com --priority priority.csv --service-regex REGEX
+      [--gallery-regex REGEX] [--low-value-regex REGEX] [--exclude-regex REGEX]
       [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv]
       Writes work/candidates.csv, work/service_links.csv, work/gallery.csv, work/wrong_target.csv,
-      work/baseline.csv for Claude to review.
+      work/baseline.csv for Claude to review. Every URL pattern comes from the site's own URLs
+      (see the folder table prep prints); nothing about the site's structure is assumed.
+      --gallery-regex    gallery / portfolio / case study / review pages (skip = no gallery check)
+      --low-value-regex  pages a service-named anchor should not point to, e.g. blog, gallery,
+                         reviews, contact (skip = no wrong-target check)
+      --exclude-regex    pages that are never worth editing, e.g. tag/category/pagination archives
   python audit.py build --base https://example.com --rows work/rows.csv --client NAME --out FILE.xlsx
       [--findings work/findings.txt]
       Checks every row (URLs exist, no existing body link, High/Low) and builds the sheet.
 
 priority.csv: url[,terms]  terms = '|'-separated phrases for the service (optional; derived from the H1).
-gsc_pages.csv: page,clicks,impressions   gsc_queries.csv: page,query,clicks,impressions
+gsc_pages.csv: page,clicks (top pages by clicks)   gsc_queries.csv: page,query,clicks,impressions (priority topics only)
 """
 import argparse, os, re, sys, warnings
 warnings.filterwarnings("ignore", message="This pattern")
 import pandas as pd
 
 W = 'work'
-LOW_VALUE = r'/blog|before-after|gallery|/reviews|testimonial|/contact|/schedule|/about|/staff|/doctors|/dr-|/team'
 ACTIONS = ['Add link', 'Add link (template)', 'Change link target']
 TYPES = ['Related content', 'Related service', 'Gallery & reviews', 'Wrong target']
 
@@ -42,7 +47,7 @@ def terms_rx(terms):
 
 def derive_terms(h1, url):
     t = re.split(r'\s+in\s+|\s*[|,–-]\s*', str(h1), maxsplit=1)[0].strip().lower() if h1 and str(h1) != 'nan' else ''
-    t = re.sub(r'\s+(surgery|treatments?|procedures?|services?|options?)$', '', t)
+    t = re.sub(r'\s+(services?|treatments?|procedures?|surgery|options?|solutions?)$', '', t)
     if len(t) < 3:
         t = re.sub(r'-(in-)?[a-z]+-[a-z]{2}$', '', url.rstrip('/').split('/')[-1]).replace('-', ' ')
     return [t]
@@ -82,6 +87,11 @@ def prep(a):
         b = L[L.body]
         print(f'\nbody links: {len(b)} from {b.src.nunique()} pages; by section:',
               b.src.str.replace(base, '').str.split('/').str[1].value_counts().head(8).to_dict())
+    live = U[U.status == 200]
+    f = live.url.str.replace(base, '').str.split('/').str[1].replace('', '(home)')
+    print('\nlive pages by top folder (use these to write the service, gallery, low-value and exclude regexes):')
+    print(pd.DataFrame({'folder': f, 'url': live.url}).groupby('folder').agg(pages=('url', 'size'), example=('url', lambda s: s.iloc[0].replace(base, '')))
+          .sort_values('pages', ascending=False).head(30).to_string())
 
 def candidates(a):
     base = a.base.rstrip('/')
@@ -105,7 +115,8 @@ def candidates(a):
     gq = None
     if a.gsc_queries:
         gq = pd.read_csv(a.gsc_queries); gq['page'] = gq.page.map(lambda x: norm(x, base))
-    content = live[~live.url.str.contains(r'before-after|gallery|/reviews|/tag/|/category/|/page/\d|/sitemap', regex=True)]
+    def match(df, rx): return df.url.str.replace(base, '').str.contains(rx, regex=True) if rx else pd.Series(False, index=df.index)
+    content = live[~match(live, a.gallery_regex) & ~match(live, a.exclude_regex)]
 
     rows = []
     for t in targets:
@@ -120,7 +131,7 @@ def candidates(a):
                 if len(q): why.append(f'ranks for {len(q)} related searches, e.g. "{q.sort_values("impressions", ascending=False)["query"].iloc[0]}"')
             if why:
                 rows.append({'type': 'Related service' if s in services else 'Related content', 'target': t, 'source': s,
-                             'source_title': p.title, 'source_clicks': clicks.get(s, ''), 'matched_on': '; '.join(why)})
+                             'source_title': p.title, 'source_clicks': clicks.get(s, 0) if a.gsc_pages else '', 'matched_on': '; '.join(why)})
     C = pd.DataFrame(rows)
     if len(C): C = C.sort_values(['target', 'type', 'source_clicks'], ascending=[True, True, False])
     C.to_csv(f'{W}/candidates.csv', index=False)
@@ -130,17 +141,18 @@ def candidates(a):
     pd.DataFrame(SL).to_csv(f'{W}/service_links.csv', index=False)
 
     G = []
-    for t in targets:
-        slug = '-'.join(terms[t][0].split())
-        rel = U[U.url.str.contains('/' + re.escape(slug) + r'(?:/|$)', regex=True) & ~U.url.isin(services) & (U.status == 200)]
+    gal = U[(U.status == 200) & match(U, a.gallery_regex) & ~U.url.isin(services)] if a.gallery_regex else U.iloc[0:0]
+    for t in targets if a.gallery_regex else []:
+        rx = terms_rx(terms[t])
+        rel = gal[[bool(rx.search(' '.join([u.replace(base, '').replace('-', ' '), ti, h]))) for u, ti, h in zip(gal.url, gal.title, gal.h1)]]
         up = L[L.src.isin(rel.url) & (L.dst == t) & ~L.position.str.lower().isin(['header', 'navigation', 'nav', 'footer'])]
         G.append({'priority_page': t, 'gallery_review_pages': len(rel), 'linking_up_outside_menu': up.src.nunique(),
                   'examples': ' | '.join(rel.url.head(3).str.replace(base, ''))})
     pd.DataFrame(G).to_csv(f'{W}/gallery.csv', index=False)
 
     WT = []
-    for _, r in body.iterrows():
-        if r.dst in services or not re.search(LOW_VALUE, r.dst.replace(base, '')): continue
+    for _, r in (body.iterrows() if a.low_value_regex else []):
+        if r.dst in services or not re.search(a.low_value_regex, r.dst.replace(base, '')): continue
         for s in services:
             if terms_rx(terms[s]).search(r.anchor):
                 WT.append({'source': r.src, 'anchor': r.anchor, 'current_target': r.dst, 'suggested_target': s,
@@ -148,12 +160,15 @@ def candidates(a):
     pd.DataFrame(WT).to_csv(f'{W}/wrong_target.csv', index=False)
 
     B = [{'priority_page': t, 'body_links_in': int((body.dst == t).sum()), 'pages_linking_in_body': body[body.dst == t].src.nunique(),
-          'body_links_out': int((body.src == t).sum()), 'clicks_3mo': clicks.get(t, '')} for t in targets]
+          'body_links_out': int((body.src == t).sum()),
+          'topic_clicks_3mo': int(gq[gq.page == t].clicks.sum()) if gq is not None else ''} for t in targets]
     pd.DataFrame(B).to_csv(f'{W}/baseline.csv', index=False)
 
     print(f'services={len(services)} priority pages={len(targets)} content pages scanned={len(content)}')
     print(pd.DataFrame(B).to_string(index=False))
     if len(C): print('\ncandidates by page/type:', C.groupby(['target', 'type']).size().to_dict())
+    if not a.gallery_regex: print('gallery check skipped (no --gallery-regex)')
+    if not a.low_value_regex: print('wrong-target check skipped (no --low-value-regex)')
     print('gallery/review link-up:', [(g['priority_page'].replace(base, ''), g['gallery_review_pages'], g['linking_up_outside_menu']) for g in G])
     print(f'wrong-target anchors: {len(WT)} (source already links to the service: {sum(w["source_already_links_to_suggested"] for w in WT)})')
     print('\nterms used:'); [print(' ', t.replace(base, ''), '->', terms[t]) for t in targets]
@@ -232,9 +247,9 @@ def build(a):
     im.freeze_panes = 'E2'; im.auto_filter.ref = f'A1:J{n}'
     b = wb.create_sheet('Baseline')
     bl = pd.read_csv(f'{W}/baseline.csv').fillna('')
-    head(b, ['Priority page', 'Body links in', 'Pages linking in body copy', 'Body links out', 'Clicks (last 3 months)'], [62, 14, 16, 14, 16])
+    head(b, ['Priority page', 'Body links in', 'Pages linking in body copy', 'Body links out', 'Clicks from topic searches (last 3 months)'], [62, 14, 16, 14, 20])
     for i, r in enumerate(bl.itertuples(), 2):
-        for j, v in enumerate([r.priority_page, r.body_links_in, r.pages_linking_in_body, r.body_links_out, r.clicks_3mo], 1): b.cell(i, j, v).font = N
+        for j, v in enumerate([r.priority_page, r.body_links_in, r.pages_linking_in_body, r.body_links_out, r.topic_clicks_3mo], 1): b.cell(i, j, v).font = N
     b.cell(len(bl) + 3, 1, 'From the crawl export. Sitebulb can hide a body link that uses the same anchor as a menu link, so these may undercount.').font = Font(name=F, size=9, italic=True)
     if a.note: b.cell(len(bl) + 4, 1, a.note).font = Font(name=F, size=9, italic=True)
     wb.save(a.out); print(f'saved {a.out}')
@@ -245,6 +260,7 @@ if __name__ == '__main__':
     p.add_argument('--base', required=True); p.add_argument('--body-regex')
     c = sub.add_parser('candidates'); c.add_argument('--base', required=True); c.add_argument('--priority', required=True)
     c.add_argument('--service-regex', required=True); c.add_argument('--gsc-pages'); c.add_argument('--gsc-queries')
+    c.add_argument('--gallery-regex'); c.add_argument('--low-value-regex'); c.add_argument('--exclude-regex')
     b = sub.add_parser('build'); b.add_argument('--base', required=True); b.add_argument('--rows', required=True)
     b.add_argument('--client', default=''); b.add_argument('--out', default='internal-linking-audit.xlsx')
     b.add_argument('--findings'); b.add_argument('--note', default='')
