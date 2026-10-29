@@ -5,7 +5,7 @@ Arial throughout, header row dark blue with white bold text, frozen header, Exce
 ## Tabs, in this order
 
 ### 1. Read Me
-Two columns (label, text): Inputs (crawler, URL count, crawl date, taxonomy version, GSC yes/no), Fields used, Practice type and service area, Level names, Offered Status definitions, Coverage definitions, Priority definitions, Competitor Volume (ranks gaps against each other; not local demand), Limits of export-only (two H2s, no body text: a Sub-Service covered lower on a page shows as not found), Thresholds, Recommendations tab, Search volume (how keywords are assigned and which are excluded), Yellow columns.
+Two columns (label, text): Inputs (crawler, URL count, crawl date, taxonomy version, GSC yes/no), Fields used, Practice type and service area, Level names, Offered Status definitions, Coverage definitions, Priority definitions, Competitor Volume (ranks gaps against each other; not local demand), Limits of export-only (no body text: a Sub-Service mentioned only in body copy shows as not found), Thresholds, Recommendations tab, Search volume (how keywords are assigned and which are excluded), Yellow columns.
 
 ### 2. Recommendations (the deliverable)
 Row 1 header groups: **Page** over columns A–D, **Search Volume** over E–F. Row 2 column headers:
@@ -40,7 +40,7 @@ Service Page Recommended, Current URL, Keyword, National Search Volume. One row 
 Keyword, National Search Volume, Service Page Recommended, Exclusion Reason, Keep? (Y to add back) in yellow. Only keywords that would have counted for a Recommendations row. Sort Geo Modified rows first.
 
 ### 5. Gap List
-Priority (P1 red fill, P2 yellow, P3 green, Ask blue), Gap Type, Category, Service, Level, Service / Sub-Service / Brand, Offered Status, Offered Evidence, Coverage, Best Page, Content Words, Indexability, All Pages for Node ("path (Nw, indexability)"; ...), Competitor Volume, Recommendation (page brief for empty Service hubs), Client Confirmed (yellow, Yes / No / Planned dropdown), Notes (yellow). Sorted by Priority, Gap Type, Competitor Volume.
+Priority (P1 red fill, P2 yellow, P3 green, Ask blue), Gap Type, Category, Service, Level, Service / Sub-Service / Brand, Offered Status, Offered Evidence, Coverage, Best Page, Content Words, Indexability, All Pages for Node ("path (Nw, indexability)"; ...), Competitor Volume, Volume Tier (High / Medium / Low / No data), Recommendation (page brief for empty Service hubs), Client Confirmed (yellow, Yes / No / Planned dropdown), Notes (yellow). Sorted by Priority, Gap Type, Competitor Volume.
 
 ### 6. Page Inventory
 Path, Page Type, Primary Level, Primary Service, Primary Service / Sub-Service / Brand, Content Words, Indexability, H1 Missing, Duplicate Of, Page Issues (not indexable; empty / thin or light with word count; missing H1), Title, H1, H2, H2 (second), Meta Description. Service pages first, then Location, Blog post, Blog index, Utility. Galleries are on their own tab.
