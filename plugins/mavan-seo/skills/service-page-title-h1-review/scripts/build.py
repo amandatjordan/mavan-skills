@@ -3,20 +3,19 @@
 
   python build.py inspect --crawl export.csv --out work
   python build.py build   --crawl export.csv --keywords work/keywords.tsv --out review.xlsx
-                          [--gsc work/gsc] [--brand "term, term"] [--cities "City, City"]
+                          [--gsc GSC_SHEET [--gsc-tab TAB]] [--brand "term, term"] [--cities "City, City"]
 
-inspect: shows which export columns are used, writes work/urls.txt (for the Search Console filter) and
-         work/pages.tsv (one compact line per page, for the AI to read), and lists pages that look like
+inspect: shows which export columns are used, writes work/pages.tsv (one compact line per page, for the AI to read), and lists pages that look like
          they are not service pages (tags, categories, blog posts).
 build:   takes the AI's topic and target keywords for every page, adds each page's top Search Console queries
          when --gsc is given, flags the pages a person should review and builds the two-tab workbook.
-         --gsc reads work/gsc/top_queries.tsv (path <TAB> "query (impressions/clicks); ...") or raw page + query
-         rows (.json or .csv). Queries with fewer than 5 impressions and queries containing a --brand term are dropped.
+         --gsc reads the provided Google Sheet of page + query rows. Queries with fewer than 5 impressions and
+         queries containing a --brand term are dropped.
 The AI decides what each page is about and its keywords. It does not rank or judge Search Console queries.
 Every number, count and join happens here. Rules: references/rules.md.
 """
 import argparse
-import json
+import csv
 import os
 import re
 import sys
@@ -37,7 +36,6 @@ TITLE_NAMES = ["title 1", "title", "page title"]
 MAX_KEYWORDS = 8   # the AI proposes at most this many per page
 MIN_IMPR, TOP_QUERIES = 5, 10   # a query needs this many impressions; this many per page
 NON_SERVICE = re.compile(r"/(tags?|category|categories|page-category|author|blog|news|feed)(/|$)|/page/\d+|/\d{4}/\d{2}/", re.I)
-QUERY_ITEM = re.compile(r"^(.*) \((\d+)/(\d+)\)$")
 NO_GSC_TEXT = "No GSC data for this page (or fewer than 5 impressions per query)"
 STOP = {"and", "or", "in", "for", "of", "the", "a", "an", "to", "with", "near", "me", "by", "vs"}
 
@@ -98,36 +96,9 @@ def load_crawl(args):
 
 # ------------------------------------------------------------------------ gsc
 
-def collect_rows(obj, out):
-    """Find every {clicks, impressions, page + query} row in any JSON wrapper."""
-    if isinstance(obj, str):
-        s = obj.strip()
-        if s[:1] in "[{":
-            try:
-                collect_rows(json.loads(s), out)
-            except ValueError:
-                pass
-    elif isinstance(obj, dict):
-        if "clicks" in obj and "impressions" in obj:
-            url = query = None
-            keys = obj.get("keys")
-            if isinstance(keys, list) and keys and isinstance(keys[0], str):
-                url = keys[0]
-                query = keys[1] if len(keys) > 1 and isinstance(keys[1], str) else None
-            for k in ("page", "url", "Page", "URL"):
-                if url is None and isinstance(obj.get(k), str):
-                    url = obj[k]
-            for k in ("query", "Query", "top queries"):
-                if query is None and isinstance(obj.get(k), str):
-                    query = obj[k]
-            if url:
-                out.append((url, query, float(obj["clicks"]), float(obj["impressions"])))
-            return
-        for v in obj.values():
-            collect_rows(v, out)
-    elif isinstance(obj, list):
-        for v in obj:
-            collect_rows(v, out)
+GSC_COLS = {"page": ("page", "landing page", "url", "address", "top pages"),
+            "query": ("query", "top queries", "search query"),
+            "clicks": ("clicks",), "impressions": ("impressions",)}
 
 
 def path_key(u):
@@ -135,59 +106,73 @@ def path_key(u):
     return p.rstrip("/") or "/"
 
 
-def load_gsc(path):
-    """-> {page path: {query: [impressions, clicks]}} from top_queries.tsv or raw page + query rows."""
-    files = []
-    if os.path.isdir(path):
-        files = sorted(os.path.join(path, f) for f in os.listdir(path) if f.lower().endswith((".json", ".csv", ".tsv")))
-    elif os.path.isfile(path):
-        files = [path]
-    if not files:
-        sys.exit(f"No .tsv, .json or .csv GSC files found at {path}")
+def to_num(x):
+    try:
+        return float(str(x).replace(",", "").strip() or 0)
+    except ValueError:
+        return None
+
+
+def gsc_tabs(path):
+    """-> {tab name: [(page, query, clicks, impressions)]} for every tab of the Google Sheet export that has
+    Page, Query, Clicks and Impressions columns. Reads an .xlsx download, or the text export where each tab
+    starts with a '## Sheet name: NAME' line followed by CSV."""
+    raw = {}
+    if path.lower().endswith((".xlsx", ".xlsm", ".xls")):
+        for name, df in pd.read_excel(path, sheet_name=None, dtype=str, header=None).items():
+            raw[name] = df.fillna("").values.tolist()
+    else:
+        name = "(file)"
+        with open(path, encoding="utf-8-sig", newline="") as fh:
+            for line in fh:
+                if line.startswith("## Sheet name:"):
+                    name = line.split(":", 1)[1].strip()
+                    raw[name] = []
+                elif line.strip():
+                    raw.setdefault(name, []).append(next(csv.reader([line])))
+    tabs = {}
+    for name, rows in raw.items():
+        for hi, row in enumerate(rows[:10]):
+            cells = [str(c).strip().lower() for c in row]
+            idx = {k: next((cells.index(n) for n in names if n in cells), None) for k, names in GSC_COLS.items()}
+            if all(v is not None for v in idx.values()):
+                out = []
+                for r in rows[hi + 1:]:
+                    if len(r) <= max(idx.values()):
+                        continue
+                    c, i = to_num(r[idx["clicks"]]), to_num(r[idx["impressions"]])
+                    if c is None or i is None or not str(r[idx["query"]]).strip():
+                        continue
+                    out.append((str(r[idx["page"]]).strip(), str(r[idx["query"]]).strip(), c, i))
+                tabs[name] = out
+                break
+    return tabs
+
+
+def load_gsc(path, tab=None):
+    """-> {page path: {query: [impressions, clicks]}}. The page's query string (utm and similar) is dropped, so
+    the same page under several URLs adds up."""
+    if not os.path.isfile(path):
+        sys.exit(f"GSC file not found: {path}")
+    tabs = gsc_tabs(path)
+    if not tabs:
+        sys.exit(f"{path}: no tab has Page, Query, Clicks and Impressions columns. Stop and tell the person.")
+    if tab:
+        if tab not in tabs:
+            sys.exit(f"--gsc-tab '{tab}' is not a tab with those columns. Tabs: {{ {', '.join(tabs)} }}")
+        use = tab
+    elif len(tabs) == 1:
+        use = next(iter(tabs))
+    else:
+        listing = "; ".join(f"'{n}' ({len(r)} rows)" for n, r in tabs.items())
+        sys.exit(f"{path} has several tabs with GSC columns: {listing}. Ask the person which tab to use, "
+                 "then re-run with --gsc-tab NAME. Never add the tabs together.")
     total = {}
-    for f in files:
-        n = 0
-        if f.lower().endswith(".tsv"):
-            with open(f, encoding="utf-8-sig") as fh:
-                for line in fh:
-                    if "\t" not in line:
-                        continue
-                    pth, qs = line.rstrip("\n").split("\t", 1)
-                    if pth.strip().lower() in ("path", "page", "url"):
-                        continue
-                    d = total.setdefault(path_key(pth), {})
-                    for item in qs.split(";"):
-                        m = QUERY_ITEM.match(item.strip())
-                        if m:
-                            v = d.setdefault(m.group(1).strip().lower(), [0, 0])
-                            v[0] += int(m.group(2))
-                            v[1] += int(m.group(3))
-                            n += 1
-        else:
-            rows = []
-            if f.lower().endswith(".json"):
-                with open(f, encoding="utf-8") as fh:
-                    collect_rows(json.load(fh), rows)
-            else:
-                df = read_table(f)
-                lk = {c.strip().lower(): c for c in df.columns}
-                cu = next((lk[x] for x in ("url", "page", "address") if x in lk), None)
-                cq = next((lk[x] for x in ("query", "top queries") if x in lk), None)
-                if not cu or "clicks" not in lk or "impressions" not in lk:
-                    sys.exit(f"{f}: needs url (or page), query, clicks and impressions columns. Columns: {list(df.columns)}")
-                for _, r in df.iterrows():
-                    rows.append((r[cu], r[cq] if cq else None, float(r[lk['clicks']] or 0), float(r[lk['impressions']] or 0)))
-            if rows and not any(q for _, q, _, _ in rows):
-                sys.exit(f"{f}: the rows have no query. This review needs the page and query dimensions (references/composio-gsc.md).")
-            for url, q, c, i in rows:
-                if q:
-                    v = total.setdefault(path_key(url), {}).setdefault(q.strip().lower(), [0, 0])
-                    v[0] += int(i)
-                    v[1] += int(c)
-                    n += 1
-        print(f"  GSC file {os.path.basename(f)}: {n} query rows")
-        if n == 0:
-            sys.exit(f"{f}: 0 query rows read. Stop and show the person the response shape; do not guess a format.")
+    for page, q, c, i in tabs[use]:
+        v = total.setdefault(path_key(page), {}).setdefault(q.lower(), [0, 0])
+        v[0] += int(i)
+        v[1] += int(c)
+    print(f"  GSC tab '{use}': {len(tabs[use])} query rows, {len(total)} pages")
     return total
 
 
@@ -306,8 +291,6 @@ def short(s, n=80):
 def cmd_inspect(args):
     pages, cols, dups = load_crawl(args)
     os.makedirs(args.out, exist_ok=True)
-    with open(os.path.join(args.out, "urls.txt"), "w", encoding="utf-8") as fh:
-        fh.write("\n".join(p["url"] for p in pages) + "\n")
     odd = [p for p in pages if NON_SERVICE.search(p["path"])]
     with open(os.path.join(args.out, "pages.tsv"), "w", encoding="utf-8") as fh:
         fh.write("id\tpath\th1\ttitle\tnote\n")
@@ -321,7 +304,7 @@ def cmd_inspect(args):
         print(f"Likely not service pages ({len(odd)}); kept and flagged, ask the person once whether to drop them:")
         for p in odd:
             print("  " + p["path"])
-    print(f"Wrote {os.path.join(args.out, 'urls.txt')} and {os.path.join(args.out, 'pages.tsv')}")
+    print(f"Wrote {os.path.join(args.out, 'pages.tsv')}")
 
 
 def cmd_build(args):
@@ -330,7 +313,7 @@ def cmd_build(args):
         p["id"] = i
     kw = read_keywords(args.keywords, pages)
     crawl_keys = {p["key"] for p in pages}
-    gsc = load_gsc(args.gsc) if args.gsc else None
+    gsc = load_gsc(args.gsc, args.gsc_tab) if args.gsc else None
     brand = [b.strip().lower() for b in (args.brand or "").split(",") if b.strip()]
     cities = [c.strip() for c in (args.cities or "").split(",") if c.strip()]
     city_keys = {term_key(c) for c in cities}
@@ -442,7 +425,8 @@ def main():
         sp.add_argument("--out", required=True, help="inspect: work folder. build: output .xlsx path")
         if name == "build":
             sp.add_argument("--keywords", required=True, help="work/keywords.tsv: the AI's topic and target keywords per page")
-            sp.add_argument("--gsc", help="folder (or file) with top_queries.tsv or saved page + query rows. Optional: without it there is no Top GSC Queries column")
+            sp.add_argument("--gsc", help="the Google Sheet of Search Console data (page, query, clicks, impressions), downloaded as .xlsx or the text export. Optional: without it there is no Top GSC Queries column")
+            sp.add_argument("--gsc-tab", help="which tab to use when the file has several tabs with GSC columns")
             sp.add_argument("--brand", help="the client's brand terms, comma separated; queries containing one are dropped. Optional")
             sp.add_argument("--cities", help="the client's city or service-area cities, comma separated. Optional: without it the city check is skipped")
     args = ap.parse_args()

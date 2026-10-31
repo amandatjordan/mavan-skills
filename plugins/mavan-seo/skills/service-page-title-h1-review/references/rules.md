@@ -11,7 +11,7 @@
 
 ## Top GSC Queries (Search Console only)
 
-- Search Console rows are page + query with impressions and clicks, summed per page and query. Brand terms are excluded in the request and again by the script.
+- The Google Sheet has one row per page + query with clicks and impressions. The script reads one tab, drops the query string from each page URL (so a page under several tracking URLs adds up), and sums per page and query. Branded queries are dropped by the script using the brand terms given.
 - Per page the script keeps up to 10 queries with at least 5 impressions each, most impressions first (ties: more clicks), shown as `query (impressions/clicks)` separated by `;`. Pages with none show "No GSC data for this page (or fewer than 5 impressions per query)".
 - The queries are for a person to read when working out what belongs in the Title Tag and H1. Claude does not rank, filter or judge them; it only reports pages whose queries are mostly other cities or services.
 - Suggested Keywords are not ranked by Search Console data.
