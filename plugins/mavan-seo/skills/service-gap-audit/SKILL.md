@@ -9,51 +9,64 @@ This skill carries the whole process and does not need the written SOP; a copy i
 
 The audit answers four questions for every service in the taxonomy: does the practice offer it, does it have a page Google can index, does that page have real content, and how much national search demand is behind it. The deliverable is the Recommendations tab: one row per page to build or fix.
 
-Work only from files: the crawl export, the bundled taxonomy, and anything the person attaches. Every count, match and join is done in Python (pandas, openpyxl); never estimate a number by reading. `$SKILL` below is this skill's folder (the base directory shown when the skill loads; `${CLAUDE_SKILL_DIR}` in Claude Code). Work in a folder named after the client with a `work/` subfolder, and keep a task list with one item per step.
+Work only from the crawl export, the bundled taxonomy, and the optional Search Console sheet. **Never visit the live site or use Composio or any other connector.** Use no tool, dependency, fallback or extra step beyond those named here without asking the person first and explaining why it is needed. If a step is unreliable, expensive or needs workarounds, stop and tell the person. Assume nothing about the site: URL structure, folder names, locations and brands differ on every site, so page types are decided per page in Step 3, never from a folder name. Every number, count and join is done by `scripts/build.py`; never type or estimate a number.
+
+`$SKILL` below is this skill's folder (the base directory shown when the skill loads; `${CLAUDE_SKILL_DIR}` in Claude Code). The script needs Python 3 with pandas and openpyxl. Work in a folder named after the client with a `work/` subfolder, and keep a task list with one item per step.
 
 ## What you need
 
-- **Crawl export** (CSV, internal HTML URLs, every status code). Sitebulb: URL, HTTP Status Code, Indexable Status, Title, Meta Description, H1, H2, H2 (second), No. Content Words, and the canonical URL column if exported. Screaming Frog: Address, Status Code, Indexability, Indexability Status, Title 1, Meta Description 1, H1-1, H2-1, H2-2, Word Count, Canonical Link Element 1. Ask for it if missing.
-- **Client facts**: domain, practice type (medspa, surgical, or both), service-area cities. Ask in one question for whatever the request doesn't give.
-- **Taxonomy**: `$SKILL/references/service-taxonomy.xlsx`. Tabs: Taxonomy (match terms per Service / Sub-Service / Brand / Device / Concern), Filters (exclusion and modifier patterns), Service Rollup, All Keywords (the competitor keyword list with US national volume, already classified, with Geo Modified / Place / Geo Check columns), Local Intent. If the person attaches a newer taxonomy or keyword list, use theirs and say so.
-- **Optional**: a Search Console queries export (CSV from the GSC web UI).
+- **Crawl export** (CSV or xlsx, internal HTML URLs, every status code). Sitebulb: URL, HTTP Status Code, Indexable Status, Title, Meta Description, H1, H2, H2 (second), No. Content Words, and the canonical URL column if exported. Screaming Frog: Address, Status Code, Indexability Status, Title 1, Meta Description 1, H1-1, H2-1, H2-2, Word Count, Canonical Link Element 1. URL, status, title, H1 and word count are required; the rest are used when present.
+- **Client facts**: domain, practice type (medspa, surgical, or both), and every city and suburb the practice targets.
+- **Search Console data** (optional): a Google Sheet with Page, Query, Clicks and Impressions columns, attached to the chat. The script uses the tab named "Claude Use This" when the file has one.
+- **Taxonomy**: bundled at `$SKILL/references/service-taxonomy.xlsx` (Taxonomy, Filters, All Keywords tabs). Do not ask for it, and do not read a sheet link to it: the bundled copy is the one to use. Use a different file only when the person explicitly says to, and pass it with `--taxonomy`.
 
 ## Vocabulary
 
 Use these names in every column, label and message: **Category > Service > Sub-Service > Brand / Device**. A **Concern** is a problem people search for; it points to Services and is never a page gap on its own. A **Modifier** (Cost, Before & After, Recovery / Risks, Comparison, Candidacy, Best / Top) is a flag on a keyword, never a level. Name every page for what it is: a Botox page is Botox (Brand / Device under Neurotoxin), never "Neurotoxin".
 
-## Step 1: Load and classify
+## Step 1: Ask once
 
-Load the crawl into a standard frame (path, status, indexable status, title, H1, H2, H2b, meta description, content words, canonical). Load the Taxonomy and Filters tabs. If you use the bundled All Keywords tab, its Class / Service / Sub-Service / Brand columns are already set; re-classify only when the person attached a different keyword list, using the rules in [references/rules.md](references/rules.md) § Keyword classification.
+Send **one** message with only what the request did not already give: practice type, every city and suburb they target (nearby towns not named are treated as other markets), and the Search Console Google Sheet. No menus of options. If a sheet link or file is provided, the script checks it has Page, Query, Clicks and Impressions columns; a sheet without them (for example the taxonomy) is not Search Console data, so say so and continue without it. If the person has no sheet, continue without it: the workbook builds without the Client GSC Impressions column and the Read Me says so.
 
-Done when you can print: page count by status code, keyword count by Class, and the number of taxonomy rows by Level.
+Done when practice type and cities are known and you know whether Search Console data is used.
 
-## Step 2: Type and label every page
+## Step 2: Inspect the crawl
 
-Apply [references/rules.md](references/rules.md) § Pages: page type, indexability (including the canonical loop), and each Service page's primary node.
+```
+python $SKILL/scripts/build.py inspect --crawl EXPORT.csv --cities "City, City" --practice medspa --out work
+```
 
-Done when every Service page has a primary node or is on a printed "not in taxonomy" list, and you have opened the label for 5 Service pages and agree with each one (the page's path, title and H1 name that node).
+It prints which columns it will use, the ones missing (H2s, canonical), status code counts, and writes `work/pages.tsv`: one line per live page with its words, indexability, title, H1, a suggested type and suggested taxonomy node, and editable `type`, `node` and `city` columns. If a column is mapped wrong, re-run with `--url-col`, `--h1-col` and so on.
 
-## Step 3: Coverage, offered status and gaps
+Done when the columns are confirmed and `work/pages.tsv` exists.
 
-Apply [references/rules.md](references/rules.md) § Coverage, § Offered status, § Gaps and priority, and § Page briefs, for every taxonomy node that fits the practice type.
+## Step 3: Review every page's type and node
 
-Done when every in-scope node has an Offered Status and a Coverage value, every gap row has a Priority and a Recommendation, and no node marked "Do not flag" or "NOT US-approved" has a gap.
+Read `work/pages.tsv` and correct the `type` and `node` columns in place (leave `suggested_*` as they are). Suggestions come from taxonomy matches and generic hints, so they are a start, not an answer. Apply [references/rules.md](references/rules.md) § Page types and § Nodes. In short:
+- **type** is one of Service, Concern, Gallery, Blog, Location, Utility, judged from the page's H1, title and path together.
+- **node** is the exact taxonomy name of what the page is about (Service pages must have one; other types may). A brand or device missing from the taxonomy is written `NEW: Name > Service`.
 
-## Step 4: Keywords per page
+Done when every Service page has a node, every row's type is one of the six, and you have checked every Service and Concern row plus 5 rows of each other type.
 
-Apply [references/rules.md](references/rules.md) § Keywords per page and § Other markets. Keep the client's service-area cities.
+## Step 4: Build
 
-Done when every Recommendations row has Relevant Keywords (or the "None in competitor keyword list" text) and a Total National Search Volume, and every excluded keyword is listed with its reason.
+```
+python $SKILL/scripts/build.py build --crawl EXPORT.csv --pages work/pages.tsv --cities "City, City" --practice medspa \
+  --domain DOMAIN --out DOMAIN_service_gap_audit.xlsx [--gsc GSC_SHEET_FILE [--gsc-tab TAB]]
+```
 
-## Step 5: Build the workbook
+If it stops on pages.tsv problems, fix each listed row and re-run. If the GSC file has several tabs with GSC columns and none is "Claude Use This", ask the person which tab (one question) and pass `--gsc-tab`; never add tabs together. Do not open, print or paste Search Console rows into the chat.
 
-Follow [references/workbook.md](references/workbook.md) for tabs, columns, labels and sort order. Save as `<domain>_service_gap_audit.xlsx`.
+Done when every check prints PASS.
 
-Done when the workbook opens with every tab in the spec, in order, and the Recommendations tab's header groups and Why Recommended labels match the spec exactly.
+## Step 5: Check
 
-## Step 6: Check, then report
+- Open 5 Recommendations rows (include a "not indexable" or "thin" row and a "no page" row) against Page Inventory: the label, URL and word count agree.
+- Read the top 10 rows the script prints. Relevant Keywords contain no other city and no keyword from a different service. A wrong-service keyword means a match term is too broad: note it for the taxonomy pull request.
+- Read the Read Me: inputs, missing columns and "Not in taxonomy" are right.
 
-Run every check in [references/workbook.md](references/workbook.md) § QA. Fix and rebuild until all pass.
+Done when all three hold.
 
-Then send the workbook and reply in a few sentences: the biggest issue, the top missing pages, what needs client confirmation, and every service or brand on the site that isn't in the taxonomy (so it can be added to `service-taxonomy.xlsx` by pull request).
+## Step 6: Report
+
+Send the workbook and reply in a few sentences: the biggest issue, the top missing pages, what needs client confirmation, whether Search Console data was used, and every brand, device or service marked NEW (plus any match term that needs tightening) for the `service-taxonomy.xlsx` pull request. Practice-specific package or program names never go in the taxonomy.
