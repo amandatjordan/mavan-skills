@@ -8,7 +8,7 @@
     {
       "name": "mavan-seo",
       "source": "./plugins/mavan-seo",
-      "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, backlinks, service page title & H1 review"
+      "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, backlinks, service page title & H1 review, client report from any audit"
     }
   ]
 }
