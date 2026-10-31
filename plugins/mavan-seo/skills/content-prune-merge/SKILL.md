@@ -33,7 +33,7 @@ Before any work, check which tools this session has and tell the person in one s
 | Need | With it | Without it |
 | --- | --- | --- |
 | Search Console files | read them (references/data.md) | Composio, if connected; otherwise say what is missing |
-| GA4 landing page file | read it | pull it through Composio yourself when it is connected and no file was attached; otherwise leave GA4 blank and say so |
+| GA4 landing page file | read it | pull it through Composio yourself (filtered as in references/data.md) when it is connected and no file was attached; otherwise leave GA4 blank and say so |
 | Google Drive + Sheets connectors | copy the template and write only the Recommendations tab by connector (references/sheet.md) | the workbook alone, with paste steps |
 
 This skill makes no requests to the live site: no sitemap fetches, no status checks, no redirect resolving. The crawl's status codes and the redirects export are the truth. Done when every row above has a chosen path and the person has been told about any gaps.

@@ -44,6 +44,17 @@ with a floor of 20 impressions on both pages. Keep each page's strongest competi
 
 Without a page + query export: fill clicks and impressions from the pages export, leave No. Keywords blank, skip suggestion rule 2 and the Competes flags, and say in the report that overlap could not be measured. Never estimate a missing number.
 
+## Composio: pull only what this audit needs
+
+Every Composio call in this skill (Search Console and GA4) follows these limits. Data pulled through Composio is filtered at the source, never pulled wide and trimmed afterwards:
+
+- **Window:** the 90-day window only (end 3 days ago), the same for every call. No longer ranges, no comparison periods.
+- **Search Console:** the client's property only. Dimensions `page` (clicks, impressions) and `page,query`, nothing else: no device, country, search appearance or date splits.
+- **GA4:** the client's property only. Dimension `landingPage` and metrics `sessions, newUsers, screenPageViews, keyEvents`, nothing else. The one extra call allowed is the monthly sessions report in the GA4 section, and only when GA4 is skipped or looks low.
+- **Row limits:** request no more rows than the site has live pages (plus a margin), and stop paging as soon as a page comes back short.
+- **Aggregate in the workbench:** join and total there, bring back one compact row per page, and never print raw rows into the chat.
+- **Search Composio tools only for the use cases listed in the fallback below.** Do not run other Composio tools or pull other reports "while you are there".
+
 ## Fallback: Composio
 
 Use only for a source whose file was not provided.
