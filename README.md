@@ -9,6 +9,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
 | `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and lists lost backlinks to win back and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
+| `seo-audit-client-report` | Turns any finished audit's deliverables into a short client report: an at-a-glance table, the biggest themes (why each matters, with examples) and the next steps we will take. Never promises a result | Client report |
 | `service-page-title-h1-review` | From a crawl export of the service pages, works out what each page is about and its target keywords from the path, H1 and title, adds each page's top non-branded Search Console queries from a Google Sheet of GSC data you provide, and flags the pages a person must review (keywords missing from the title and H1, no location in the Title Tag or H1, blanks, pages that look like they are not service pages) | Service Page H1 & Title Tag Review |
 
 ## Layout
@@ -49,6 +50,7 @@ Free plans can use skills but not plugins. Download the ZIP for the skill you wa
 | Content prune & merge | [content-prune-merge.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/content-prune-merge.zip) |
 | Service gap audit | [service-gap-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/service-gap-audit.zip) |
 | Backlink audit | [backlink-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/backlink-audit.zip) |
+| SEO audit client report | [seo-audit-client-report.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/seo-audit-client-report.zip) |
 | Service page H1 & Title Tag review | [service-page-title-h1-review.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/service-page-title-h1-review.zip) |
 
 Then in Claude: **Customize > Skills**, **+** > **Create skill** > **Upload a skill**, and choose the ZIP. Uploaded skills do not update themselves: download the ZIP again when a new version is released ([all releases](https://github.com/amandatjordan/mavan-skills/releases)).
