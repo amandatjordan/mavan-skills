@@ -36,7 +36,7 @@ Done when the columns are confirmed, the cities and brand terms are known (or sk
 
 ## Step 2: Pull queries (only with Search Console)
 
-Follow references/composio-gsc.md, including every request rule and the one approved sandbox job. The result is `work/gsc/` holding either `top_queries.tsv` or the saved rows. Skip this step when Search Console is not used.
+Follow references/composio-gsc.md, including every request rule and the one pre-approved sandbox job (run it when the saved response requires it; do not ask the person whether to). The result is `work/gsc/` holding either `top_queries.tsv` or the saved rows. Skip this step when Search Console is not used.
 
 Done when every URL in `work/urls.txt` was in a batch, and the file is saved and verified (row count, or MD5 match), or the step is skipped.
 

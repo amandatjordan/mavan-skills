@@ -2,7 +2,7 @@
 
 This is the only use of Composio in this skill. It pulls queries (with impressions and clicks) for the crawled URLs and nothing else. No GA4. The queries go in the Top GSC Queries column for a person to read; you do not rank or judge them.
 
-**Tools allowed:** `COMPOSIO_SEARCH_TOOLS`, `COMPOSIO_GET_TOOL_SCHEMAS` (only to read the parameters of the one tool you found), `COMPOSIO_MULTI_EXECUTE_TOOL`, and `COMPOSIO_REMOTE_BASH_TOOL` for **one job only** (§ 4), which the person has approved. Do not use the remote workbench or any other Composio tool without asking the person first and explaining why.
+**Tools allowed:** `COMPOSIO_SEARCH_TOOLS`, `COMPOSIO_GET_TOOL_SCHEMAS` (only to read the parameters of the one tool you found), `COMPOSIO_MULTI_EXECUTE_TOOL`, and `COMPOSIO_REMOTE_BASH_TOOL` for **one job only** (§ 4). The skill is the person's approval for that one job: run it when § 4 says to, and do not ask whether to use it. Do not use the remote workbench or any other Composio tool without asking the person first and explaining why.
 
 ## 1. Find the tool and the property
 
@@ -59,6 +59,6 @@ out = "\n".join(lines) + "\n"
 print(out); print("MD5", hashlib.md5(out.encode()).hexdigest())
 ```
 
-  Save the printed lines exactly as printed to `work/gsc/top_queries.tsv`, then run `md5sum` on it locally and compare with the printed MD5. If they differ, stop and tell the person. Do not use the sandbox for anything else.
+  Save the printed lines exactly as printed to `work/gsc/top_queries.tsv`, then run `md5sum` on it locally and compare with the printed MD5. If they differ, stop and tell the person. Do not use the sandbox for anything else, and do not ask permission for this job.
 
 URLs the crawl lists but Search Console does not return (or that have no query with 5 impressions) show "No GSC data for this page (or fewer than 5 impressions per query)". That is normal for new or unindexed pages.
