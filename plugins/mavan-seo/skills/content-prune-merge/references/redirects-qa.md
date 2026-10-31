@@ -4,7 +4,7 @@ Do all matching in code, on normalized URLs (lowercase, https, non-www, trailing
 
 A **chain** is A -> B -> C: every redirect goes straight to its final page. A **loop** is A -> B -> A, including a wildcard whose target matches its own pattern. A specific rule listed below a wildcard that also matches it never fires.
 
-Valid final destinations: live pages whose suggestion (or, once a person has decided, Next Steps) is Keep, Update, Repurpose or Needs Discussion.
+Valid final destinations: live pages whose suggestion (or, once a person has decided, Next Steps) is Keep, Update, Repurpose or Needs Discussion. Never suggest a page that is not live in the crawl. A folder-level target (such as a services folder page) matches only slugs that name a service, never other kinds of page. When an existing redirect points at a root URL that is not live, suggest the live page with the same slug (for example the same slug under the folder the crawl shows it in) and mark it `SUGGESTED - check target`.
 
 ## Existing Redirects rows
 
@@ -15,7 +15,7 @@ Columns: Source URL | Target URL | Notes (full URLs). They appear at the bottom 
    - Lands on a page being merged or removed: repoint to that page's Suggested Target, following on until a kept page. Notes `Existing redirect - repointed (was X)`.
    - Lands on a 404 or missing page: suggest the closest kept page by topic, same treatment first. Notes start `SUGGESTED - check target`.
 2. **URLs with demand that are not live pages**: every URL in `work/not_in_crawl.tsv`, plus every non-200 URL in the crawl, that has GSC impressions, GA4 sessions or internal links and is not already covered by a redirect. Suggest a target the same way, Notes `SUGGESTED - check target. Not a live page per the crawl; [the demand, e.g. 860 impressions for "[treatment] [city]"]`. The crawl's status codes are the truth: never confirm with a live request.
-3. **Junk folder wildcards**: one row per folder, Source `https://domain/folder/*`. Notes: "Junk folder wildcard - [what it is, how many]. Disable these archives in the SEO plugin so they do not regenerate".
+3. **Junk folder wildcards**: one row per folder, Source `https://domain/folder/*`. Notes: "Junk folder wildcard - [what it is], [N] pages, [M] impressions. Disable these archives in the SEO plugin so they do not regenerate". Build the string in code from the data (page count and impressions of that folder), write each number once, and never type a count by hand.
 
 ## QA (run once on the final set, before writing anything to the sheet)
 

@@ -12,7 +12,7 @@ URL | Page Type | Page Type Reason | HTTP Status Code | Internal Linking URLs | 
 
 - Conversions = GA4 key events. No. Keywords = number of non-brand queries.
 - Duplicate H1s / Titles = how many *other* live pages share the exact text. Similar Content = the crawler's near-duplicate count, blank if the export has none.
-- Referring Domains = from the bulk backlink export when one was given (matched on the normalized URL), otherwise blank for a person.
+- Referring Domains: always leave blank. The column stays in the sheet but is not filled or mentioned.
 - Leave blank for a person: Next Steps, Target URL, Reasoning.
 - Sort by Page Type (order below), then Impressions high to low.
 
@@ -23,12 +23,12 @@ Values (a dropdown, in this sort order): `Home` | `Service` | `Concern / Conditi
 Apply in order; write the rule used in Page Type Reason.
 
 1. `/` = Home.
-2. **The confirmed folder map decides first** (SKILL.md Step 2): a page inside a mapped folder gets that folder's type. Reason: "Folder map: /folder/". A folder's own listing page, or a page that lists a group of services or products (often ~10 words), = Hub / Category Page. These patterns hold on any site: `/tag/`, `/category/` and `/blog/page/N/` = Blog Category / Tag; `/author/` or date archives (`/2024/05/`) = Author / Archive; gallery folders = Gallery. Any folder the map does not cover: the closest type, naming the folder in the reason.
+2. **The confirmed folder map decides first** (SKILL.md Step 2): a page inside a mapped folder gets that folder's type. Reason: "Folder map: /folder/". A folder's own listing page, or a page that lists a group of services or products (often ~10 words), = Hub / Category Page. A folder of resources or information for existing patients or customers (patient resources, forms, financing) = Not for SEO, not Service. A page inside a Service folder stays Service even when its slug names a city (`/services/botox-tampa/`); the city-in-slug rule below is for root-level pages and folders that are not mapped as Service. These patterns hold on any site: `/tag/`, `/category/` and `/blog/page/N/` = Blog Category / Tag; `/author/` or date archives (`/2024/05/`) = Author / Archive; gallery folders = Gallery. Any folder the map does not cover: the closest type, naming the folder in the reason.
 3. **Site signals for root-level pages** (from the classified links, before any slug guess). Many sites, WordPress especially, keep posts and service pages at the root, so these beat the slug rules:
    - Linked from Body links on the blog listing or its pagination = Blog Post. Reason: "Listed on the blog listing".
    - Linked from Body links on a hub page for the client's concerns or conditions = Concern / Condition. Reason: "Listed on the [hub name] hub".
 4. **Slug rules for the remaining root-level pages:**
-   - Contact, privacy, terms, HIPAA, thank-you, sitemap, login, cart, checkout, account, financing, shop, packages, memberships, booking, events, policies, and any other page that exists for users rather than search = Not for SEO (contact, legal, etc.). About, team, reviews = Other.
+   - Contact, privacy, terms, HIPAA, thank-you, sitemap, login, cart, checkout, account, financing, shop, packages, memberships, booking, events, policies, patient resources, patient information, forms, and any other page that exists for users rather than search = Not for SEO (contact, legal, etc.). About, team, reviews = Other.
    - Pages named for an area the client serves (`/areas-we-serve/`, `/{city}/`, `/{city}-{business type}/`) = Service Area / Location. A service-plus-city slug follows the city-in-slug bullet below.
    - Blog Post if ANY: slug starts with a question word (what, how, why, can, is, are, does, do, should, when, which, where, who); slug has 6+ words; slug or H1 uses blog wording (vs, versus, benefits, guide, tips, cost, explained, what to expect, reasons, aftercare, before and after, myths); the H1 is a question. Reason starts "Root-level, slug reads like a post".
    - A long-slug page that is NOT listed on the blog is a page, not a post: Service, reason "Root-level, long slug but not on the blog - check".
@@ -76,11 +76,11 @@ Consistency: a Keep row that carries a Competes flag says "kept by default (rule
 A folder is a junk candidate when (a) it matches a known auto-generated pattern: `/tag/`, `/category/`, `/author/`, date archives (`/2024/05/`), `/page/N/` pagination outside the blog listing, `/attachment/`, a folder name containing "category" or "archive", or the platform's equivalent (for example Shopify `/blogs/{blog}/tagged/`); OR (b) 80%+ of its live pages have ALL of: 0 clicks and under 10 impressions, under 150 content words or titles/H1s identical apart from one word, and no Body links from pages outside the folder. One-page-per-photo gallery folders count when they meet (b).
 
 - Include archive URLs that are in `work/not_in_crawl.tsv` or in the crawl's sitemap data (they are often missing from a link crawl). Make no live requests to find more.
-- Junk pages get no Audit row; each folder gets one wildcard on Existing Redirects (see redirects-qa.md). A page inside a junk folder with 5+ clicks, conversions or backlinks gets its own Audit row.
+- Junk pages get no Audit row; each folder gets one wildcard on Existing Redirects (see redirects-qa.md). A page inside a junk folder with 5+ clicks or any conversions gets its own Audit row.
 - Wildcard target: the blog listing for blog archives, the main gallery page for gallery entries, the team or about page for author archives. Never a target the pattern itself matches.
 - Leave `/blog/page/N/` alone when it is the only internal path to older posts or canonicalizes to the listing.
 - Pagination query URLs (`?e-page-1a2b=2`, `?page=3`, `?paged=2`) canonicalize to the listing: they get no audit row and no redirect.
-- For each folder report: rule matched, page count, clicks, impressions, 5 example URLs, wildcard target. The person confirms which folders are junk before the sheet is written (SKILL.md Step 5).
+- For each folder report: rule matched, page count, total impressions, 5 example URLs, suggested wildcard target. Targets: the blog listing for tag, category and author folders, the gallery page for gallery folders, the testimonials page for testimonial categories. The person picks which folders ARE junk before the sheet is written (SKILL.md Step 5); anything not picked stays in the audit as normal pages.
 
 ## Review triage
 
@@ -101,3 +101,6 @@ Every row still needs a Next Steps value, skim list included. Report both counts
 - Do this: one or two short instructions, naming the exact target URL when there is one.
 - Point links at service, concern or location pages; recommend links to blog posts nowhere.
 - Leave page counts and locations to the sheet.
+- Write every count from the data, in code, with correct plurals ("1 click", "2 clicks", "1 page", "3 pages"). Name the exact pages instead of vague phrases ("check the 1 in 4"). Never hardcode a number into text.
+- Never write a Recommendations row about canonical problems; they are noted only on the affected page.
+- The links export may not include blog listing or pagination pages, so root-level posts can then be typed only from the slug rules. Keep the Check page type row and say how many pages are affected.

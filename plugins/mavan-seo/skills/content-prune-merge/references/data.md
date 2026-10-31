@@ -10,7 +10,7 @@ Ask for these in one message at the start of the run, naming the window (last 90
 - **Search Console, pages**: Performance > Pages (fine if the page + query export already covers it).
 - **GA4 landing pages**: Reports > Engagement > Landing page (or an Exploration) with Sessions, New users, Views and Key events.
 
-Files are the main route. Composio is the fallback when a file is missing and Composio has an active Search Console or GA4 connection (see the end of this file).
+Files are the main route for Search Console. Composio is the fallback when a Search Console file is missing, and the default route for GA4 when no file was attached (see GA4 and the end of this file).
 
 ## Reading the page + query export
 
@@ -22,9 +22,12 @@ Exports from the add-on or Looker Studio are messy. Handle these in code before 
 - **Case duplicates:** `/Page-Name/` and `/page-name/` join on the lowercase path; flag the duplicate URL from the crawl.
 - **Non-site paths in GA4:** booking-widget UUID folders, `/to/` short links, `(not set)`. Confirm they are not pages on the site, then exclude them.
 
-## GA4 sanity check
+## GA4
 
-Compare GA4 sessions with Search Console clicks by month when the exports give months, otherwise by page totals for the window. Organic sessions should be in the same range as clicks. If GA4 sessions are a small fraction of GSC clicks (a collapse, for example 1,577 sessions one month and 35 the next), tracking is broken. Leave the GA4 columns (Conversions, New Users, Sessions, Views) blank, do not estimate them, and say so in the report with the numbers you compared. Do not switch to a different window.
+1. **Get it.** Use the GA4 landing page file when one was given. Otherwise, whenever Composio is connected, pull it yourself without waiting to be asked: `GOOGLE_ANALYTICS_LIST_ACCOUNT_SUMMARIES` to find the property by client name, then `GOOGLE_ANALYTICS_RUN_REPORT` with dimension `landingPage` and metrics `sessions, newUsers, screenPageViews, keyEvents` for the 90-day window (end 3 days ago). If no file and no connection, leave GA4 blank and say so.
+2. **200-session rule.** If total GA4 sessions in the window are under 200, skip GA4: leave Conversions, New Users, Sessions and Views blank, do not estimate them, spend no more time on it, and say in one report line that GA4 was skipped and why, with the total.
+3. **Optional diagnosis, one call.** When GA4 is skipped or looks low, run a monthly sessions report (dimension `month` or `yearMonth`, metric `sessions`) to show when tracking broke (for example about 1,500 sessions a month, then 35, 31 and 23). Tell the person to check the GA4 tag. Do not change the window.
+4. **Context only.** Compare total GA4 sessions with Search Console clicks and mention a large gap in the report as context. It does not change what gets filled in; the 200-session rule decides.
 
 ## Pages the crawl does not have
 
