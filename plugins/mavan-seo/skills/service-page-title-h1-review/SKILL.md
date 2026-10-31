@@ -36,7 +36,7 @@ Done when the columns are confirmed, the cities and brand terms are known (or sk
 
 ## Step 2: Check the Search Console sheet (only with the sheet)
 
-The sheet can have thousands of rows. **Do not open it, print it, or read its rows into the chat, and do not read it with a Google Sheets tool.** The script reads the attached file. If the file has several tabs with Page and Query columns, the script stops and lists them: ask the person which tab to use (one question), then pass `--gsc-tab NAME`. Never add tabs together. Skip this step when Search Console data is not used.
+The sheet can have thousands of rows. **Do not open it, print it, or read its rows into the chat, and do not read it with a Google Sheets tool.** The script reads the attached file. The script uses the tab named "Claude Use This" (the name in Mavan's Search Console template) when the file has one. If the file has several tabs with Page and Query columns and none has that name, the script stops and lists them: ask the person which tab to use (one question), then pass `--gsc-tab NAME`. Never add tabs together. Skip this step when Search Console data is not used.
 
 Done when you know which file (and tab) to pass to `--gsc`, or the step is skipped.
 

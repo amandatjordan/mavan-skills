@@ -96,6 +96,7 @@ def load_crawl(args):
 
 # ------------------------------------------------------------------------ gsc
 
+GSC_TAB = "Claude Use This"   # the tab of the Search Console template that the script uses when it exists
 GSC_COLS = {"page": ("page", "landing page", "url", "address", "top pages"),
             "query": ("query", "top queries", "search query"),
             "clicks": ("clicks",), "impressions": ("impressions",)}
@@ -157,6 +158,8 @@ def load_gsc(path, tab=None):
     tabs = gsc_tabs(path)
     if not tabs:
         sys.exit(f"{path}: no tab has Page, Query, Clicks and Impressions columns. Stop and tell the person.")
+    if not tab:
+        tab = next((n for n in tabs if n.strip().lower() == GSC_TAB.lower()), None)
     if tab:
         if tab not in tabs:
             sys.exit(f"--gsc-tab '{tab}' is not a tab with those columns. Tabs: {{ {', '.join(tabs)} }}")
@@ -166,7 +169,7 @@ def load_gsc(path, tab=None):
     else:
         listing = "; ".join(f"'{n}' ({len(r)} rows)" for n, r in tabs.items())
         sys.exit(f"{path} has several tabs with GSC columns: {listing}. Ask the person which tab to use, "
-                 "then re-run with --gsc-tab NAME. Never add the tabs together.")
+                 "then re-run with --gsc-tab NAME (or name the tab \"" + GSC_TAB + "\"). Never add the tabs together.")
     total = {}
     for page, q, c, i in tabs[use]:
         v = total.setdefault(path_key(page), {}).setdefault(q.lower(), [0, 0])
