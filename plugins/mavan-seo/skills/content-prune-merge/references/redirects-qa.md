@@ -14,7 +14,7 @@ Columns: Source URL | Target URL | Notes (full URLs). They appear at the bottom 
    - Lands on a kept page in one hop: leave it off the tab (nothing to change). Lands on one after several hops: add it pointing straight at the final page, Notes `Chain removed (was A -> B -> C)`.
    - Lands on a page being merged or removed: repoint to that page's Suggested Target, following on until a kept page. Notes `Existing redirect - repointed (was X)`.
    - Lands on a 404 or missing page: suggest the closest kept page by topic, same treatment first. Notes start `SUGGESTED - check target`.
-2. **404s with demand**: every non-live URL with GSC impressions, GA4 sessions or internal links that returns 404 today. Suggest a target the same way, Notes `SUGGESTED - check target. Currently 404s; [the demand, e.g. 860 impressions for "[treatment] [city]"]`. Confirm the 404 with a live request when web access allows; otherwise say "per crawl".
+2. **URLs with demand that are not live pages**: every URL in `work/not_in_crawl.tsv`, plus every non-200 URL in the crawl, that has GSC impressions, GA4 sessions or internal links and is not already covered by a redirect. Suggest a target the same way, Notes `SUGGESTED - check target. Not a live page per the crawl; [the demand, e.g. 860 impressions for "[treatment] [city]"]`. The crawl's status codes are the truth: never confirm with a live request.
 3. **Junk folder wildcards**: one row per folder, Source `https://domain/folder/*`. Notes: "Junk folder wildcard - [what it is, how many]. Disable these archives in the SEO plugin so they do not regenerate".
 
 ## QA (run once on the final set, before writing anything to the sheet)
@@ -32,7 +32,7 @@ Breaking issues first:
 Gaps:
 
 - Every live 200 URL in the crawl has an Audit row, or sits in a junk folder covered by a wildcard. Group misses by folder with counts.
-- Every archive-type URL (tag, category, author, date, gallery entries, sitemap-only archives) is covered by a wildcard.
+- Every archive-type URL (tag, category, author, date, gallery entries) is covered by a wildcard.
 - Every Repurpose row says "If the URL changes, update anything redirecting to it", and every redirect pointing at it is listed in the report.
 
 Consistency (report, do not change):

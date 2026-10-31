@@ -67,7 +67,7 @@ Start with `Suggested because: ` and one short sentence, then flags joined with 
 - `Already redirected to by [N] old URL(s)`: from the redirects export.
 - `In main menu`: linked from a Nav-class link (menu by CSS/link path, not the crawler's location label). The sheet only counts it toward the Menu cleanup Area on Merge/Remove rows, and `Already redirected to by` toward Old redirects likewise; on a Keep row they are plain information.
 
-Other flags (plain words, not read by formulas): "Only linked from blog pagination", "Canonical points to [URL] which 404s - fix the canonical", "Uppercase duplicate of [URL]", "If the URL changes, update anything redirecting to it" (every Repurpose row), "No GSC or GA4 data in the window".
+Other flags (plain words, not read by formulas): "Only linked from blog pagination", "Canonical points to [URL] which 404s - fix the canonical", "Canonical points to [URL] which redirects back to this page - fix the canonical" (take both from `work/canonical_issues.csv`; the redirect-back case is common after a duplicate slug such as `/page-results/` canonicalizing to `/page-results-2/`), "Uppercase duplicate of [URL]", "If the URL changes, update anything redirecting to it" (every Repurpose row), "No GSC or GA4 data in the window".
 
 Consistency: a Keep row that carries a Competes flag says "kept by default (rule 7), but it overlaps with the page flagged below - review whether both should stay". A keeper says how many pages are suggested to merge or redirect into it. Notes never contradict the suggestion.
 
@@ -75,10 +75,11 @@ Consistency: a Keep row that carries a Competes flag says "kept by default (rule
 
 A folder is a junk candidate when (a) it matches a known auto-generated pattern: `/tag/`, `/category/`, `/author/`, date archives (`/2024/05/`), `/page/N/` pagination outside the blog listing, `/attachment/`, a folder name containing "category" or "archive", or the platform's equivalent (for example Shopify `/blogs/{blog}/tagged/`); OR (b) 80%+ of its live pages have ALL of: 0 clicks and under 10 impressions, under 150 content words or titles/H1s identical apart from one word, and no Body links from pages outside the folder. One-page-per-photo gallery folders count when they meet (b).
 
-- Include archive URLs found only in the XML sitemap (they are often missing from a link crawl).
+- Include archive URLs that are in `work/not_in_crawl.tsv` or in the crawl's sitemap data (they are often missing from a link crawl). Make no live requests to find more.
 - Junk pages get no Audit row; each folder gets one wildcard on Existing Redirects (see redirects-qa.md). A page inside a junk folder with 5+ clicks, conversions or backlinks gets its own Audit row.
 - Wildcard target: the blog listing for blog archives, the main gallery page for gallery entries, the team or about page for author archives. Never a target the pattern itself matches.
 - Leave `/blog/page/N/` alone when it is the only internal path to older posts or canonicalizes to the listing.
+- Pagination query URLs (`?e-page-1a2b=2`, `?page=3`, `?paged=2`) canonicalize to the listing: they get no audit row and no redirect.
 - For each folder report: rule matched, page count, clicks, impressions, 5 example URLs, wildcard target. The person confirms which folders are junk before the sheet is written (SKILL.md Step 5).
 
 ## Review triage

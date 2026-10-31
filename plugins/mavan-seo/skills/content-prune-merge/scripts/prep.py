@@ -2,7 +2,7 @@
 """Normalize Sitebulb or Screaming Frog exports and classify every internal link.
 
 Usage:
-  python prep.py --domain example.com --urls URLS.csv --links LINKS.csv [--redirects REDIRECTS.csv]
+  python prep.py --domain example.com --urls URLS.csv --links LINKS.csv --redirects REDIRECTS.csv
                  [--client-redirects LIST.csv] [--out work]
                  [--nav-regex R] [--footer-regex R] [--breadcrumb-regex R]
 
@@ -53,12 +53,41 @@ def read(path, **kw):
     return pd.read_csv(path, encoding='utf-8-sig', low_memory=False, dtype=str, **kw)
 
 
+# Column names only one crawler uses. The URL column alone is not enough: some Screaming Frog
+# exports call it "URL", so the crawler is chosen by how many of its own columns are present.
+SF_COLS = ['Address', 'Content Type', 'Status Code', 'Status', 'Indexability Status', 'Title 1', 'H1-1',
+           'Inlinks', 'Outlinks', 'Redirect URL', 'Redirect Type', 'Canonical Link Element 1']
+SB_COLS = ['HTTP Status Code', 'Indexable', 'URLs with Duplicate H1', 'URLs with Duplicate Titles',
+           'URLs with Similar Content', 'No. Internal Linking URLs', 'No. Content Words', 'Indexable Status']
+
+
+def detect_crawler(u, forced=None):
+    """Return (crawler, reason). Override with --crawler when the guess is wrong."""
+    if forced:
+        return forced, 'set with --crawler'
+    sf = [c for c in SF_COLS if find(u, c)]
+    sb = [c for c in SB_COLS if find(u, c)]
+    if not find(u, 'Address', 'URL'):
+        return None, ''
+    if len(sf) > len(sb) or (len(sf) == len(sb) and find(u, 'Address')):
+        return 'Screaming Frog', 'columns: ' + ', '.join(sf)
+    if sb or find(u, 'URL'):
+        return 'Sitebulb', 'columns: ' + (', '.join(sb) or 'URL only, no Screaming Frog columns')
+    return None, ''
+
+
+def pick(df, *names):
+    """Column name for the first of names present (case-insensitive), else None."""
+    return find(df, *names)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--domain', required=True)
     ap.add_argument('--urls', required=True)
     ap.add_argument('--links', required=True)
-    ap.add_argument('--redirects')
+    ap.add_argument('--redirects', help='redirects export (required unless the URL export has a redirect target for every 3XX)')
+    ap.add_argument('--crawler', choices=['Screaming Frog', 'Sitebulb'], help='force the crawler if detection guesses wrong')
     ap.add_argument('--client-redirects', help='optional existing redirect list (source, target columns)')
     ap.add_argument('--out', default='work')
     ap.add_argument('--nav-regex', default=NAV_RE)
@@ -71,13 +100,11 @@ def main():
 
     # ---------- URL export ----------
     u = read(a.urls)
-    if find(u, 'Address'):
-        crawler = 'Screaming Frog'
-    elif find(u, 'URL'):
-        crawler = 'Sitebulb'
-    else:
+    crawler, why = detect_crawler(u, a.crawler)
+    if not crawler:
         sys.exit(f'Unrecognised URL export columns: {list(u.columns)[:20]}')
     report['crawler'] = crawler
+    report['crawler_detected_from'] = why
     raw = col(u, 'Address', 'URL')
     status = pd.to_numeric(col(u, 'Status Code', 'HTTP Status Code'), errors='coerce')
     idx_text = col(u, 'Indexability Status', 'Indexable Status', 'Indexability').fillna('')
@@ -98,6 +125,7 @@ def main():
         'words': pd.to_numeric(col(u, 'Word Count', 'No. Content Words', 'Content Word Count'), errors='coerce'),
         'crawl_source': col(u, 'Crawl Source', 'Source').fillna(''),
         'redirect_to': col(u, 'Redirect URL', 'Redirect URL 1', 'Redirects To', 'Redirect Destination').fillna(''),
+        'canonical': col(u, 'Canonical Link Element 1', 'Canonical URL', 'Canonical URLs', 'Canonical').fillna(''),
     })
     # indexability text for non-indexable pages: say why (Canonicalized, Noindex, ...)
     pages.loc[pages.indexable == '', 'indexable'] = pages.index_detail.where(pages.index_detail.str.strip() != '', 'Not indexable')
@@ -109,11 +137,19 @@ def main():
         lambda s: '200' if s == 200 else '3xx' if 300 <= s < 400 else '4xx' if 400 <= s < 500 else '5xx' if s >= 500 else 'no response').value_counts().to_dict()
     report['url_counts'] = counts
     report['urls_total'] = int(len(pages))
+    # Pagination variants (?e-page-1a2b=2, ?page=3, ?paged=2) canonicalize to the listing and get no audit row.
+    report['pagination_query_urls'] = int(pages.url.fillna('').str.contains(r'[?&](?:e-page[^=&]*|page|paged)=\d+', regex=True).sum())
 
     # ---------- redirects ----------
     redir = {}
-    for _, r in pages[(pages.status >= 300) & (pages.status < 400) & (pages.redirect_to != '')].iterrows():
+    is3 = (pages.status >= 300) & (pages.status < 400)
+    for _, r in pages[is3 & (pages.redirect_to != '')].iterrows():
         redir[r.key] = (int(r.status), key(r.redirect_to, dom))
+    missing_targets = int((is3 & (pages.redirect_to == '')).sum())
+    if missing_targets and not a.redirects:
+        sys.exit(f'{missing_targets} of the crawl\'s 3XX URLs have no redirect target in the URL export. The redirects export is '
+                 'required: Sitebulb: the redirected URLs export; Screaming Frog: Response Codes > Redirection (3xx) > Export '
+                 '(or Reports > Redirects > All Redirects). Pass it with --redirects. Do not resolve redirects with live requests.')
     if a.redirects:
         rd = read(a.redirects)
         src = col(rd, 'Address', 'Source URL', 'Source', 'URL')
@@ -138,18 +174,38 @@ def main():
     pd.DataFrame(rows, columns=['source', 'status', 'final', 'origin']).to_csv(os.path.join(a.out, 'redirects.csv'), index=False)
     report['redirects'] = len(rows)
 
+    # ---------- canonicals that point at a non-200 URL (including one that redirects back) ----------
+    st_by_key = dict(zip(pages.key, pages.status))
+    cano = []
+    for _, r in pages[(pages.status == 200) & (pages.canonical != '')].iterrows():
+        ck = key(r.canonical, dom)
+        if ck == r.key or not ck.startswith('/'):
+            continue
+        cs = st_by_key.get(ck)
+        back = redir.get(ck, (0, ''))[1] == r.key
+        if (cs is not None and cs == cs and int(cs) != 200) or back:
+            cano.append({'url': r.key, 'canonical': ck, 'canonical_status': '' if cs != cs or cs is None else int(cs),
+                         'redirects_back': back})
+    pd.DataFrame(cano, columns=['url', 'canonical', 'canonical_status', 'redirects_back']).to_csv(
+        os.path.join(a.out, 'canonical_issues.csv'), index=False)
+    report['canonical_issues'] = len(cano)
+    report['canonical_redirect_loops'] = sum(1 for c in cano if c['redirects_back'])
+
     # ---------- links ----------
+    # Map each field on its own, so a hybrid export (Sitebulb-style names from Screaming Frog, or the reverse) still works.
     head = read(a.links, nrows=0)
-    if find(head, 'Linking URL'):
-        m = {'src': find(head, 'Linking URL'), 'dst': find(head, 'Target URL'), 'anchor': find(head, 'Anchor Text'),
-             'pos': find(head, 'Location'), 'path': find(head, 'CSS Path'), 'img': find(head, 'Image'),
-             'type': None}
-    elif find(head, 'Source') and find(head, 'Destination'):
-        m = {'src': find(head, 'Source'), 'dst': find(head, 'Destination'), 'anchor': find(head, 'Anchor'),
-             'pos': find(head, 'Link Position'), 'path': find(head, 'Link Path'), 'img': None,
-             'type': find(head, 'Type'), 'alt': find(head, 'Alt Text')}
-    else:
+    m = {'src': find(head, 'Linking URL', 'Source', 'From', 'Linking Page'),
+         'dst': find(head, 'Target URL', 'Destination', 'To', 'Target'),
+         'anchor': find(head, 'Anchor Text', 'Anchor'),
+         'pos': find(head, 'Location', 'Link Position', 'Position', 'Link Location'),
+         'path': find(head, 'CSS Path', 'Link Path', 'XPath', 'Path'),
+         'img': find(head, 'Image'),
+         'type': find(head, 'Type', 'Link Type'),
+         'alt': find(head, 'Alt Text')}
+    if not (m['src'] and m['dst']):
         sys.exit(f'Unrecognised links export columns: {list(head.columns)[:20]}')
+    if not (m['pos'] or m['path']):
+        report['warnings'].append('Links export has neither a Location/Link Position column nor a CSS/Link Path: every link will count as Body.')
     use = [c for c in m.values() if c]
     raw_counts = collections.Counter()
     acc = {}
@@ -204,8 +260,10 @@ def main():
         report['warnings'].append('No Body links at all: the classification failed or the export has no CSS/link paths.')
     save_json(os.path.join(a.out, 'prep_report.json'), report)
 
-    print(f'{crawler} export: {len(pages)} URLs ({", ".join(f"{k}: {v}" for k, v in counts.items())}), '
+    print(f'{crawler} export ({why}): {len(pages)} URLs ({", ".join(f"{k}: {v}" for k, v in counts.items())}), '
           f'{len(redir)} redirects found by the crawl')
+    print(f'Canonicals pointing at a non-200 URL: {len(cano)} ({report["canonical_redirect_loops"]} redirect back to the page); '
+          f'pagination query URLs (no audit rows): {report["pagination_query_urls"]}')
     print(f'Links: {n_rows} internal link rows -> {len(L)} unique linking page + target + class')
     print('Link classes (unique linking page + target page):',
           ', '.join(f'{c} {report["link_classes"][c]}' for c in report['link_classes']))
