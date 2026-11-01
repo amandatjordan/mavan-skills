@@ -4,17 +4,21 @@ Do all matching in code, on normalized URLs (lowercase, https, non-www, trailing
 
 A **chain** is A -> B -> C: every redirect goes straight to its final page. A **loop** is A -> B -> A, including a wildcard whose target matches its own pattern. A specific rule listed below a wildcard that also matches it never fires.
 
-Valid final destinations: live pages whose suggestion (or, once a person has decided, Next Steps) is Keep, Update, Repurpose or Needs Discussion. Never suggest a page that is not live in the crawl. A folder-level target (such as a services folder page) matches only slugs that name a service, never other kinds of page. When an existing redirect points at a root URL that is not live, suggest the live page with the same slug (for example the same slug under the folder the crawl shows it in) and mark it `SUGGESTED - check target`.
+Valid final destinations: live pages whose suggestion (or, once a person has decided, Next Steps) is Keep, Update, Repurpose or Needs Discussion. Never suggest a page that is not live in the crawl. A folder-level target (such as a services folder page) matches only slugs that name a service, never other kinds of page.
+
+**Finding a target for a URL that is not a live page.** Exact matches only, in this order:
+1. A live page with the same last path segment under another folder (`/treatments/body/hair-restoration-brandon-fl/` -> `/services/hair-restoration-brandon-fl/`). When several match, prefer the one in the folder mapped as Service. If that page is being merged or removed, follow its Suggested Target. Notes start `SUGGESTED - check target`.
+2. No exact match: leave Target URL blank and start Notes with `NEEDS TARGET - no live page with the same slug`. Never pick a target by word similarity: a guessed target looks finished and gets copied. The reviewer chooses, and the report gives the count of blank targets.
 
 ## Existing Redirects rows
 
 Columns: Source URL | Target URL | Notes (full URLs). They appear at the bottom of the Redirects tab marked Now.
 
-1. **Existing 3XX** from the redirects export: follow each to its final destination through other hops in the export.
+1. **Existing 3XX** from `work/redirects.csv`, which already holds each redirect's `final` page, `hops` and full `chain`. Skip rows with `normalization_only` True (they only add a slash or change case).
    - Lands on a kept page in one hop: leave it off the tab (nothing to change). Lands on one after several hops: add it pointing straight at the final page, Notes `Chain removed (was A -> B -> C)`.
    - Lands on a page being merged or removed: repoint to that page's Suggested Target, following on until a kept page. Notes `Existing redirect - repointed (was X)`.
-   - Lands on a 404 or missing page: suggest the closest kept page by topic, same treatment first. Notes start `SUGGESTED - check target`.
-2. **URLs with demand that are not live pages**: every URL in `work/not_in_crawl.tsv`, plus every non-200 URL in the crawl, that has GSC impressions, GA4 sessions or internal links and is not already covered by a redirect. Suggest a target the same way, Notes `SUGGESTED - check target. Not a live page per the crawl; [the demand, e.g. 860 impressions for "[treatment] [city]"]`. The crawl's status codes are the truth: never confirm with a live request.
+   - Lands on a 404 or a URL that is not a live page (`final_status` is not 200): find a target as above.
+2. **URLs with demand that are not live pages**: every URL in `work/not_in_crawl.tsv`, plus every non-200 URL in the crawl, that has GSC impressions, GA4 sessions or internal links and is not already covered by a redirect. Find a target as above; Notes add `Not a live page per the crawl; [the demand, e.g. 860 impressions for "[treatment] [city]", or "linked from 10 pages"]`. The crawl's status codes are the truth: never confirm with a live request.
 3. **Junk folder wildcards**: one row per folder, Source `https://domain/folder/*`. Notes: "Junk folder wildcard - [what it is], [N] pages, [M] impressions. Disable these archives in the SEO plugin so they do not regenerate". Build the string in code from the data (page count and impressions of that folder), write each number once, and never type a count by hand.
 
 ## QA (run once on the final set, before writing anything to the sheet)
@@ -24,6 +28,7 @@ Do every check in code and list only what fails. Rerun only if the redirects cha
 Breaking issues first:
 
 - Every Merge/Remove row has a full Suggested Target URL (not a description) that is a live page with a valid-destination suggestion.
+- An Existing Redirects row has a blank Target URL only when its Notes start `NEEDS TARGET`; every other target is a live page with a valid-destination suggestion.
 - No target is also a source (on the Audit tab or Existing Redirects), and no target matches a wildcard.
 - No self-redirects; no wildcard targets matching their own pattern; no specific rule a wildcard would catch first.
 - No source appears twice with different targets. An existing no-slash redirect next to its slash version on the Audit tab is the same rule, not a conflict.
