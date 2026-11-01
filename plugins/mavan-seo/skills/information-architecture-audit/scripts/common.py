@@ -3,7 +3,7 @@ import json
 import os
 import re
 
-# Keep identical to ia_norm() in gsc_workbench.py so crawl URLs and GSC URLs join.
+# Keep identical to ia_norm() in ga4_workbench.py so crawl URLs and GSC URLs join.
 def normalize(u, domain):
     """lowercase, drop ?query and #fragment, https, no www, trailing slash (not on files)."""
     if not isinstance(u, str) or not u.strip():

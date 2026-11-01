@@ -4,7 +4,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 
 | Skill | What it does | Matching SOP |
 | --- | --- | --- |
-| `information-architecture-audit` | Classifies every page, finds duplicate intent, path and link problems, and fills the IA Audit template | Information Architecture Audit Process |
+| `information-architecture-audit` | Checks the inputs first (preflight), classifies every page, finds duplicate intent, path and link problems, and fills the IA Audit template. Search Console comes from a Google Sheet (GA4 optional, through Composio); when the client has a content prune workbook, flags pages whose types disagree with it | Information Architecture Audit Process |
 | `internal-linking-audit` | From a crawl export and Search Console, lists which pages should link to each priority page (page to edit + page to link to) and builds the implementation sheet | Internal Linking Audit Process |
 | `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |

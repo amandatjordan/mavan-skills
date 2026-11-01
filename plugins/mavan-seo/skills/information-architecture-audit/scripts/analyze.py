@@ -1041,9 +1041,10 @@ def main():
     lines.append(f"\n## Blog folder: {blog_folder or 'none exists'}; service folder: {service_folder or 'none exists'}")
     if has_gsc:
         if need_pq:
-            lines.append('\n## Top shared queries\nRun this in the Composio workbench and save the block to '
-                         'work/gsc/pair_queries.txt, then re-run gsc_import.py and analyze.py:\n'
-                         f"ia_pair_queries({sorted({tuple(sorted(x)) for x in need_pq})})")
+            pairs_arg = ','.join(f'{a}:{b}' for a, b in sorted({tuple(sorted(x)) for x in need_pq}))
+            lines.append('\n## Top shared queries\nRun this (it reads the Search Console sheet data already loaded, no '
+                         'Composio), then re-run analyze.py:\n'
+                         f"python $SKILL/scripts/gsc_sheet.py pair-queries --pairs {pairs_arg} --out {os.path.join(W, 'gsc')}")
     n_check = sum(1 for x in pair_rows if x['verdict'] == 'check')
     lines.append(f"\n## Duplicate candidates: review/dup_candidates.csv ({len(pair_rows)} pairs; "
                  f"{len(dup_pairs)} duplicate, {len(city_rows)} city variant, {n_check} check, "

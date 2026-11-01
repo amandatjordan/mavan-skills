@@ -43,7 +43,7 @@ The topic decides duplicates, the blog's matching service page and the retarget 
 
 ## Duplicate pairs (`review/dup_candidates.csv`)
 
-The Composio workbench built the candidate pairs in code (0.30+ overlap on 2+ shared searches, plus same-H1 pairs); you only judge those, working from the rows in the file (both pages, topics, overlap, shared searches, top shared searches), highest shared impressions first, and without opening the pages. Judge them in batches, and give a pair you cannot decide from its row the verdict `review`. A pair is a duplicate only if both pages are about the same treatment. Look at:
+gsc_sheet.py built the candidate pairs in code from the Search Console sheet (0.30+ overlap on 2+ shared searches, plus same-H1 pairs); you only judge those, working from the rows in the file (both pages, topics, overlap, shared searches, top shared searches), highest shared impressions first, and without opening the pages. Judge them in batches, and give a pair you cannot decide from its row the verdict `review`. A pair is a duplicate only if both pages are about the same treatment. Look at:
 - **check**: one topic is the other plus words. A product line is a duplicate (Restylane / Restylane Silk; gynecomastia / gynecomastia surgery). A different treatment in the same area is not (breast / breast lift; liposuction / neck liposuction). Decide every one.
 - **duplicate**: confirm the two pages really share the treatment, not just a city or a generic search.
 - **not** with high overlap: usually a missing synonym. Fix the synonym rather than the pair.
