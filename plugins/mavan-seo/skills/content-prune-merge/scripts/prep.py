@@ -7,9 +7,14 @@ Usage:
                  [--nav-regex R] [--footer-regex R] [--breadcrumb-regex R]
 
 Writes to --out:
-  crawl_pages.csv   one row per crawled URL (all statuses)
+  crawl_pages.csv   one row per crawled URL (all statuses). Several crawled URLs can share one key
+                    (/page and /page/ normalize to the same key): the `primary` column marks the one
+                    row per key to use for lookups (the 200 without a query string when there is one).
   links.csv         one row per linking page + target page + link class (Nav/Footer/Breadcrumb/Body)
-  redirects.csv     source key -> final key for every redirect the crawl found
+  redirects.csv     every redirect the crawl found: source, next (the URL it points at), final (where the
+                    chain ends), hops, chain, final_status, and normalization_only (True when source and
+                    next are the same page once normalized, e.g. /page -> /page/; nothing to change)
+  slug_words.csv    how many live pages use each URL-path word, most common first (to spot city names)
   prep_report.json  counts used by the Read Me
 
 Links are classed from the CSS path (Sitebulb) or link path / XPath (Screaming Frog), not from
@@ -132,6 +137,12 @@ def main():
     pages = pages[pages.key != ''].drop(columns=['index_detail'])
     pages['h2'] = pages.h2.str.split(r'\s*[|\n]\s*').str[0].fillna('')
     pages = pages.sort_values(['has_query', 'status']).reset_index(drop=True)
+    # One primary row per key: the 200 without a query string first, so /page (301) never hides /page/ (200).
+    rank = (pages.status != 200).astype(int) * 2 + pages.has_query.astype(int)
+    order = pages.assign(_r=rank).sort_values(['key', '_r'], kind='stable')
+    pages['primary'] = False
+    pages.loc[order.drop_duplicates('key').index, 'primary'] = True
+    report['keys_with_several_urls'] = int((pages.groupby('key').size() > 1).sum())
     pages.to_csv(os.path.join(a.out, 'crawl_pages.csv'), index=False)
     counts = pages.status.fillna(0).astype(int).map(
         lambda s: '200' if s == 200 else '3xx' if 300 <= s < 400 else '4xx' if 400 <= s < 500 else '5xx' if s >= 500 else 'no response').value_counts().to_dict()
@@ -159,7 +170,7 @@ def main():
         for s, c, d in zip(src, st, dst):
             if isinstance(s, str) and isinstance(d, str) and d.strip():
                 redir[key(s, dom)] = (int(c) if c == c else 301, key(d, dom))
-    rows = [{'source': k, 'status': v[0], 'final': v[1], 'origin': 'crawl'} for k, v in redir.items()]
+    rows = [{'source': k, 'status': v[0], 'next': v[1], 'origin': 'crawl'} for k, v in redir.items()]
     if a.client_redirects:
         cr = read(a.client_redirects)
         s_col = find(cr, 'source', 'source url', 'from', 'old url', 'redirect from', 'url')
@@ -167,17 +178,34 @@ def main():
         if s_col and t_col:
             for s, t in zip(cr[s_col], cr[t_col]):
                 if isinstance(s, str) and isinstance(t, str):
-                    rows.append({'source': key(s, dom), 'status': 301, 'final': key(t, dom), 'origin': 'client list'})
+                    rows.append({'source': key(s, dom), 'status': 301, 'next': key(t, dom), 'origin': 'client list'})
             report['client_redirects'] = int(len(cr))
         else:
             report['warnings'].append(f'Client redirect list: could not find source/target columns in {list(cr.columns)[:10]}')
-    pd.DataFrame(rows, columns=['source', 'status', 'final', 'origin']).to_csv(os.path.join(a.out, 'redirects.csv'), index=False)
+    # Follow every chain to the page it ends on, using only the exports (no live requests).
+    primary_status = dict(zip(pages[pages.primary].key, pages[pages.primary].status))
+    nxt = {r['source']: r['next'] for r in rows if r['source'] != r['next']}
+    for r in rows:
+        chain = [r['source'], r['next']]
+        while chain[-1] in nxt and nxt[chain[-1]] not in chain and len(chain) < 20:
+            chain.append(nxt[chain[-1]])
+        if chain[-1] in nxt and nxt[chain[-1]] in chain:
+            report['warnings'].append(f'Redirect loop: {" -> ".join(chain + [nxt[chain[-1]]])}')
+        fs = primary_status.get(chain[-1])
+        r.update({'final': chain[-1], 'hops': len(chain) - 1 if r['source'] != r['next'] else 0,
+                  'chain': ' -> '.join(dict.fromkeys(chain)), 'final_status': '' if fs is None or fs != fs else int(fs),
+                  'normalization_only': r['source'] == r['next']})
+    cols = ['source', 'status', 'next', 'final', 'hops', 'chain', 'final_status', 'normalization_only', 'origin']
+    pd.DataFrame(rows, columns=cols).to_csv(os.path.join(a.out, 'redirects.csv'), index=False)
     report['redirects'] = len(rows)
+    report['redirects_normalization_only'] = sum(1 for r in rows if r['normalization_only'])
+    report['redirects_multi_hop'] = sum(1 for r in rows if r['hops'] > 1)
+    report['redirects_final_not_live'] = sum(1 for r in rows if not r['normalization_only'] and r['final_status'] != 200)
 
     # ---------- canonicals that point at a non-200 URL (including one that redirects back) ----------
-    st_by_key = dict(zip(pages.key, pages.status))
+    st_by_key = primary_status
     cano = []
-    for _, r in pages[(pages.status == 200) & (pages.canonical != '')].iterrows():
+    for _, r in pages[pages.primary & (pages.status == 200) & (pages.canonical != '')].iterrows():
         ck = key(r.canonical, dom)
         if ck == r.key or not ck.startswith('/'):
             continue
@@ -190,6 +218,17 @@ def main():
         os.path.join(a.out, 'canonical_issues.csv'), index=False)
     report['canonical_issues'] = len(cano)
     report['canonical_redirect_loops'] = sum(1 for c in cano if c['redirects_back'])
+
+    # ---------- URL-path words (a plain count to help a person spot city names; no matching) ----------
+    live = pages[pages.primary & (pages.status == 200) & ~pages.has_query & pages.key.str.startswith('/')]
+    words = collections.defaultdict(list)
+    for k in live.key:
+        for w in sorted(set(re.findall(r'[a-z0-9]+', k.lower()))):
+            words[w].append(k)
+    sw = pd.DataFrame([{'word': w, 'pages': len(ks), 'examples': ' '.join(ks[:3])} for w, ks in words.items()],
+                      columns=['word', 'pages', 'examples'])
+    sw = sw.sort_values(['pages', 'word'], ascending=[False, True])
+    sw.to_csv(os.path.join(a.out, 'slug_words.csv'), index=False)
 
     # ---------- links ----------
     # Map each field on its own, so a hybrid export (Sitebulb-style names from Screaming Frog, or the reverse) still works.
@@ -262,6 +301,10 @@ def main():
 
     print(f'{crawler} export ({why}): {len(pages)} URLs ({", ".join(f"{k}: {v}" for k, v in counts.items())}), '
           f'{len(redir)} redirects found by the crawl')
+    print(f'Keys shared by several crawled URLs (use the primary row): {report["keys_with_several_urls"]}')
+    print(f'Redirects: {report["redirects_normalization_only"]} only add a slash or change case (nothing to change), '
+          f'{report["redirects_multi_hop"]} pass through more than one hop, '
+          f'{report["redirects_final_not_live"]} end on a URL that is not a live page')
     print(f'Canonicals pointing at a non-200 URL: {len(cano)} ({report["canonical_redirect_loops"]} redirect back to the page); '
           f'pagination query URLs (no audit rows): {report["pagination_query_urls"]}')
     print(f'Links: {n_rows} internal link rows -> {len(L)} unique linking page + target + class')

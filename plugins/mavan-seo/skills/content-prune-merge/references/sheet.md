@@ -27,9 +27,9 @@ To move it into the template: open the template link, File > Make a copy, then p
 
 ## With Google Drive and Sheets connectors
 
-1. Copy the whole template file with the Drive connector (`copy_file`), titled `{Client} Content Pruning and Merging`.
+1. Copy the whole template file with the Drive connector (`copy_file`, with the new name in its `title` argument), titled `{Client} Content Pruning and Merging`.
 2. Write only the Recommendations rows (about 11) with Sheets `update_values` at B5. Do not write the Audit or Existing Redirects through the connector: hundreds of rows cell by cell was the slowest step of earlier runs. Tell the person to import or paste those two tabs from the workbook.
-3. Read the Recommendations back with `get_values` and compare. Done when it matches and the Pages column shows values.
+3. Read the Recommendations back with `get_values` and compare the text. Done when it matches. The Pages column shows 0 at this point, because the Audit tab is still empty: it fills once the person pastes the Audit, so say that rather than treating it as a failure.
 
 ## Without connectors
 
