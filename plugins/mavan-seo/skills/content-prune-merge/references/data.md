@@ -18,7 +18,12 @@ The data needs Page, Query, Clicks and Impressions columns (CTR and Position are
 
 Exports from the add-on or Looker Studio are messy. Handle these in code before anything else:
 
-- **Several sheets in one file or link**, in a download separated by lines like `## Sheet name:`. Read each sheet separately. Use the sheet that holds every page + query row; ignore sheets that are a filtered subset of it (fewer rows, a minimum-impressions filter, a top-queries or single-folder sheet). Say which sheet you used and why.
+- **Several sheets in one file or link**, in a download separated by lines like `## Sheet name:`. Read each sheet separately.
+- **Respect the person's filters.** Filters (for example dropping queries with under 10 impressions) keep low-value terms out of the audit; never undo one.
+  - When one tab is a filtered version of another, use the filtered tab.
+  - When a tab has a filter applied in Google Sheets, the attached file still holds the hidden rows. Read the filter with the Sheets connector's `get_spreadsheet` (the tab's `basicFilter`, such as Impressions values 1 to 10 hidden) and apply the same filter in code.
+  - Ignore tabs that are a different cut of the data rather than a filter (top queries only, a single folder).
+  - Say in the report which tab and which filter you used.
 - **Thousands separators** in numbers (`"1,853"`): strip the commas before converting to numbers.
 - **UTM and other query-string variants** of the same page: strip the query string and fragment, then add up the rows that now share a URL. Normalize with the same rule as the crawl (lowercase, https, non-www, trailing slash).
 - **Case duplicates:** `/Page-Name/` and `/page-name/` join on the lowercase path; flag the duplicate URL from the crawl.
