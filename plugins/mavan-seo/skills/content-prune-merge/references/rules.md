@@ -1,6 +1,6 @@
 # Audit rules
 
-Rules version: 2026-11-01. It changes the Content Prune & Merge SOP as edited on 2026-10-26 in three places: city copies are Needs Discussion before any overlap check (rule 2), concern pages that overlap a service page merge into it (rule 3), and cities come from the list the person confirms. Update the SOP to match. If the person pastes a newer SOP and its rules differ, follow the pasted SOP and list the differences in the report.
+Rules version: 2026-11-01. It changes the Content Prune & Merge SOP as edited on 2026-10-26 in three places: city copies are decided before any overlap check, merging into the main-city page under 2 clicks (rule 2), concern pages that overlap a service page merge into it (rule 3), and cities come from the list the person confirms. Update the SOP to match. If the person pastes a newer SOP and its rules differ, follow the pasted SOP and list the differences in the report.
 
 The sheet's formulas read some of these values as exact text. Anything shown in `code` below is matched by a formula or a dropdown: copy it character for character.
 
@@ -44,7 +44,11 @@ Apply in order; write the rule used in Page Type Reason.
 Values (same as the Next Steps dropdown): `Keep` | `Update` | `Repurpose` | `Merge then Redirect` | `Remove then Redirect` | `Needs Discussion`. Apply in order; the first match wins.
 
 1. Not for SEO pages = Keep.
-2. **City copies** = Needs Discussion (a policy decision, not a merge), whatever their overlap or clicks. A city copy is a page whose slug is identical to another live page's slug once a "separate" city from `work/cities.json` (and a trailing state code such as `-fl`) is removed, or a pair the person matched by hand in Step 2 (`copy_pairs`). The copy for the non-main city is the one flagged; the main-city page goes on through the rules. Never decide a copy by fuzzy matching.
+2. **City copies.** A city copy is a page whose slug is identical to another live page's slug once a "separate" city from `work/cities.json` (and a trailing state code such as `-fl`) is removed, or a pair the person matched by hand in Step 2 (`copy_pairs`). Never decide a copy by fuzzy matching. The copy for the non-main city is decided here, whatever its overlap; the main-city page goes on through the rules.
+   - Under 2 clicks (0 or 1) = Merge then Redirect, Suggested Target = the main-city page.
+   - 2 clicks or more = Keep: it earns its own traffic.
+   - Both carry the city copy flag, so the reviewer can find them under City copies and check them before filling in Next Steps.
+   - When the client has only two cities (the main city and one separate city), the Notes also recommend making the main-city page target both cities, for example a title and H1 that name both. With more cities, one page per city can make sense, so leave that out.
 3. **Overlap** (references/data.md defines the share): pages that share 30%+ of their impressions:
    - Within a topic group: the keeper = Keep; every other page = Merge then Redirect, Suggested Target = the keeper. Keeper order: Service, then Concern, then Blog Post; the main city before other cities; then most impressions. A page merges only into a keeper it overlaps itself, never through a chain of other pages.
    - A concern page and a service page (any topic group): service pages come first, so the concern page = Merge then Redirect into that service page, with the Notes flag `Concern merges into service page [URL]`. If the concern page overlaps several service pages at 30%+, it merges into the one with the highest share.
@@ -54,7 +58,8 @@ Values (same as the Next Steps dropdown): `Keep` | `Update` | `Repurpose` | `Mer
 7. Everything else = Keep.
 
 Also:
-- Suggested Target is always a full URL of a live page whose own suggestion is Keep, Update, Repurpose or Needs Discussion. Follow the chain until it lands on one. When a merge target turns out to be a city copy (rule 2), point the merge at the copy's main-city page instead and mark it "judgment" in Notes.
+- Suggested Target is always a full URL of a live page whose own suggestion is Keep, Update, Repurpose or Needs Discussion. Follow the chain until it lands on one.
+- No rule sets Needs Discussion. Use it only for a business decision the reviewer cannot make alone (for example a service the client may no longer offer), and mark it "judgment" in Notes.
 - Thin stubs (under ~15 words) that duplicate a real page's intent merge into that page even below the 30% bar; say "judgment" in Notes.
 - Every call beyond the seven rules (a "near me" post with under 30% overlap, a blog matching a concern page, a location page that overlaps the homepage) is marked "judgment" in Notes so the reviewer can find it.
 
@@ -65,7 +70,7 @@ Start with `Suggested because: ` and one short sentence, then flags joined with 
 - `Competes with [URL] for "[top shared query]" ([N]% shared)`: same topic group, or a concern and a service page, with 30%+ shared impressions on the smaller page (references/data.md, Overlap).
 - `Blog outranks service page [URL]`: a blog on a treatment gets more clicks than that treatment's service page.
 - `0 clicks, under 50 impressions`
-- `[City]-style city copy of [URL]`: on every rule-2 row, naming the main-city page (the formula looks for `city copy of`; keep those words exactly).
+- `[City]-style city copy of [URL]`: on every rule-2 row, merged or kept, naming the main-city page (the formula looks for `city copy of`; keep those words exactly).
 - `Concern merges into service page [URL]`: on every concern page merged into a service page under rule 3 (plain information; the row's Area is Merge pages from its suggestion).
 - `Already redirected to by [N] old URL(s)`: from the redirects export.
 - `In main menu`: linked from a Nav-class link (menu by CSS/link path, not the crawler's location label). The sheet only counts it toward the Menu cleanup Area on Merge/Remove rows, and `Already redirected to by` toward Old redirects likewise; on a Keep row they are plain information.
