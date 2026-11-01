@@ -429,6 +429,9 @@ def main():
     if blog_folder and blog_folder not in formula_blog_prefixes:
         notes.append(f'The blog folder is {blog_folder}, which the template Area formula does not know, so its posts '
                      f'will show as "Blog URLs" on All Pages. Edit the formula in the sheet or ignore those rows.')
+    # a folder that only holds a listing page is a hub, not a blog folder
+    blog_folder_has_posts = bool(blog_folder) and any(
+        t == 'Blog' and k.startswith(blog_folder) for k, t in type_of.items())
     blog_hub = next((k for k, t in type_of.items() if t == 'Blog hub' and (not blog_folder or k == blog_folder)), '') or \
         next((k for k, t in type_of.items() if t == 'Blog hub'), '')
     service_hub = next((k for k, t in type_of.items() if t == 'Service hub' and segs(k) and len(segs(k)) == 1), '')
@@ -996,7 +999,8 @@ def main():
         'link_classes': prep.get('link_classes'), 'link_rows': prep.get('link_rows'),
         'links_unique': prep.get('links_unique'), 'nav_share': prep.get('nav_share'),
         'redirects_found': prep.get('redirects'), 'has_gsc': has_gsc, 'gsc_meta': meta, 'utm_home': utm_lines,
-        'blog_folder': blog_folder, 'service_folder': service_folder, 'blog_hub': blog_hub,
+        'blog_folder': blog_folder, 'blog_folder_has_posts': blog_folder_has_posts,
+        'service_folder': service_folder, 'blog_hub': blog_hub,
         'blogs': int(len(blog_pages)), 'blogs_outside': int(len(outside)),
         'service_like_outside': len(svc_out), 'deep_service': len(deep),
         'archive_pages': int((P.type == 'Archive').sum()), 'gallery_items': int((P.type == 'Gallery item').sum()),
@@ -1038,7 +1042,13 @@ def main():
     if summary['other_folders']:
         lines.append('\n## Other folders\nThese folders got their own type. If one is really a service, concern or blog '
                      'folder, set folder_types in decisions.json: ' + ', '.join(summary['other_folders']))
-    lines.append(f"\n## Blog folder: {blog_folder or 'none exists'}; service folder: {service_folder or 'none exists'}")
+    blog_label = blog_folder or 'none exists'
+    if blog_folder and not blog_folder_has_posts:
+        blog_label = f'{blog_folder} (listing page only; no posts live in it)'
+    lines.append(f"\n## Blog folder: {blog_label}; service folder: {service_folder or 'none exists'}")
+    if summary['blogs_outside']:
+        lines.append(f"{summary['blogs_outside']} blog post(s) sit outside a blog folder. The recommendations must say to move "
+                     f"them all into one dedicated folder with 301s (SKILL.md, Step 6).")
     if has_gsc:
         if need_pq:
             pairs_arg = ','.join(f'{a}:{b}' for a, b in sorted({tuple(sorted(x)) for x in need_pq}))

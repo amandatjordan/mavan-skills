@@ -22,7 +22,7 @@ A TL;DR for the strategist: one row per fix, short and direct. fill.py sorts the
 - An area name must not sit inside another area name ("Service URLs" inside "Deep service URLs"): the Pages formula matches parts of names, so it would count both. fill.py stops on this.
 - **where**: the tab and filter that shows the pages.
 - **covers**: which required topics the row answers. Every topic needs a row, even when the answer is Pass: `junk_pages`, `blogs_outside_path`, `services_outside_path`, `duplicates`, `no_owner`, `menu_zero_clicks`, `prune`, `redirect_links`, `overlapping_browse`, `city_pages`, `service_depth`, `traffic_baseline` (Info).
-- Blogs outside the blog path: name the blog folder the person confirmed in the folder mapping, or "no blog folder exists", and recommend one consistent folder with 301s, done in the same release as other URL changes so links are only updated once.
+- Blogs outside the blog path: name the blog folder the person confirmed in the folder mapping, or "no blog folder exists". Always recommend moving every post into one dedicated blog folder with 301s (creating the folder when the site has none), done in the same release as other URL changes so links are only updated once. Posts at the root of the domain are High priority; never recommend leaving them there. A listing page with no posts under it is a hub, not a blog folder, so say "no posts live in it".
 - Linking from blogs to service pages is fine. Never recommend adding links to blog posts; that isn't a goal of this audit, and fill.py stops on it.
 
 ## readme

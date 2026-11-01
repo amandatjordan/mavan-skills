@@ -281,6 +281,12 @@ def main():
         if re.search(r'(add|more|build)\s+(internal\s+)?links?\s+(to|into|pointing (to|at))\s+(the\s+|these\s+|this\s+|your\s+)?(blog|post)', txt):
             errors.append(f'{tag}: recommends adding links to blog posts, which this audit must not do.')
         covered |= set(rc.get('covers', []))
+    if int(sm.get('blogs_outside', 0) or 0) > 0:
+        blog_recs = [rc for rc in recs if 'blogs_outside_path' in rc.get('covers', [])]
+        if not any(re.search(r'folder', str(rc.get('do', '')), re.I) and re.search(r'301|redirect', str(rc.get('do', '')), re.I)
+                   for rc in blog_recs):
+            errors.append('Blogs sit outside a blog folder, so the blogs_outside_path recommendation must say to move them '
+                          'all into one dedicated folder with 301s.')
     missing = [REQUIRED_TOPICS[t] for t in REQUIRED_TOPICS if t not in covered]
     if recs and missing:
         errors.append('Recommendations do not cover (tag each row with "covers"): ' + '; '.join(missing))
@@ -328,8 +334,10 @@ def main():
         win = f"{meta.get('window_start')} to {meta.get('window_end')}"
         window_text = f"{win}. {meta.get('window_note') or 'The last 6 full calendar months.'}"
         totals = (f"{int(float(meta.get('clicks', 0))):,} clicks, {int(float(meta.get('impressions', 0))):,} impressions, "
-                  f"{meta.get('page_rows')} pages, {meta.get('page_query_rows')} page+query rows (after joining URL variants). "
-                  f"Brand searches excluded from query analysis: {int(float(meta.get('brand_query_impr', 0))):,} impressions.") + (' ' + meta['sheet_note'] if meta.get('sheet_note') else '')
+                  f"{meta.get('page_rows')} pages, {meta.get('page_query_rows')} page+query rows (after joining URL variants). " +
+                  (f"Brand searches excluded from query analysis: {int(float(meta.get('brand_query_impr', 0))):,} impressions."
+                   if float(meta.get('brand_query_impr', 0) or 0) > 0 else
+                   "The data contained no branded searches (brand terms: " + (meta.get('brand_terms') or 'none given') + "), so none were removed.")) + (' ' + meta['sheet_note'] if meta.get('sheet_note') else '')
         ga4 = (f"{meta.get('ga4_property')}, dimension landingPage, metrics sessions, keyEvents "
                f"({meta.get('ga4_rows')} landing pages)" if meta.get('ga4_property') else 'GA4 not available: ' +
                rd_notes.get('ga4_missing', 'no GA4 property was found for this domain.'))
