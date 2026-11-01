@@ -24,12 +24,15 @@ All optional, except that `mapping_confirmed` and `folder_types` come from the f
 }
 ```
 
+- `page_types` is matched on the path without its query string, so an override on `/folder/` also changes every `/folder/?page=2` style URL. To type a listing page and leave its query-string variants alone, map the folder in `folder_types` (its listing page becomes a hub) instead of overriding the path.
 - `page_types` values must be one of the template's types: Home, Pagination, Query-string URL, Archive, Gallery item, Company / Info, Utility / Policy, Service hub, Service, Concern hub, Concern, Blog hub, Blog, Location hub, Location / Area, Service-like (no folder), Unclassified, or "Name (folder)". The Area formula needs "Blog", "Service", "Service-like (no folder)" and "Location / Area" spelled exactly.
 - `pair_verdicts` keys are the `override_key` column of `review/dup_candidates.csv`, copied exactly. Values: `duplicate`, `not`, `city`, and `review` for a pair you cannot judge from the candidate row: it is kept as a Low-confidence pair, so its pages get the action Review instead of a guess.
 - `folder_types` values: Service, Concern, Blog, Location / Area, Company / Info, Gallery item, Archive, Utility / Policy, Mixed, or any other name (it becomes "Name (folder)"). Use `"parent/child"` as a key to type a second-level folder on its own; map the parent as Mixed.
 - `keepers` and `service_pages` are keyed by topic, as it appears in `review/topics.csv`.
 
 ## Page types (`review/page_types.csv`, `review/unclassified.csv`)
+
+Ask about the uncertain ones with AskUserQuestion (see SKILL.md, "How to ask the person questions"): group root-level pages by the rule that typed them, and offer a rule as an option rather than one question per page.
 
 - Open 5 rows per type and read the "why" column. Blogs at the root are the usual problem: a short blog slug can land in Service-like, and a long service slug can land in Blog. Fix single pages with `page_types`.
 - A folder typed "Name (folder)" is one the person gave its own name, or one missing from the confirmed mapping (next_steps.md lists those). If the person later says what it holds, update `folder_types` and re-run; do not guess.
