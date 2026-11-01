@@ -44,7 +44,7 @@ The taxonomy is bundled; never ask for it.
 
 **If anything required is missing**, send **one** message that:
 - lists only the missing items, one line each, saying what to provide and (for the crawl) which columns and export settings;
-- points them to the **Service Gap Audit SOP** (https://app.notion.com/p/40418945155e80a6ab5fd48e36cc135a) for the full details: how to export from Sitebulb or Screaming Frog, the column lists, and how to get the Search Console sheet;
+- tells them to see the **Service Gap Audit SOP in ClickUp** for the full details: how to export from Sitebulb or Screaming Frog, the column lists, and how to get the Search Console sheet;
 - asks the Search Console question only if they have not already said they have none. No menus of options.
 
 Then stop and wait. Do not run the script, guess a missing value, or continue with part of the inputs. An attached file that is not what it should be counts as missing: a crawl without the required columns (the script's `inspect` lists them), or a sheet without Page, Query, Clicks and Impressions (for example the taxonomy). Say what is wrong with the file and point to the SOP. For a Search Console sheet only, say it is not Search Console data and continue without it, since it is optional.
