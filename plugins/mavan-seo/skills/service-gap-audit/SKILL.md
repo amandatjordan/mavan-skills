@@ -15,6 +15,8 @@ Work only from the crawl export, the bundled taxonomy, and the optional Search C
 
 ## What you need
 
+Step 1 checks all of this before work starts.
+
 - **Crawl export** (CSV or xlsx, internal HTML URLs, every status code). Sitebulb: URL, HTTP Status Code, Indexable Status, Title, Meta Description, H1, H2, H2 (second), No. Content Words, and the canonical URL column if exported. Screaming Frog: Address, Status Code, Indexability Status, Title 1, Meta Description 1, H1-1, H2-1, H2-2, Word Count, Canonical Link Element 1. URL, status, title, H1 and word count are required; the rest are used when present.
 - **Client facts**: domain, practice type (medspa, surgical, or both), and every city and suburb the practice targets.
 - **Search Console data** (optional): a Google Sheet with Page, Query, Clicks and Impressions columns, attached to the chat. The script uses the tab named "Claude Use This" when the file has one.
@@ -24,11 +26,30 @@ Work only from the crawl export, the bundled taxonomy, and the optional Search C
 
 Use these names in every column, label and message: **Category > Service > Sub-Service > Brand / Device**. A **Concern** is a problem people search for; it points to Services and is never a page gap on its own. A **Modifier** (Cost, Before & After, Recovery / Risks, Comparison, Candidacy, Best / Top) is a flag on a keyword, never a level. Name every page for what it is: a Botox page is Botox (Brand / Device under Neurotoxin), never "Neurotoxin".
 
-## Step 1: Ask once
+## Step 1: Pre-flight check
 
-Send **one** message with only what the request did not already give: practice type, every city and suburb they target (nearby towns not named are treated as other markets), and the Search Console Google Sheet. No menus of options. If a sheet link or file is provided, the script checks it has Page, Query, Clicks and Impressions columns; a sheet without them (for example the taxonomy) is not Search Console data, so say so and continue without it. If the person has no sheet, continue without it: the workbook builds without the Client GSC Impressions column and the Read Me says so.
+Run this before anything else, and again whenever the person says what they have. It applies when the person asks what is needed, and when the request leaves anything required out. Check the chat for each item:
 
-Done when practice type and cities are known and you know whether Search Console data is used.
+| # | Item | Required? | Ready when |
+| --- | --- | --- | --- |
+| 1 | Crawl export | Required | A Sitebulb or Screaming Frog CSV or xlsx of internal HTML URLs is attached, with every status code, and with before & after gallery and blog URLs left in. It has URL, status code, title, H1 and word count columns. H2s, meta description, indexability and canonical columns are used when present. |
+| 2 | Domain | Required | Stated, or readable from the crawl URLs. |
+| 3 | Practice type | Required | medspa, surgical, or both. |
+| 4 | Service-area cities and suburbs | Required | Every city and suburb the practice targets. Towns not named are treated as other markets. |
+| 5 | Search Console Google Sheet | Optional | Has Page, Query, Clicks and Impressions columns. Without it the workbook builds with no Client GSC Impressions column. |
+
+The taxonomy is bundled; never ask for it.
+
+**If the person asks what is needed**, answer with this table in plain words (items 1 to 5, required or optional, and the crawl columns), then ask for what they have not given.
+
+**If anything required is missing**, send **one** message that:
+- lists only the missing items, one line each, saying what to provide and (for the crawl) which columns and export settings;
+- points them to the **Service Gap Audit SOP** (https://app.notion.com/p/40418945155e80a6ab5fd48e36cc135a) for the full details: how to export from Sitebulb or Screaming Frog, the column lists, and how to get the Search Console sheet;
+- asks the Search Console question only if they have not already said they have none. No menus of options.
+
+Then stop and wait. Do not run the script, guess a missing value, or continue with part of the inputs. An attached file that is not what it should be counts as missing: a crawl without the required columns (the script's `inspect` lists them), or a sheet without Page, Query, Clicks and Impressions (for example the taxonomy). Say what is wrong with the file and point to the SOP. For a Search Console sheet only, say it is not Search Console data and continue without it, since it is optional.
+
+Done when items 1 to 4 are all provided and you know whether Search Console data is used.
 
 ## Step 2: Inspect the crawl
 

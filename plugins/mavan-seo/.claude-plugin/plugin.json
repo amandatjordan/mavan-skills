@@ -1,7 +1,7 @@
 {
   "name": "mavan-seo",
   "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, backlinks, service page title & H1 review, client report from any audit",
-  "version": "1.13.0",
+  "version": "1.13.1",
   "author": {
     "name": "Mavan"
   }
