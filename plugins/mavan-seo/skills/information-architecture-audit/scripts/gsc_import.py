@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Load the blocks printed by gsc_workbench.py (saved as text files) and check their checksums.
+"""Load the blocks printed by ga4_workbench.py (saved as text files) and check their checksums.
+
+Only GA4 comes through Composio now (table ga4 -> ga4.csv). Search Console comes from the Google Sheet through
+gsc_sheet.py, which does not use this script.
 
 Usage:
   python gsc_import.py --dir work/gsc
@@ -16,7 +19,7 @@ import re
 import sys
 import zlib
 
-ADDITIVE = {'pair_queries'}  # several rounds of ia_pair_queries add up
+ADDITIVE = {'pair_queries'}  # several rounds of pair queries add up (kept for old saved blocks)
 HEAD = re.compile(r'^##IA table=(\w+) part=(\d+)/(\d+) rows=(\d+) crc=([0-9a-f]{8})\s*$')
 
 

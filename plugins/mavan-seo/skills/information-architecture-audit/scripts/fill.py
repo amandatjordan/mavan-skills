@@ -307,7 +307,7 @@ def main():
     if sm.get('pairs_to_check'):
         warns.append(f'{sm["pairs_to_check"]} duplicate pair(s) still marked "check"; they are treated as not duplicates.')
     if sm.get('has_gsc') and not sm.get('pair_queries_loaded') and sm.get('pair_queries_needed'):
-        warns.append('Top shared queries were not loaded (ia_pair_queries); that column will be blank.')
+        warns.append('Top shared queries were not loaded (gsc_sheet.py pair-queries); that column will be blank.')
 
     # ---------------- write
     wb = load_workbook(a.template)
@@ -326,10 +326,10 @@ def main():
     lc = sm.get('link_classes') or {}
     if sm.get('has_gsc'):
         win = f"{meta.get('window_start')} to {meta.get('window_end')}"
-        window_text = f'{win}: the last 6 full calendar months.'
+        window_text = f"{win}. {meta.get('window_note') or 'The last 6 full calendar months.'}"
         totals = (f"{int(float(meta.get('clicks', 0))):,} clicks, {int(float(meta.get('impressions', 0))):,} impressions, "
-                  f"{meta.get('page_rows')} page rows, {meta.get('page_query_rows')} page+query rows (after joining URL variants). "
-                  f"Brand searches excluded from query analysis: {int(float(meta.get('brand_query_impr', 0))):,} impressions.")
+                  f"{meta.get('page_rows')} pages, {meta.get('page_query_rows')} page+query rows (after joining URL variants). "
+                  f"Brand searches excluded from query analysis: {int(float(meta.get('brand_query_impr', 0))):,} impressions.") + (' ' + meta['sheet_note'] if meta.get('sheet_note') else '')
         ga4 = (f"{meta.get('ga4_property')}, dimension landingPage, metrics sessions, keyEvents "
                f"({meta.get('ga4_rows')} landing pages)" if meta.get('ga4_property') else 'GA4 not available: ' +
                rd_notes.get('ga4_missing', 'no GA4 property was found for this domain.'))
