@@ -8,10 +8,9 @@ Brand terms are handled in the Search Console export itself: do not ask for bran
 
 ## Getting the Search Console data
 
-Accepted, in this order of preference:
+The person pastes the Google Sheet link into the chat. The Claude app then attaches the sheet itself as a file (every tab, separated by `## Sheet name:` lines), so read that attached file in code, like any other export: it never passes through the conversation and its size does not matter. Use the link only to confirm which sheet it is (for example its tab names with the Sheets connector's `get_spreadsheet`); do not read the rows through the connector.
 
-1. **A CSV or XLSX download of the sheet** (File > Download in Google Sheets), attached to the chat. Best for any size: it is read in code and never passes through the chat.
-2. **A Google Sheet link**, read with the Sheets connector. Call `get_spreadsheet` first to list the tabs and their row counts. A connector read returns every cell into the conversation, so read the sheet this way only when the tab you need has about 2,000 rows or fewer: `get_values` in blocks of up to 1,000 rows, each written to `work/gsc/` in code straight away. For a bigger tab, ask for a download (option 1) instead of reading it through the connector.
+If a link is pasted but no attached file arrives, ask the person to paste the link again, or to attach a CSV or XLSX of the sheet. A CSV or XLSX attached directly is accepted too.
 
 The data needs Page, Query, Clicks and Impressions columns (CTR and Position are optional). It is made with the Search Analytics for Sheets add-on or a Looker Studio table. The Search Console UI export gives pages and queries separately and caps at 1,000 rows, so it cannot show overlap: if that is all the person has, say so and ask for the add-on export.
 
