@@ -80,8 +80,13 @@ class Deliverable(unittest.TestCase):
             run("prune_import.py", "--workbook", "prune.xlsx", "--domain", "example-medspa.com", "--out", "work")
             Path("work/config.json").write_text(Path("config.json").read_text())
             Path("work/decisions.json").write_text(Path("decisions.json").read_text())
+            import zlib
+            Path("work/gsc").mkdir(parents=True, exist_ok=True)
+            body = "/services/botox/|40|3"
+            Path("work/gsc/ga4.txt").write_text(f"##IA table=ga4 part=1/1 rows=1 crc={zlib.crc32(body.encode()) & 0xffffffff:08x}\nkey|sessions|key_events\n{body}\n##END\n")
+            run("gsc_import.py", "--dir", "work/gsc")
             run("gsc_sheet.py", "build", "--sheet", "gsc.xlsx", "--domain", "example-medspa.com", "--brand", "example",
-                "--start", "2026-05-01", "--end", "2026-10-31", "--out", "work/gsc")
+                "--start", "2026-05-01", "--end", "2026-10-31", "--out", "work/gsc", "--ga4-property", "properties/1")
             run("analyze.py", "--work", "work", "--past", "work/past.csv", "--prune", "work/prune.csv")
             run("make_xlsx.py", "--work", "work", "--out", "out.xlsx")
         finally:
@@ -122,6 +127,11 @@ class Deliverable(unittest.TestCase):
         self.assertNotIn("/contact/", items)        # core company page stays
         self.assertIn("/services/botox/", items)
         self.assertTrue(all(r[2] == "SEO fill in" for r in m[2:]))
+
+    def test_ga4_sessions_in_menu_why(self):
+        m = {r[0]: r[3] for r in rows(self.wb, "Menu cleanup")[2:]}
+        self.assertIn("GA4: 40 sessions", m["/services/botox/"])
+        self.assertIn("GA4: 0 sessions", m["/services/filler/"])   # a page with no GA4 row had none
 
     def test_internal_linking_one_link_from_per_row_with_hub_to_fill(self):
         li = rows(self.wb, "Internal linking opportunities")[2:]
