@@ -204,6 +204,9 @@ def main():
     keep_types = {'Home', 'Service hub', 'Concern hub', 'Blog hub', 'Location hub'}
     core_words = {'contact', 'about', 'book', 'booking', 'gallery'}
     menu, kept = [], []
+    sessions = {}  # GA4 sessions per page, only when GA4 was merged into the search data (a page with no row had none)
+    if len(P) and 'ga4_sessions' in P and str(gsc_meta.get('ga4_rows', '0')) not in ('', '0'):
+        sessions = {r.path: num(r.ga4_sessions) for r in P.itertuples() if r.ga4_sessions != ''}
     if len(NAV):
         gone = set(P[P.final_action.isin(['Remove then Redirect', 'Merge then Redirect'])].path) if len(P) and 'final_action' in P else set()
         for r in NAV.itertuples():
@@ -213,6 +216,9 @@ def main():
             elif r.page not in gone:
                 why = {'Query-string URL': 'Tracking URL, not a real page.', 'Pagination': 'Listing page 2+, not a real page.'}.get(
                     r.type, f'{r.type} page in the main menu. Hubs and core pages stay; the hubs link to this page.')
+                ga = sessions.get(r.page)
+                if ga is not None:
+                    why += f' GA4: {int(ga)} sessions in the window.'
                 menu.append([r.page, r.type, FILL_IN, why])
     T[MENU] = menu
 
@@ -355,7 +361,7 @@ def main():
           '; '.join(f'/{k.strip("/")}/ = {v}' for k, v in fm.items()) or 'none', 'Used for pages inside a folder.'])
     line(['Searches with no owner: impressions', 'Minimum impressions in the window', str(NOOWNER_MIN), 'Smaller searches are noise.'])
     line(['GA4', 'Whether GA4 was merged into the search data', 'Merged' if str(gsc_meta.get('ga4_rows', '0')) not in ('', '0') else 'Not used',
-          'No tab on this workbook depends on GA4.'])
+          'Sessions appear in the Why column on Menu cleanup only.'])
     line(['DATA USED', 'Source', 'What was taken', 'Notes'], fill=GREY, bold=True)
     line(['Crawl', f"{summ.get('crawler') or cfg.get('crawler', '')} export, {cfg.get('crawl_date', '')}".strip(' ,'),
           'URL, status code, title, H1, links, redirects and crawl depth for each page', ''])

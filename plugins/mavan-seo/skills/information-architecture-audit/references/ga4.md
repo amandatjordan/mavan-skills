@@ -1,6 +1,8 @@
 # GA4 through Composio (optional)
 
-Only when the person asked for GA4. Search Console does not use Composio: it comes from the Google Sheet (`scripts/gsc_sheet.py`). Many clients have too little traffic for GA4 to matter; if the person says to skip it, do none of this and leave the GA4 columns blank.
+Only when the person asked for GA4. Search Console does not use Composio: it comes from the Google Sheet (`scripts/gsc_sheet.py`). Many clients have too little traffic for GA4 to matter (use it only with Search Console 300+ clicks and GA4 200+ sessions); if the person says to skip it, do none of this. In the workbook it only adds sessions to the Why text on Menu cleanup.
+
+**Composio filtering:** pull only sessions and key events by landing page for the dates above, through the script. Do not pull any other report, dimension or property data.
 
 `scripts/ga4_workbench.py` runs inside Composio's remote workbench (`COMPOSIO_REMOTE_WORKBENCH`), not here. Its state persists between workbench calls and it saves to `/mnt/files/ia/`, so if the sandbox restarts, send the file again and carry on from the step you were on.
 
