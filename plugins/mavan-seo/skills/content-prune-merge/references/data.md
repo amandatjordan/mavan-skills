@@ -8,7 +8,7 @@ Brand terms are handled in the Search Console export itself: do not ask for bran
 
 ## Getting the Search Console data
 
-The person pastes the Google Sheet link into the chat. The Claude app then attaches the sheet itself as a file (every tab, separated by `## Sheet name:` lines), so read that attached file in code, like any other export: it never passes through the conversation and its size does not matter. Use the link only to confirm which sheet it is (for example its tab names with the Sheets connector's `get_spreadsheet`); do not read the rows through the connector.
+The person pastes the Google Sheet link into the chat. The Claude app then attaches the sheet itself as a file (every tab, separated by `## Sheet name:` lines), so read that attached file in code, like any other export: it never passes through the conversation and its size does not matter. Never read the sheet through a Google Sheets connector or Composio: not every person running this skill has one, and the attached file is enough.
 
 If a link is pasted but no attached file arrives, ask the person to paste the link again, or to attach a CSV or XLSX of the sheet. A CSV or XLSX attached directly is accepted too.
 
@@ -21,7 +21,7 @@ Exports from the add-on or Looker Studio are messy. Handle these in code before 
 - **Several sheets in one file or link**, in a download separated by lines like `## Sheet name:`. Read each sheet separately.
 - **Respect the person's filters.** Filters (for example dropping queries with under 10 impressions) keep low-value terms out of the audit; never undo one.
   - When one tab is a filtered version of another, use the filtered tab.
-  - When a tab has a filter applied in Google Sheets, the attached file still holds the hidden rows. Read the filter with the Sheets connector's `get_spreadsheet` (the tab's `basicFilter`, such as Impressions values 1 to 10 hidden) and apply the same filter in code.
+  - When a tab has a filter applied in Google Sheets, the attached file still holds the hidden rows, and the filter cannot be read from the file. Apply the filter the person named in pre-flight item 4 (for example Impressions 1 to 10 hidden) in code. If they named none, use every row.
   - Ignore tabs that are a different cut of the data rather than a filter (top queries only, a single folder).
   - Say in the report which tab and which filter you used.
 - **Thousands separators** in numbers (`"1,853"`): strip the commas before converting to numbers.

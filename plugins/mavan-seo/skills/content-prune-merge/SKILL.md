@@ -27,7 +27,7 @@ Run this before anything else, and again whenever the person says what they have
 | 1 | Crawl: URL export | Required | Sitebulb or Screaming Frog, every URL and every status code (not just 200s). Sitebulb: the URLs export. Screaming Frog: Internal > All. |
 | 2 | Crawl: internal links export | Required | Every internal link with its CSS path (Sitebulb) or link path (Screaming Frog). Sitebulb: Links > Internal Links. Screaming Frog: Bulk Export > Links > All Inlinks. |
 | 3 | Crawl: redirects export | Required | The target of every 3XX. Sitebulb: the redirected URLs export. Screaming Frog: Response Codes > Redirection (3xx) > Export, or Reports > Redirects > All Redirects. |
-| 4 | Search Console page + query data | Required | The Google Sheet link pasted into the chat (the app attaches the sheet as a file, which is what gets read), or a CSV or XLSX of it, with Page, Query, Clicks and Impressions columns. Made with the Search Analytics for Sheets add-on or a Looker Studio table. The Search Console UI export is not enough: it splits pages and queries and caps at 1,000 rows. |
+| 4 | Search Console page + query data | Required | The Google Sheet link pasted into the chat (the app attaches the sheet as a file, which is what gets read), or a CSV or XLSX of it, with Page, Query, Clicks and Impressions columns. Made with the Search Analytics for Sheets add-on or a Looker Studio table. The Search Console UI export is not enough: it splits pages and queries and caps at 1,000 rows. If a tab has a filter applied in Google Sheets, the person names it (for example "Impressions 1 to 10 hidden"), because the attached file keeps the hidden rows. |
 | 5 | Search Console date range | Required | The person has said the start and end dates the Search Console data covers. Always ask; never assume a window. The recommended window is the last 90 days, ending 3 days ago. |
 | 6 | GA4 landing pages | Optional | A GA4 landing page file (Sessions, New users, Views, Key events) for the same dates, or nothing: see Step 3 for when GA4 is pulled and when it is skipped. |
 | 7 | Domain | Required | Stated, or readable from the crawl URLs. |
@@ -42,8 +42,6 @@ Brand terms are handled in the Search Console export, so never ask for them. The
 **If anything required is missing**, send **one** message that lists only the missing items, one line each, saying what to provide (for crawl files, which export; for Search Console, the columns and the date range question), and points to the Content Prune & Merge SOP for the full export steps. Then stop and wait. Do not run a script, guess a missing value, or start with part of the inputs. A file that is not what it should be counts as missing (for example a links export with no CSS or link path column, or a Search Console sheet with no Query column): say what is wrong with it.
 
 Load every file in code only; never print or paste one into the chat (the links file is often 20MB+). Make no requests to the live site: no sitemap fetches, no status checks, no redirect resolving. The crawl's status codes and the redirects export are the truth. The Sitebulb connector cannot replace the crawl files.
-
-Also check which tools the session has: with Google Drive and Sheets connectors, the template is copied and the Recommendations tab written by connector (references/sheet.md); without them, the workbook alone with paste steps. Say which in one line.
 
 Done when items 1 to 5, 7 and 8 are provided, and you know whether GA4 comes from a file, from Composio, or is skipped.
 
@@ -95,7 +93,7 @@ Write the Recommendations rows (references/rules.md) and the Existing Redirects 
 
 ## Step 7: Deliver the workbook
 
-Follow references/sheet.md. Build one workbook with `scripts/make_xlsx.py` (tabs: Recommendations, Audit, Existing Redirects, Not in crawl) and deliver it once with SendUserFile. With Drive and Sheets connectors, also copy the template and write only the Recommendations rows by connector; never write the Audit through a connector, because that was the slow part of earlier runs. Done when the workbook is delivered (and, on the connector path, the Recommendations read-back matches).
+Follow references/sheet.md. Build one workbook with `scripts/make_xlsx.py` (tabs: Recommendations, Audit, Existing Redirects, Not in crawl) and deliver it once with SendUserFile. Use no Google Drive or Sheets connector. Done when the workbook is delivered.
 
 ## Step 8: Report
 

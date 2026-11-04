@@ -53,7 +53,7 @@ Values (same as the Next Steps dropdown): `Keep` | `Update` | `Repurpose` | `Mer
    - Within a topic group: the keeper = Keep; every other page = Merge then Redirect, Suggested Target = the keeper. Keeper order: Service, then Concern, then Blog Post; the main city before other cities; then most impressions. A page merges only into a keeper it overlaps itself, never through a chain of other pages.
    - A concern page and a service page (any topic group): service pages come first, so the concern page = Merge then Redirect into that service page, with the Notes flag `Concern merges into service page [URL]`. If the concern page overlaps several service pages at 30%+, it merges into the one with the highest share.
 4. Blog Post with 0 clicks and under 50 impressions = Remove then Redirect, Suggested Target = the service page in the post's confirmed topic group with the most impressions, otherwise the blog listing page.
-5. Blog Post getting impressions for commercial searches (treatment + city, "near me", cost) with no service page in its topic group = Repurpose.
+5. Blog Post getting impressions for commercial searches with no service page in its topic group = Repurpose. Find the candidates in code first: Blog Posts with no service page in their topic group whose queries contain a city from `work/cities.json` (main or separate), "near me", or a price word (cost, price, prices, how much). Then judge only those candidates: a query is commercial when it is someone looking to buy or book, not to learn. Never start from a list of treatment names: the site's own services come from its confirmed folder map, not from an assumed list.
 6. Service page named after a brand or product while its queries are for the treatment or problem = Update.
 7. Everything else = Keep.
 
@@ -65,7 +65,22 @@ Also:
 
 ## Notes
 
-Start with `Suggested because: ` and one short sentence, then flags joined with `; `. Flag wording the Area formula reads (copy exactly, filling the brackets):
+Start with `Suggested because: ` and the fixed sentence for the rule that decided the row, filled in code, then flags joined with `; `. Write your own sentence only on rows marked "judgment".
+
+| Rule | Sentence after `Suggested because: ` |
+| --- | --- |
+| 1 | `Not a page for search, so it stays.` |
+| 2, under 2 clicks | `City copy of [URL] with [N] click(s), so it merges into the main-city page.` |
+| 2, 2+ clicks | `City copy of [URL], but it earns [N] clicks of its own.` |
+| 3, keeper | `Strongest page in its topic group; [N] page(s) merge into it.` |
+| 3, merged | `Shares [N]% of its impressions with [URL], the page kept for this topic.` |
+| 3, concern into service | `Concern page sharing [N]% of its impressions with service page [URL].` |
+| 4 | `Blog post with 0 clicks and [N] impression(s).` |
+| 5 | `Blog post showing for buying searches such as "[query]", with no service page on the topic.` |
+| 6 | `Named for a brand or product, but searchers use "[query]".` |
+| 7 | `No rule called for a change.` |
+
+Flag wording the Area formula reads (copy exactly, filling the brackets):
 
 - `Competes with [URL] for "[top shared query]" ([N]% shared)`: same topic group, or a concern and a service page, with 30%+ shared impressions on the smaller page (references/data.md, Overlap).
 - `Blog outranks service page [URL]`: a blog on a treatment gets more clicks than that treatment's service page.
