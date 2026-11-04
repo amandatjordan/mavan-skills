@@ -6,13 +6,13 @@ Run it first, before prep.py. It reads only headers and the first few thousand r
 
 Usage:
   python preflight.py --domain example.com --urls URLS.csv --links LINKS.csv --redirects REDIRECTS.csv \
-      --template TEMPLATE.xlsx --gsc-sheet GSC.xlsx [--gsc-start 2026-04-01 --gsc-end 2026-09-30] \
+      --gsc-sheet GSC.xlsx [--gsc-start 2026-04-01 --gsc-end 2026-09-30] \
       [--prune PRUNE.xlsx] [--client-redirects LIST.csv] [--ga4 yes|no] \
-      [--client "Name" --city "City, ST" --brand "term,term"] [--skip redirects,gsc,template] [--out work]
+      [--client "Name" --city "City, ST" --brand "term,term"] [--skip redirects,gsc] [--out work]
 
 Any argument that is left out is reported as missing. Exit code 1 when anything FAILs, so the audit does not
 start on bad inputs. WARN means the audit can run but something will be thinner, and the message says what.
---skip names an input the person has said they do not have (redirects, gsc, template); it is reported as
+--skip names an input the person has said they do not have (redirects, gsc); it is reported as
 SKIPPED with what the audit loses, and does not fail.
 """
 import argparse
@@ -27,8 +27,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import bare_domain  # noqa: E402
 import gsc_sheet  # noqa: E402
 
-TEMPLATE_SHEETS = ['Read Me', 'Recommendations', 'All Pages', 'Page Type Summary', 'Duplicate Intent',
-                   'Path Consistency', 'Link Flow', 'Retarget Links', 'Blog to Service Links', 'Nav Pages', 'Redirects']
 
 URL_COLS = {  # role: (required?, names)
     'url': (True, ('url', 'address')),
@@ -57,6 +55,11 @@ REDIR_COLS = {'source': ('url', 'address', 'source', 'from'),
               'target': ('redirect url', 'redirect destination', 'destination', 'final address', 'to')}
 
 rows = []  # (level, name, message)
+
+
+PRUNE_TABS = {'Kept pages', 'Check page type', 'Needs discussion', 'Junk folders', 'Remove pages', 'All redirects - Handoff to Dev',
+              'Redirects needing a target', 'Merge pages', 'Per location service pages', 'Redirect after merge', 'Menu cleanup',
+              'Update pages', 'Repurpose pages', 'Blog beats service'}
 
 
 def add(level, name, msg):
@@ -200,27 +203,6 @@ def check_dates(a):
         add('INFO', 'Crawl dates', 'no dates in the file names; ask the person for the crawl date (config crawl_date).')
 
 
-def check_template(a):
-    if not check_exists('Template', a.template, set(a.skip), 'no template: the audit analysis can run but the '
-                        'workbook cannot be filled.'):
-        return
-    try:
-        import openpyxl
-        names = openpyxl.load_workbook(a.template, read_only=True).sheetnames
-    except Exception as e:  # noqa: BLE001
-        add('FAIL', 'Template', f'could not open it as .xlsx: {e}')
-        return
-    missing = [s for s in TEMPLATE_SHEETS if s not in names]
-    if missing:
-        hint = ''
-        if any(n.lower().startswith('sas_') or n.lower() == 'claude use this' for n in names):
-            hint = ' This looks like the Search Console data sheet, not the IA template.'
-        add('FAIL', 'Template', f'tabs missing: {", ".join(missing)}. Tabs found: {", ".join(names)}.{hint} '
-            'Use the IA Audit template (Step 1).')
-    else:
-        add('PASS', 'Template', 'all 11 tabs present')
-
-
 def check_gsc(a):
     if not check_exists('Search Console sheet', a.gsc_sheet, set(a.skip), 'no Search Console data: all search columns '
                         'stay blank, duplicate-intent pairs cannot be found from searches, and the Read Me says why.'):
@@ -275,29 +257,29 @@ def check_gsc(a):
 
 def check_prune(a):
     if not a.prune:
-        add('INFO', 'Content prune', 'none provided. That is fine: page types come from the folder mapping and rules alone. '
-            'If the client has a prune & merge workbook, provide it so the page types and planned redirects can be '
-            'checked against it.')
+        add('INFO', 'Content prune', 'none provided. That is fine: the audit types every page itself, and junk archives, blog posts to '
+            'remove and duplicate or merge pages are not covered (they need the Content Prune & Merge audit).')
         return
     if not os.path.isfile(a.prune):
         add('FAIL', 'Content prune', f'file not found: {a.prune}')
         return
     try:
-        x = pd.read_excel(a.prune, sheet_name=None, dtype=str)
+        import openpyxl
+        names = openpyxl.load_workbook(a.prune, read_only=True).sheetnames
     except Exception as e:  # noqa: BLE001
-        add('FAIL', 'Content prune', f'could not open it: {e}')
+        add('FAIL', 'Content prune', f'could not open it as .xlsx: {e}')
         return
-    aud = next((d for n, d in x.items() if {'URL', 'Page Type'} <= set(d.columns)), None)
-    if aud is None:
-        add('FAIL', 'Content prune', 'no tab with URL and Page Type columns. Is this the Prune & Merge workbook?')
+    known = PRUNE_TABS & set(names)
+    if not known:
+        add('FAIL', 'Content prune', f'none of the Content Prune & Merge tabs were found. Tabs here: {", ".join(names)}. '
+            'Is this the prune workbook? If it is in Google Sheets, download it as .xlsx and attach it.')
         return
-    ns = find(aud.columns, ('next steps',))
-    sg = find(aud.columns, ('suggested next step',))
-    filled = int((aud[ns].fillna('').str.strip() != '').sum()) if ns else 0
-    sug = int((aud[sg].fillna('').str.strip() != '').sum()) if sg else 0
-    add('INFO', 'Content prune', f'{len(aud)} audited URLs; Next Steps filled for {filled}, Suggested Next Step for {sug}. '
-        + ('Using the filled Next Steps as the plan.' if filled else 'Next Steps is empty, so the Suggested Next Step '
-           'is treated as the plan; confirm with the person.'))
+    if not {'Kept pages', 'Check page type'} & set(names):
+        add('WARN', 'Content prune', 'this copy has neither Kept pages nor Check page type, so it has no page types (it looks like the '
+            "copy sent to the implementer). Ask for the SEO's working copy to use the prune's page types; otherwise the audit "
+            'types every page itself.')
+    else:
+        add('PASS', 'Content prune', f'prune workbook read: {len(known)} known tab(s) ({", ".join(sorted(known))}).')
 
 
 def check_facts(a):
@@ -326,22 +308,21 @@ def check_ga4(a):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--domain', required=True)
-    for k in ['urls', 'links', 'redirects', 'template', 'gsc-sheet', 'prune', 'client-redirects',
+    for k in ['urls', 'links', 'redirects', 'gsc-sheet', 'prune', 'client-redirects',
               'gsc-start', 'gsc-end', 'client', 'city', 'brand']:
         ap.add_argument('--' + k)
     ap.add_argument('--ga4', choices=['yes', 'no'])
-    ap.add_argument('--skip', default='', help='comma list of inputs the person does not have: redirects, gsc, template')
+    ap.add_argument('--skip', default='', help='comma list of inputs the person does not have: redirects, gsc')
     ap.add_argument('--out', default='work')
     a = ap.parse_args()
     a.skip = {s.strip() for s in a.skip.split(',') if s.strip()}
-    a.skip = {{'redirects': 'Redirects export', 'gsc': 'Search Console sheet', 'template': 'Template'}.get(s, s) for s in a.skip}
+    a.skip = {{'redirects': 'Redirects export', 'gsc': 'Search Console sheet'}.get(s, s) for s in a.skip}
 
     check_facts(a)
     check_urls(a)
     check_links(a)
     check_redirects(a)
     check_dates(a)
-    check_template(a)
     check_gsc(a)
     if a.client_redirects and not os.path.isfile(a.client_redirects):
         add('FAIL', 'Client redirect list', f'file not found: {a.client_redirects}')
