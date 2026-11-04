@@ -2,7 +2,7 @@
 
 Search Console data comes only from the person (a Google Sheet, or a download of it). Never pull Search Console through Composio or any other connector query. GA4 comes from a file, or through Composio only when Step 3 of SKILL.md allows it.
 
-**Date range.** Ask the person which dates the Search Console data covers (pre-flight item 5); the add-on export has no date column, so it cannot be read from the file. Recommend the last 90 days, ending 3 days ago (Search Console lags). Use the same dates for GA4. Write the range into the report. If the person does not know, say in the report that the range is unconfirmed.
+**How long the data covers.** Ask the person how long the Search Console data covers (pre-flight item 5), for example "last 90 days". Ask for the length only, never exact dates. Recommend the last 90 days. Use the same length for GA4, and write it into the report.
 
 Brand terms are handled in the Search Console export itself: do not ask for brand terms and do not filter queries yourself. Say in the report that you used the export's queries as given.
 
@@ -16,12 +16,11 @@ The data needs Page, Query, Clicks and Impressions columns (CTR and Position are
 
 ## Reading the page + query data
 
-Exports from the add-on or Looker Studio are messy. Handle these in code before anything else:
+Exports from the add-on or Looker Studio are messy. build.py handles the thousands separators, query strings and case below; you choose the tab:
 
-- **Several sheets in one file or link**, in a download separated by lines like `## Sheet name:`. Read each sheet separately.
+- **Several sheets in one file or link**, in a download separated by lines like `## Sheet name:`. Look at each tab's name and columns in code, pick the one to use by the rules below, and pass its name to build.py with `--gsc-tab`.
 - **Respect the person's filters.** Filters (for example dropping queries with under 10 impressions) keep low-value terms out of the audit; never undo one.
   - When one tab is a filtered version of another, use the filtered tab.
-  - When a tab has a filter applied in Google Sheets, the attached file still holds the hidden rows, and the filter cannot be read from the file. Apply the filter the person named in pre-flight item 4 (for example Impressions 1 to 10 hidden) in code. If they named none, use every row.
   - Ignore tabs that are a different cut of the data rather than a filter (top queries only, a single folder).
   - Say in the report which tab and which filter you used.
 - **Thousands separators** in numbers (`"1,853"`): strip the commas before converting to numbers.
