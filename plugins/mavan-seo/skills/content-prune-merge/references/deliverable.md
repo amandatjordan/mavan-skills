@@ -11,7 +11,7 @@ In this order. A tab with no rows is left out, with its Recommendations row and 
 | Tab | Color | Rows | Columns |
 | --- | --- | --- | --- |
 | Recommendations | orange | one per issue with rows | Issue, Priority, Fix, Number of Pages Affected, Tab(s) for SEO to Review, Tab(s) to hand off, Handoff to, Order |
-| Check page type | grey, SEO only | Page Type Reason contains `Root-level` or `No rule matched` | Page, Page type we guessed, Correct page type (SEO fill in), Why we guessed |
+| Check page type | grey, SEO only | Page Type Reason contains `Root-level` or `No rule matched`. Left out when an IA audit workbook was given (the IA settled page types) | Page, Page type we guessed, Correct page type (SEO fill in), Why we guessed |
 | Kept pages | grey, SEO only | Keep, and not on an action tab below | Page, Page type, Clicks, Impressions, Why, Disagree? (SEO fill in) |
 | Needs discussion | grey, SEO only | Needs Discussion | Page, Question for the client (SEO fill in), Why |
 | Junk folders | green | junk wildcards | Folder to redirect, Redirect to, Why |

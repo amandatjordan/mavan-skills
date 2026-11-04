@@ -183,7 +183,9 @@ def main():
     removed = by('Remove then Redirect')
 
     T = {}  # tab -> rows
-    T[CPT] = [[r[0], r[1], FILL_IN, r[2]] for r in audit if 'Root-level' in r[2] or 'No rule matched' in r[2]]
+    # With an IA audit workbook, the IA already settled page types: pages it did not list were typed with confidence, and
+    # any page with a prune action is already on that action tab for the SEO to check. So no Check page type tab.
+    T[CPT] = [] if run.get('ia') else [[r[0], r[1], FILL_IN, r[2]] for r in audit if 'Root-level' in r[2] or 'No rule matched' in r[2]]
     T[DISC] = [[r[0], FILL_IN, why(r[24])] for r in by('Needs Discussion')]
     T[LOC] = [[r[0], copies[r[0]], as_num(r[16]), 'Merge into the main page' if r[19] == 'Merge then Redirect' else 'Keep',
                FILL_IN if r[19] == 'Merge then Redirect' else '', why(r[24])] for r in audit if r[0] in copies]
