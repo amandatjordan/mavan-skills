@@ -16,6 +16,9 @@ how the site is built comes from files the person confirmed in the chat, all in 
                     with under 20 impressions.
   junk.json         optional. {"/tag/": "/blog/", ...} the folders the person picked as junk, with the
                     wildcard target. Without it nothing is treated as junk (candidates are still listed).
+  ia_*.csv, ia_folder_map.json, ia.json   optional. Written by ia_import.py when an IA audit workbook was given. IA page
+                    types win over the folder map and the URL rules (they were approved by the SEO); the IA folder map types the
+                    pages inside folders this chat's folder_map.json does not cover. Without them nothing changes.
   overrides.json    optional. Calls made in the chat, one entry per page:
                     {"/page/": {"page_type": "...", "step": "...", "target": "/other/", "why": "..."}}.
                     page_type is applied before the rules; step/target after them, and is marked "judgment".
@@ -98,6 +101,14 @@ class Run:
         self.title_groups = load_json(self.p('title_groups.json'), [])
         self.junk = {self.k(f): self.k(t) for f, t in (load_json(self.p('junk.json'), {}) or {}).items()}
         self.over = {self.k(u): v for u, v in (load_json(self.p('overrides.json'), {}) or {}).items()}
+        # optional IA audit workbook, read by ia_import.py: everything in it is treated as approved by the SEO
+        rd = lambda f: pd.read_csv(self.p(f), keep_default_na=False, dtype=str) if os.path.exists(self.p(f)) else None
+        t, mv, mn = rd('ia_types.csv'), rd('ia_moves.csv'), rd('ia_menu.csv')
+        self.ia = load_json(self.p('ia.json'))
+        self.ia_types = dict(zip(t.key, t.page_type)) if t is not None else {}
+        self.ia_fm = load_json(self.p('ia_folder_map.json'), {}) or {}
+        self.ia_moves = dict(zip(mv.old, mv.new)) if mv is not None else {}
+        self.ia_menu = set(mn.key) if mn is not None else set()
         self.sep = [slugify(c) for c in self.cities.get('separate', [])]
         self.allcity = self.sep + [slugify(c) for c in [self.cities.get('main', '')] + self.cities.get('ignore', []) if c]
         self.qa = []
@@ -186,18 +197,28 @@ class Run:
         hubs = [self.k(h) for h in self.fm.get('concern_hubs', []) or []]
         body = self.links[self.links.cls == 'Body']
         on_hub = set(body[body.src.isin(hubs)].dst) if hubs else set()
+        # a folder's own page lists the pages inside it: folders that hold live pages, folders the IA map names, the blog listing
+        parents = ({self.folder(k) for k in self.live.index} | set(self.ia_fm) | {self.k(self.fm.get('blog_listing') or '')}) - {''}
         out = {}
         for k, r in self.live.iterrows():
             slug = k.strip('/').split('/')[-1] if k != '/' else ''
             f = self.folder(k)
+            ftype = folders.get(k) or self.ia_fm.get(k) or ''
             if k in self.over and self.over[k].get('page_type'):
                 out[k] = (self.over[k]['page_type'], 'judgment: ' + self.over[k].get('why', 'set by the person'))
+            elif k in self.ia_types:
+                out[k] = (self.ia_types[k], 'From the IA audit (approved by the SEO)')
             elif k == '/':
                 out[k] = ('Home', 'Home page')
+            elif k in parents and ftype != 'Hub / Category Page':
+                # a folder's own page lists the pages inside it (rules.md Page Type rule 2)
+                out[k] = (NFS, f'Listing page of {k}') if ftype == NFS else ('Hub / Category Page', f'Listing page of {k}')
             elif k in folders:
                 out[k] = (folders[k], f'Folder map: {k}')
             elif f in folders:
                 out[k] = (folders[f], f'Folder map: {f}')
+            elif f in self.ia_fm:
+                out[k] = (self.ia_fm[f], f'Folder map from the IA audit: {f}')
             elif f and ARCHIVE.match(f.strip('/')):
                 t = 'Author / Archive' if f.strip('/') in ('author', 'authors') or f.strip('/').isdigit() else 'Blog Category / Tag'
                 out[k] = (t, f'Archive folder {f}')
@@ -561,6 +582,15 @@ class Run:
                     f.append(f'Canonical points to {self.full(c.canonical)} which {c.canonical_status}s - fix the canonical')
             if self.step[k] == 'Repurpose':
                 f.append('If the URL changes, update anything redirecting to it')
+            # IA audit moves: only where the two plans collide (the same URL redirected twice, or a redirect chain)
+            gone = self.step[k] in ('Merge then Redirect', 'Remove then Redirect')
+            if gone and k in self.ia_moves:
+                f.append(f'The IA audit plans to move this page to {self.full(self.ia_moves[k])}. Drop that move: this page is being '
+                         f'{"merged" if self.step[k].startswith("Merge") else "removed"}')
+            t = self.target.get(k, '')
+            if gone and t in self.ia_moves:
+                f.append(f'The IA audit moves {self.full(t)} to {self.full(self.ia_moves[t])}. Once that move is live, point this redirect '
+                         f'at {self.full(self.ia_moves[t])}')
             if k not in self.gpage.index and k not in self.ga4.index:
                 f.append('No Search Console or GA4 data in the window')
             w = self.why[k]
@@ -723,7 +753,10 @@ class Run:
                     'junk_pages': {f: sum(1 for k in self.live.index if self.folder(k) == f) for f in self.junk},
                     'blog_beats': {self.full(k): self.full(v) for k, v in self.blog_beats.items()},
                     'copies': {self.full(k): self.full(v) for k, v in self.copies.items()},
-                    'menu_redirects': self.menu_redirects()})
+                    'menu_redirects': self.menu_redirects(),
+                    'ia': bool(self.ia), 'ia_folder_map': self.ia_fm, 'ia_menu': sorted(self.full(x) for x in self.ia_menu),
+                    'ia_moved_targets': sorted({f'{self.full(sr)} -> {self.full(tg)} (IA moves it to {self.full(self.ia_moves[tg])})'
+                                               for sr, tg, _ in self.ex if tg in self.ia_moves})})
         save_json(self.p('run.json'), run)
         return rows
 

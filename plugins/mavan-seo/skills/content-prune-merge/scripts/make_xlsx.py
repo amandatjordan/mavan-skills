@@ -183,7 +183,9 @@ def main():
     removed = by('Remove then Redirect')
 
     T = {}  # tab -> rows
-    T[CPT] = [[r[0], r[1], FILL_IN, r[2]] for r in audit if 'Root-level' in r[2] or 'No rule matched' in r[2]]
+    # With an IA audit workbook, the IA already settled page types: pages it did not list were typed with confidence, and
+    # any page with a prune action is already on that action tab for the SEO to check. So no Check page type tab.
+    T[CPT] = [] if run.get('ia') else [[r[0], r[1], FILL_IN, r[2]] for r in audit if 'Root-level' in r[2] or 'No rule matched' in r[2]]
     T[DISC] = [[r[0], FILL_IN, why(r[24])] for r in by('Needs Discussion')]
     T[LOC] = [[r[0], copies[r[0]], as_num(r[16]), 'Merge into the main page' if r[19] == 'Merge then Redirect' else 'Keep',
                FILL_IN if r[19] == 'Merge then Redirect' else '', why(r[24])] for r in audit if r[0] in copies]
@@ -206,13 +208,15 @@ def main():
     T[DEV] = dev
     T[RAM] = [[r[0], r[20], f'Page is being merged ({LOC if r[0] in copies else MERGE} tab)',
                "Add after the merge is live. Old URL lands on the 'Redirect to' page in one step."] for r in merged]
-    menu, seen = [], set()
+    # With an IA audit workbook, its Menu cleanup and Fix links tabs already decide these menu items: do not repeat them.
+    ia_menu = set(run.get('ia_menu', []))
+    menu, seen = [], set(ia_menu)
     for r in merged + removed:
         if 'In main menu' in r[24] and r[0] not in seen:
             seen.add(r[0])
             tab = LOC if r[0] in copies else (MERGE if r in merged else REM)
             menu.append([r[0], r[20], f'In the main menu. Page is being {"merged" if r in merged else "removed"} ({tab} tab).'])
-    for s, t in run.get('menu_redirects', {}).items():
+    for s, t in ({} if run.get('ia') else run.get('menu_redirects', {})).items():
         if s not in seen:
             seen.add(s)
             menu.append([s, t, 'In the main menu, but this URL redirects. Link straight to the page it lands on.'])
@@ -366,12 +370,19 @@ def main():
           'A post below this is a candidate to remove.'])
     line(['Data window', 'How long the search data covers', run.get('window') or FILL_IN, ''])
     line(['GA4', 'Used only when Search Console has 300+ clicks and GA4 has 200+ sessions', ga4 or FILL_IN, ''])
+    ia_fm = run.get('ia_folder_map', {})
     line(['Folder map', 'Page type per folder, confirmed in the chat', '; '.join(f'{k} = {v}' for k, v in fm.items()) or 'none', ''])
+    if ia_fm:
+        line(['Folder map from the IA audit', 'Page type of the pages inside each folder, approved in the IA audit',
+              '; '.join(f'{k} = {v}' for k, v in ia_fm.items()), 'Used for folders the map above does not cover.'])
     line(['Locations', 'Main location, and locations treated as separate markets',
           f"Main: {cities.get('main', '')}. Separate: {', '.join(cities.get('separate', [])) or 'none'}", ''])
     line(['DATA USED', 'Source', 'What was taken', 'Notes'], fill=GREY, bold=True)
     line(['Crawl', 'Sitebulb or Screaming Frog export', 'URL, status code, title, H1, links, redirects and canonicals for each page', ''])
     line(['Search Console', 'Search Console export from the person', 'Clicks, impressions and searches for each page, for the window above', ''])
+    if run.get('ia'):
+        line(['IA audit workbook', 'The SEO\'s working copy', 'Page types, folder map, cities, moves and menu cleanup',
+              'Its decisions are treated as approved and are not repeated here.'])
     if ga4 and not ga4.lower().startswith(('skipped', 'not used')):
         line(['GA4', 'Google Analytics 4', 'Sessions, new users, views and key events for each landing page, for the window above', ga4])
         if 'composio' in ga4.lower():

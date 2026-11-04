@@ -11,7 +11,7 @@ In this order. A tab with no rows is left out, with its Recommendations row and 
 | Tab | Color | Rows | Columns |
 | --- | --- | --- | --- |
 | Recommendations | orange | one per issue with rows | Issue, Priority, Fix, Number of Pages Affected, Tab(s) for SEO to Review, Tab(s) to hand off, Handoff to, Order |
-| Check page type | grey, SEO only | Page Type Reason contains `Root-level` or `No rule matched` | Page, Page type we guessed, Correct page type (SEO fill in), Why we guessed |
+| Check page type | grey, SEO only | Page Type Reason contains `Root-level` or `No rule matched`. Left out when an IA audit workbook was given (the IA settled page types) | Page, Page type we guessed, Correct page type (SEO fill in), Why we guessed |
 | Kept pages | grey, SEO only | Keep, and not on an action tab below | Page, Page type, Clicks, Impressions, Why, Disagree? (SEO fill in) |
 | Needs discussion | grey, SEO only | Needs Discussion | Page, Question for the client (SEO fill in), Why |
 | Junk folders | green | junk wildcards | Folder to redirect, Redirect to, Why |
@@ -21,7 +21,7 @@ In this order. A tab with no rows is left out, with its Recommendations row and 
 | Merge pages | green | Merge then Redirect, not a location copy | Page that will be removed after merge, Page we are keeping, Unique content to copy over (SEO fill in), Why |
 | Per location service pages | green | every location copy (rules.md rule 2), merged or kept | Location page, Main page, Clicks, What to do, Unique content to copy over (SEO fill in on Merge rows), Why |
 | Redirect after merge | green | every Merge then Redirect row | Old URL, Redirect to, Why, Done when |
-| Menu cleanup | green | Merge or Remove rows in the main menu, and menu links to URLs that redirect | Menu item to replace, Replace with, Why |
+| Menu cleanup | green | Merge or Remove rows in the main menu, and menu links to URLs that redirect. With an IA audit workbook: only menu items its Menu cleanup tab does not already list, and no redirected-link rows (its Fix links tab has them) | Menu item to replace, Replace with, Why |
 | Update pages | green | Update | Page to update, New title, New H1, New first sentence (all SEO fill in), Why with the current title and H1 |
 | Repurpose pages | green | Repurpose | Blog post, What to do (SEO fill in), Why |
 | Blog beats service | green | Blog posts flagged `Blog outranks service page` | Blog post, Service page, What to do (SEO fill in), Why |
@@ -40,4 +40,4 @@ Merge redirects are never on it: they are on Redirect after merge, sent only onc
 
 ## README
 
-Built per run: the six how-to steps, one row per tab present from the Workbook README table in rules.md, the settings (overlap share, remove thresholds, how long the data covers, GA4 used or skipped and why, the folder map, the locations) and the data used. GA4 is listed only when it was used, and a Composio line ("Only the listed fields were pulled.") only when GA4 came through Composio.
+Built per run (with an IA audit workbook, it also lists the IA's folder map and that the IA was used): the six how-to steps, one row per tab present from the Workbook README table in rules.md, the settings (overlap share, remove thresholds, how long the data covers, GA4 used or skipped and why, the folder map, the locations) and the data used. GA4 is listed only when it was used, and a Composio line ("Only the listed fields were pulled.") only when GA4 came through Composio.
