@@ -1,4 +1,4 @@
-"""IA audit: Search Console from a sheet, GA4 block import, preflight, and the prune type check.
+"""IA audit: Search Console from a sheet, GA4 block import, preflight, and reading the prune workbook.
 
 Run from the repo root:  python3 -m unittest discover -s tests/information-architecture-audit -v
 """
@@ -104,13 +104,21 @@ class Preflight(unittest.TestCase):
         self.assertIn("Links export: not provided", r.stdout)
         self.assertIn("NOT READY", r.stdout)
 
-    def test_gsc_data_sheet_is_not_the_template(self):
+    def test_prune_workbook_needs_known_tabs(self):
         import openpyxl
         wb = openpyxl.Workbook()
         wb.active.title = "Claude Use This"
-        wb.save(self.t / "t.xlsx")
-        r = self.pre("--template", self.t / "t.xlsx")
-        self.assertIn("looks like the Search Console data sheet", r.stdout)
+        wb.save(self.t / "p.xlsx")
+        r = self.pre("--prune", self.t / "p.xlsx")
+        self.assertIn("none of the Content Prune & Merge tabs", r.stdout)
+
+    def test_prune_copy_without_page_types_warns(self):
+        import openpyxl
+        wb = openpyxl.Workbook()
+        wb.active.title = "Remove pages"
+        wb.save(self.t / "p.xlsx")
+        r = self.pre("--prune", self.t / "p.xlsx")
+        self.assertIn("no page types", r.stdout)
 
     def test_missing_redirects_can_be_skipped_explicitly(self):
         r = self.pre("--skip", "redirects")
@@ -121,32 +129,67 @@ class Preflight(unittest.TestCase):
         self.assertIn("GA4: not decided", r.stdout)
 
 
-class TypeCheck(unittest.TestCase):
-    def test_conflicts_grouped_and_noise_split(self):
+def prune_workbook(path):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    k = wb.active
+    k.title = "Kept pages"
+    k.append(["banner"])
+    k.append(["Page (SEO: QA this URL)", "Page type", "Clicks", "Impressions", "Why", "Disagree? Type the change you want (SEO fill in)"])
+    k.append(["https://x.com/lip-flip/", "Service", 1, 50, "why", ""])
+    k.append(["https://x.com/botox/", "Service", 1, 50, "why", "should be a hub"])
+    c = wb.create_sheet("Check page type")
+    c.append(["banner"])
+    c.append(["Page", "Page type we guessed", "Correct page type (SEO fill in)", "Why we guessed"])
+    c.append(["https://x.com/aftercare/", "Service", "Blog Post", "Root-level"])
+    c.append(["https://x.com/body/", "Service", "SEO fill in", "Root-level"])
+    c.append(["https://x.com/tips/", "Blog Post", "", "Root-level"])
+    rm = wb.create_sheet("Remove pages")
+    rm.append(["banner"])
+    rm.append(["Page to remove", "Redirect to", "Why"])
+    rm.append(["https://x.com/old/", "https://x.com/services/", ""])
+    lc = wb.create_sheet("Per location service pages")
+    lc.append(["banner"])
+    lc.append(["Location page", "Main page", "Clicks", "What to do", "Unique content", "Why"])
+    lc.append(["https://x.com/botox-denver/", "https://x.com/botox/", 3, "Merge into the main page", "", ""])
+    lc.append(["https://x.com/botox-boulder/", "https://x.com/botox/", 9, "Keep", "", ""])
+    dv = wb.create_sheet("All redirects - Handoff to Dev")
+    dv.append(["Source URL", "Target URL", "Regex (0 = no, 1 = yes)", "HTTP Code"])
+    dv.append(["https://x.com/tag/(.*)", "https://x.com/blog/", 1, 301])
+    dv.append(["https://x.com/old/", "https://x.com/services/", 0, 301])
+    wb.save(path)
+
+
+class PruneImport(unittest.TestCase):
+    def test_reads_new_workbook(self):
         t = Path(tempfile.mkdtemp())
-        (t / "analysis").mkdir()
-        ia = pd.DataFrame([
-            ("https://x.com/radiesse-brandon-fl/", "/radiesse-brandon-fl/", "Service-like (no folder)", "Rule 7", "Radiesse"),
-            ("https://x.com/botox/", "/botox/", "Service", "mapping", "Botox"),
-            ("https://x.com/body/", "/body/", "Service-like (no folder)", "Rule 7", "Body"),
-            ("https://x.com/about/", "/about/", "Company / Info", "Rule 7", "About"),
-        ], columns=["url", "path", "type", "why", "h1"])
-        ia.to_csv(t / "analysis/all_pages.csv", index=False)
-        pr = pd.DataFrame([
-            ("/radiesse-brandon-fl/", "Blog Post", "Root-level, slug reads like a post"),
-            ("/botox/", "Service", "Folder map: /services/"),
-            ("/body/", "Hub / Category Page", "Folder map: listing page"),
-            ("/about/", "Other", "Slug: about"),
-        ], columns=["key", "prune_type", "prune_reason"])
-        pr["plan_action"], pr["plan_target"], pr["plan_source"], pr["url"] = "Keep", "", "Suggested Next Step", ""
-        pr.to_csv(t / "prune.csv", index=False)
-        r = run("type_check.py", "--work", t)
-        c = pd.read_csv(t / "review/type_conflicts.csv", keep_default_na=False).set_index("path")
-        self.assertEqual(set(c.index), {"/radiesse-brandon-fl/", "/body/"})   # agreeing pages are not listed
-        self.assertEqual(c.loc["/radiesse-brandon-fl/", "severity"], "Different type")
-        self.assertEqual(c.loc["/body/", "severity"], "Hub or page?")
-        self.assertIn("a guess from the URL wording", c.loc["/radiesse-brandon-fl/", "prune_basis"].replace("was ", "a ").replace("a a", "a"))
-        self.assertIn("CONFLICTS: 2 of 4", r.stdout)
+        prune_workbook(t / "p.xlsx")
+        r = run("prune_import.py", "--workbook", t / "p.xlsx", "--domain", "x.com", "--out", t / "w")
+        pr = pd.read_csv(t / "w/prune.csv", keep_default_na=False).set_index("key")
+        self.assertEqual(pr.loc["/lip-flip/", "prune_type"], "Service")                       # Kept pages
+        self.assertEqual(pr.loc["/aftercare/", "prune_type"], "Blog Post")                    # SEO corrected the guess
+        self.assertEqual(pr.loc["/body/", "prune_type"], "")                                  # guess nobody corrected
+        self.assertEqual(pr.loc["/body/", "prune_reason"], "Guessed from the URL")
+        self.assertEqual(pr.loc["/tips/", "prune_type"], "")                                  # blank = guess stands, IA types it
+        self.assertEqual(pr.loc["/old/", "plan_action"], "Remove then Redirect")
+        self.assertEqual(pr.loc["/old/", "plan_target"], "/services/")
+        self.assertEqual(pr.loc["/botox-denver/", "plan_action"], "Merge then Redirect")
+        self.assertEqual(pr.loc["/botox-boulder/", "plan_action"], "Keep")
+        wild = pd.read_csv(t / "w/prune_wildcards.csv")
+        self.assertEqual(wild.source.tolist(), ["https://x.com/tag/*"])                       # (.*) written back as *
+        self.assertTrue((t / "w/prune_disagree.csv").exists())                                # not guessed at
+        past = pd.read_csv(t / "w/past.csv", keep_default_na=False)
+        self.assertIn("Remove then Redirect", past.decision.tolist())
+        self.assertIn("Disagree", r.stdout)
+
+    def test_not_a_prune_workbook_stops(self):
+        import openpyxl
+        t = Path(tempfile.mkdtemp())
+        wb = openpyxl.Workbook()
+        wb.active.title = "Other"
+        wb.save(t / "o.xlsx")
+        r = run("prune_import.py", "--workbook", t / "o.xlsx", "--domain", "x.com", "--out", t / "w", check=False)
+        self.assertEqual(r.returncode, 1)
 
 
 if __name__ == "__main__":

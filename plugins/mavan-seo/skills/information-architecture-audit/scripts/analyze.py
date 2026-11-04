@@ -59,6 +59,10 @@ KEEPER_RANK = {'Service': 0, 'Service-like (no folder)': 1, 'Concern': 2, 'Locat
 FLOW_COLS = ['Home', 'Service hub', 'Service', 'Service-like', 'Concern hub', 'Concern', 'Location / Area', 'Blog hub',
              'Blog', 'Company / Info', 'Utility / Policy', 'Pagination', 'Query-string URL']
 NOOWNER_MIN_IMPR = 100  # a search with fewer impressions in the window is not listed
+# Prune workbook page type -> IA page type. 'Hub / Category Page' is left out on purpose: the IA audit decides which hub it is.
+PRUNE_TYPES = {'Home': 'Home', 'Service': 'Service', 'Concern / Condition': 'Concern', 'Service Area / Location': 'Location / Area',
+               'Blog Post': 'Blog', 'Blog Category / Tag': 'Archive', 'Author / Archive': 'Archive', 'Gallery': 'Gallery item',
+               'Not for SEO (contact, legal, etc.)': 'Utility / Policy', 'Other': 'Company / Info'}
 # Words a person may use for a folder type in the confirmed mapping (decisions.json folder_types).
 HUB_BASE = {'service': 'Service', 'service hub': 'Service', 'concern': 'Concern', 'concern hub': 'Concern',
             'blog': 'Blog', 'blog hub': 'Blog', 'location': 'Location', 'location / area': 'Location',
@@ -313,6 +317,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--work', default='work')
     ap.add_argument('--past', help='optional past prune decisions CSV (url, decision, target)')
+    ap.add_argument('--prune', help='optional work/prune.csv from prune_import.py: its page types are adopted')
     ap.add_argument('--allow-unconfirmed', action='store_true',
                     help='run without a confirmed folder mapping (folder types guessed from common names); '
                          'for tests and unattended runs only')
@@ -359,10 +364,23 @@ def main():
             k = redirect_final[k]; n += 1
         return k
 
+    prune_adopted = set()
+    if a.prune and os.path.exists(a.prune):
+        pt = pd.read_csv(a.prune, dtype=str, keep_default_na=False)
+        dec.setdefault('page_types', {})
+        for r in pt[pt.prune_type != ''].itertuples():
+            ia_t = PRUNE_TYPES.get(r.prune_type)
+            if r.prune_type == 'Service' and len(segs(r.key)) == 1:
+                ia_t = 'Service-like (no folder)'
+            if ia_t and r.key in live_keys and r.key not in dec['page_types']:  # a reviewer's own setting wins
+                dec['page_types'][r.key] = ia_t
+                prune_adopted.add(r.key)
     clf = Classifier(live_keys, cfg, dec)
     rows = []
     for r in live_df.itertuples():
         t, why = clf.classify(r.key, r.url, r.h1, r.title)
+        if r.key in prune_adopted:
+            why = 'Page type from the prune workbook'
         rows.append((t, why))
     live_df['type'] = [x[0] for x in rows]
     live_df['why'] = [x[1] for x in rows]
@@ -633,8 +651,12 @@ def main():
             generic = ' '.join(t for t in words(q) if t not in clf.city_words and t not in TOPIC_STRIP)
             sugg = (f'Make {owner} the owner: link to it from the other pages' if owner
                     else f'Create one hub page for "{generic}" and link the treatments from it')
+            frm = [(k, v) for k, v in content if k != owner and not (owner and owner in body_out.get(k, set()))]
             noowner_rows.append({'query': q, 'impressions': int(num(r.impressions)), 'pages': int(num(r.pages)),
-                                 'treatments': len(tops),
+                                 'treatments': len(tops), 'owner': owner,
+                                 'owner_impr': next((v for k, v in pg if k == owner), 0),
+                                 'anchor': (topic_of.get(owner) if owner else '') or generic,
+                                 'from_pages': ';'.join(f'{k}|{v}' for k, v in frm),
                                  'top_pages': '; '.join(f'{k} ({v})' for k, v in pg[:5]),
                                  'suggested': dec.get('noowner_owner', {}).get(q, sugg)})
     noowner_rows = noowner_rows[:30]
@@ -830,7 +852,7 @@ def main():
             target = dup_of.get(target, {}).get('target') or target  # follow a merge to its keeper
         gsc_ok = has_gsc and not isq and not r.dupe_key
         pd_, pt_ = past.get(k, ('', ''))
-        final_a, final_t = (pd_, pt_) if pd_ else (action, target)
+        final_a, final_t = (pd_, pt_) if pd_ else ('', '')  # only the prune workbook's plan counts; the prune audit owns removals and merges
         depth = str(r.crawl_depth).strip()
         out_pages.append({
             'url': r.url, 'path': k if not isq else re.sub(r'^https?://[^/]+', '', str(r.url)),
@@ -900,6 +922,13 @@ def main():
         pages_linking = sorted(set(srcs.src))
         n_nav = nav[nav.dst.isin(src_keys)].src.nunique()
         n_ft = foot[foot.dst.isin(src_keys)].src.nunique()
+        # every page to edit: body links from each page; a menu or footer link found on 10+ pages is one sitewide place
+        lk = list(pages_linking)
+        if n_nav >= 10: lk.append('Main menu')
+        elif n_nav: lk += sorted(set(nav[nav.dst.isin(src_keys)].src))
+        if n_ft >= 10: lk.append('Footer')
+        elif n_ft: lk += sorted(set(foot[foot.dst.isin(src_keys)].src))
+        inbound.last = sorted(set(lk), key=lambda x: (x not in ('Main menu', 'Footer'), x))
         return len(srcs), len(pages_linking), pages_linking[:5], n_nav, n_ft
     when = {'Remove then Redirect': 'Now', 'Merge then Redirect': 'After merge', 'Prune candidate': 'Now (if pruned)'}
     act = P[P.final_action.isin(when.keys())]
@@ -940,7 +969,8 @@ def main():
                                        (' (from the client redirect list)' if r.origin == 'client list' else ''),
                              'status': int(num(r.status, 301)), 'body_in': n_body, 'in_nav': 'Yes' if n_nav else 'No',
                              'footer_in': 'Sitewide' if n_ft >= 100 else n_ft, 'pages_linking': n_pages,
-                             'examples': ', '.join(ex), 'target_live': 'Yes' if fin in live_keys else 'No',
+                             'examples': ', '.join(ex), 'linkers': ';'.join(inbound.last),
+                             'target_live': 'Yes' if fin in live_keys else 'No',
                              'target_redirected': 'Yes' if fin in being_redirected else 'No', 'self_match': ''})
     broken = sorted(k for k in linked_dsts if 400 <= status_of.get(k, 0) < 500)
     for k in broken:
@@ -949,7 +979,45 @@ def main():
                          'detail': 'Fix or remove the links, or redirect this URL', 'status': status_of.get(k),
                          'body_in': n_body, 'in_nav': 'Yes' if n_nav else 'No',
                          'footer_in': 'Sitewide' if n_ft >= 100 else n_ft, 'pages_linking': n_pages,
-                         'examples': ', '.join(ex), 'target_live': '', 'target_redirected': '', 'self_match': ''})
+                         'examples': ', '.join(ex), 'linkers': ';'.join(inbound.last),
+                         'target_live': '', 'target_redirected': '', 'self_match': ''})
+    # ---------------- moves: blog posts and service pages outside their folder
+    removing_now = set(P[P.final_action.isin(['Remove then Redirect', 'Merge then Redirect'])].key)
+    redirect_src = set(redir.source) | set(planned_targets)
+    move_rows = []
+    for k, t, flag in flags:
+        if flag.startswith('Blog outside') or flag.startswith('Blog with no blog'):
+            kind, folder = 'Blog post', blog_folder or blog_hub
+        elif flag.startswith('Service page outside'):
+            kind, folder = 'Service page', service_folder
+        else:
+            continue
+        if k in removing_now or '?' in k:
+            continue
+        where = f'at the root' if len(segs(k)) == 1 else f'in {"/" + segs(k)[0] + "/"}'
+        if kind == 'Blog post':
+            why = (f'Blog post {where}. Posts belong in {blog_folder}.' if blog_folder else
+                   f'Blog post {where}. The site has no blog folder; {blog_hub} is a listing page, so all posts go under it.'
+                   if blog_hub else f'Blog post {where}. The site has no blog folder, so the SEO picks one.')
+        else:
+            why = f'Service page {where}. Service pages belong in {service_folder}.'
+        new = folder + last_slug(k) + '/' if folder else ''
+        if new and (new in live_keys or new in redirect_src):
+            why += f' {new} already exists or is a redirect source, so the SEO decides the new URL.'
+            new = ''
+        elif not folder:
+            why += ' No folder to move it to was found.'
+        move_rows.append({'old': k, 'new': new, 'type': t, 'why': why})
+    move_map = {m['old']: m['new'] for m in move_rows if m['new']}
+    for m in move_rows:
+        n_body, n_pages, ex, n_nav, n_ft = inbound([m['old']])
+        m['linkers'] = ';'.join(inbound.last)
+        red_rows.append({'kind': 'Moved page still linked', 'source': m['old'], 'target': m['new'], 'when': 'After move',
+                         'detail': 'Change the links on these pages to the new URL', 'status': 200, 'body_in': n_body,
+                         'in_nav': 'Yes' if n_nav else 'No', 'footer_in': 'Sitewide' if n_ft >= 100 else n_ft,
+                         'pages_linking': n_pages, 'examples': ', '.join(ex), 'linkers': m['linkers'],
+                         'target_live': '', 'target_redirected': '', 'self_match': ''})
+    pd.DataFrame(move_rows, columns=['old', 'new', 'type', 'why', 'linkers']).to_csv(os.path.join(A, 'moves.csv'), index=False)
     RD = pd.DataFrame(red_rows)
     RD.to_csv(os.path.join(A, 'redirects.csv'), index=False)
 
@@ -1030,7 +1098,7 @@ def main():
     save_json(os.path.join(A, 'summary.json'), summary)
 
     # ---------------- next steps for the reviewer
-    lines = ['# Review before filling the template', '']
+    lines = ['# Review before building the workbook', '']
     lines.append(f"Live pages: {len(P)}. Types: " + ', '.join(f'{t} {n}' for t, n in P.type.value_counts().items()))
     lines.append(f"Link classes: {prep.get('link_classes')} (Nav share {prep.get('nav_share')})")
     if summary['unclassified']:
@@ -1048,21 +1116,7 @@ def main():
     lines.append(f"\n## Blog folder: {blog_label}; service folder: {service_folder or 'none exists'}")
     if summary['blogs_outside']:
         lines.append(f"{summary['blogs_outside']} blog post(s) sit outside a blog folder. The recommendations must say to move "
-                     f"them all into one dedicated folder with 301s (SKILL.md, Step 6).")
-    if has_gsc:
-        if need_pq:
-            pairs_arg = ','.join(f'{a}:{b}' for a, b in sorted({tuple(sorted(x)) for x in need_pq}))
-            lines.append('\n## Top shared queries\nRun this (it reads the Search Console sheet data already loaded, no '
-                         'Composio), then re-run analyze.py:\n'
-                         f"python $SKILL/scripts/gsc_sheet.py pair-queries --pairs {pairs_arg} --out {os.path.join(W, 'gsc')}")
-    n_check = sum(1 for x in pair_rows if x['verdict'] == 'check')
-    lines.append(f"\n## Duplicate candidates: review/dup_candidates.csv ({len(pair_rows)} pairs; "
-                 f"{len(dup_pairs)} duplicate, {len(city_rows)} city variant, {n_check} check, "
-                 f"{len(pair_rows) - len(dup_pairs) - len(city_rows) - n_check} not)\n"
-                 'Decide every "check" pair (one topic is the other plus words: a product line is a duplicate, '
-                 'a different treatment in the same area is not; a pair you cannot judge from the table is "review"). Confirm every "duplicate" is the same treatment '
-                 'and look down the "not" pairs with high overlap for synonyms (e.g. labiaplasty / labia reduction). '
-                 'Fix with pair_verdicts, topics or synonyms in decisions.json. Unresolved "check" pairs count as not duplicates.')
+                     f"them all into one dedicated folder with 301s (they are on the Moves tab).")
     if orphan_risk:
         lines.append(f'\n## Orphan risk\n{len(orphan_risk)} pages lose all their body links if the suggested removals '
                      f'happen: {", ".join(orphan_risk[:20])}')
