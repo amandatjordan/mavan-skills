@@ -6,7 +6,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | --- | --- | --- |
 | `information-architecture-audit` | Checks the inputs first (preflight), classifies every page, finds duplicate intent, path and link problems, and fills the IA Audit template. Search Console comes from a Google Sheet (GA4 optional, through Composio); when the client has a content prune workbook, flags pages whose types disagree with it | Information Architecture Audit Process |
 | `internal-linking-audit` | From a crawl export and Search Console, lists which pages should link to each priority page (page to edit + page to link to) and builds the implementation sheet | Internal Linking Audit Process |
-| `content-prune-merge` | Runs the Content Prune & Merge audit and fills the Prune & Merge template | Content Prune & Merge |
+| `content-prune-merge` | Runs the Content Prune & Merge audit and delivers a workbook with a Recommendations tab, one tab per issue and a dev redirect CSV tab | Content Prune & Merge |
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
 | `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and lists lost backlinks to win back and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
 | `seo-audit-client-report` | Turns any finished audit's deliverables into a short client report: an at-a-glance table, the biggest themes (why each matters, with examples) and the next steps we will take. Never promises a result | Client report |
