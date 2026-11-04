@@ -65,14 +65,16 @@ Also:
 
 ## Notes
 
-Start with `Suggested because: ` and the fixed sentence for the rule that decided the row, filled in code, then flags joined with `; `. Write your own sentence only on rows marked "judgment".
+Start with `Suggested because: ` and the fixed sentence for the rule that decided the row, filled in code, then flags joined with `; `. Write your own sentence only on rows marked "judgment" (shown in the workbook as "Claude's judgment call, not a fixed rule").
+
+Notes become the workbook's Why column, which the SEO reads on its own. So every sentence says what the rule is in plain words: never a rule number ("rule 7"), never a pointer to another cell or tab to explain it ("the page flagged below"), and the other page named by its URL.
 
 | Rule | Sentence after `Suggested because: ` |
 | --- | --- |
 | 1 | `Not a page for search, so it stays.` |
 | 2, under 2 clicks | `City copy of [URL] with [N] click(s), so it merges into the main-city page.` |
 | 2, 2+ clicks | `City copy of [URL], but it earns [N] clicks of its own.` |
-| 3, keeper | `Strongest page in its topic group; [N] page(s) merge into it.` |
+| 3, keeper | `Strongest page on this topic; [N] page(s) merge into it.` |
 | 3, merged | `Shares [N]% of its impressions with [URL], the page kept for this topic.` |
 | 3, concern into service | `Concern page sharing [N]% of its impressions with service page [URL].` |
 | 4 | `Blog post with 0 clicks and [N] impression(s).` |
@@ -90,9 +92,9 @@ Flag wording the scripts read (copy exactly, filling the brackets):
 - `Already redirected to by [N] old URL(s)`: from the redirects export.
 - `In main menu`: linked from a Nav-class link (menu by CSS/link path, not the crawler's location label). It puts a Merge or Remove row on the Menu cleanup tab; on a Keep row it is plain information.
 
-Other flags (plain words, not read by the scripts): "Only linked from blog pagination", "Canonical points to [URL] which 404s - fix the canonical", "Canonical points to [URL] which redirects back to this page - fix the canonical" (take both from `work/canonical_issues.csv`; the redirect-back case is common after a duplicate slug such as `/page-results/` canonicalizing to `/page-results-2/`), "Uppercase duplicate of [URL]", "If the URL changes, update anything redirecting to it" (every Repurpose row), "No GSC or GA4 data in the window".
+Other flags (plain words, not read by the scripts): "Only linked from blog pagination", "Canonical points to [URL] which 404s - fix the canonical", "Canonical points to [URL] which redirects back to this page - fix the canonical" (take both from `work/canonical_issues.csv`; the redirect-back case is common after a duplicate slug such as `/page-results/` canonicalizing to `/page-results-2/`), "Uppercase duplicate of [URL]", "If the URL changes, update anything redirecting to it" (every Repurpose row), "No Search Console or GA4 data in the window".
 
-Consistency: a Keep row that carries a Competes flag says "kept by default (rule 7), but it overlaps with the page flagged below - review whether both should stay". A keeper says how many pages are suggested to merge or redirect into it. Notes never contradict the suggestion.
+Consistency: a Keep row that shares 30%+ of its searches with another page (where no rule merges the two kinds of page) says so in its Why sentence instead of a Competes flag: `But [N]% of its searches (for example "[query]") also show [URL], and no rule merges these two kinds of page. Check whether both should stay.` The share is measured on the smaller page: when this page is the bigger one, the sentence reads `But [N]% of the searches for [URL] (for example "[query]") also show this page, ...`. A keeper says how many pages are suggested to merge or redirect into it. Notes never contradict the suggestion.
 
 ## Junk folders
 

@@ -456,7 +456,7 @@ class Run:
                 elif o.get('rule') == 6:
                     why[k] = f'Named for a brand or product, but searchers use "{q}".'
                 else:
-                    why[k] = o.get('why', '') + ' (judgment)'
+                    why[k] = o.get('why', '') + " (Claude's judgment call, not a fixed rule)"
         for k in self.audited:
             if k not in step:
                 step[k], why[k] = 'Keep', 'No rule called for a change.'
@@ -518,9 +518,18 @@ class Run:
             best = max(((self.sh(k, x)[0], x) for x in self.audited if x != k and self.group_of.get(x) and
                         (self.group_of.get(x) == self.group_of.get(k) or {T[k], T[x]} == {'Concern / Condition', 'Service'})),
                        default=(0, ''))
+            overlap_note = ''
             if best[0] >= OVERLAP and self.step[k] != 'Merge then Redirect':
                 s, q = self.sh(k, best[1])
-                f.append(f'Competes with {self.full(best[1])} for "{q}" ({s:.0%} shared)')
+                if self.step[k] == 'Keep':  # said in plain words in the Why sentence, so no separate flag
+                    o = self.full(best[1])
+                    # the share is measured on the smaller page, so name that page as the one whose searches overlap
+                    who = ('of its searches', f'also show {o}') if self.gpage.impr.get(k, 0) <= self.gpage.impr.get(best[1], 0) \
+                        else (f'of the searches for {o}', 'also show this page')
+                    overlap_note = (f' But {s:.0%} {who[0]} (for example "{q}") {who[1]}, '
+                                    'and no rule merges these two kinds of page. Check whether both should stay.')
+                else:
+                    f.append(f'Competes with {self.full(best[1])} for "{q}" ({s:.0%} shared)')
             if self.step[k] == 'Merge then Redirect' and k in self.target and 'city copy' not in ' '.join(f):
                 s, q = self.sh(k, self.target[k])
                 if s:
@@ -553,12 +562,11 @@ class Run:
             if self.step[k] == 'Repurpose':
                 f.append('If the URL changes, update anything redirecting to it')
             if k not in self.gpage.index and k not in self.ga4.index:
-                f.append('No GSC or GA4 data in the window')
+                f.append('No Search Console or GA4 data in the window')
             w = self.why[k]
             if merged_into.get(k) and self.step[k] in KEEPISH:
-                w = f'Strongest page in its topic group; {plural(merged_into[k], "page")} merge into it.' if 'No rule' in w else w + f' {plural(merged_into[k], "page")} merge into it.'
-            if self.step[k] == 'Keep' and any(x.startswith('Competes with') for x in f):
-                w += ' Kept by default (rule 7), but it overlaps with the page flagged below - review whether both should stay.'
+                w = f'Strongest page on this topic; {plural(merged_into[k], "page")} merge into it.' if 'No rule' in w else w + f' {plural(merged_into[k], "page")} merge into it.'
+            w += overlap_note
             out[k] = '; '.join(['Suggested because: ' + w] + list(dict.fromkeys(f)))
         self.note = out
 
