@@ -32,7 +32,7 @@ Run this before anything else, and again whenever the person says what they have
 | 6 | GA4 landing pages | Optional | A GA4 landing page file (Sessions, New users, Views, Key events) for the same dates, or nothing: see Step 3 for when GA4 is pulled and when it is skipped. |
 | 7 | Domain | Required | Stated, or readable from the crawl URLs. |
 | 8 | Cities | Required | The main city, and every other city or area the client wants its own pages for. Step 2 checks this list against the URL paths. |
-| 9 | IA audit All Pages tab | Optional | When attached, its page types are used. |
+| 9 | IA audit workbook | Optional | The SEO's working copy (with its Check page type and README tabs), as .xlsx or the Google Sheet link. When attached, everything it decided is treated as approved and not asked or repeated: page types, folder map, cities, menu cleanup and links to fix. Without one, the audit runs as normal. |
 | 10 | Newer copy of the SOP | Optional | When pasted, it wins over references/rules.md and the differences are listed in the report. |
 
 Brand terms are handled in the Search Console export, so never ask for them. A Google Sheet link given with the command is the Search Console data (item 4) when it has Page and Query columns.
@@ -46,6 +46,14 @@ Load every file in code only; never print or paste one into the chat (the links 
 Done when items 1 to 5, 7 and 8 are provided, and you know whether GA4 comes from a file, from Composio, or is skipped.
 
 ## Step 2: Prepare the crawl, map the structure, confirm the cities
+
+**With an IA audit workbook (pre-flight item 9) only:** run it through the IA importer first, before mapping anything:
+
+```
+python $SKILL/scripts/ia_import.py --workbook IA_FILE --domain DOMAIN --out work
+```
+
+It saves the IA's page types (a filled Correct page type, or the guess when that cell is empty, which means the SEO confirmed it), its folder map, its cities, its moves and its menu items into `work/`, and prints the folder map and cities. Everything the IA decided was approved by the SEO: do not ask about it again. In the folder map below, show the IA's folders with their types as settled and ask only about folders the IA did not cover. Use the IA's cities as separate markets; ask only for the main city if pre-flight did not give it. build.py and make_xlsx.py read the saved files on their own.
 
 ```
 python $SKILL/scripts/prep.py --domain DOMAIN --urls URLS.csv --links LINKS.csv --redirects REDIRECTS.csv --out work
@@ -108,7 +116,8 @@ In chat, plain language. The person may not know the workbook's labels: whenever
 - The folder map and city decisions you used, how long the Search Console data covers, and what happened with GA4 (file, pulled, or skipped and why).
 - The junk folders with their wildcards, so the person can change a target.
 - The findings that change the plan: demand with no page (`work/not_in_crawl.tsv`), case duplicates, menu links to redirected URLs (a menu link on every page is one template fix), Needs Discussion items, and the old URLs left with no target (Redirects needing a target tab). Do not mention canonical problems; they live only in the affected page's Why text.
-- Internal links to update (`work/internal_links_to_update.csv`, references/redirects-qa.md): Nav and Footer links first, since one template edit fixes them sitewide. Give it as a separate file when it is long. Case duplicates are in `work/case_duplicates.csv`.
+- Internal links to update (`work/internal_links_to_update.csv`, references/redirects-qa.md): Nav and Footer links first, since one template edit fixes them sitewide. Give it as a separate file when it is long. Leave it out when an IA audit workbook was given: its Fix links tab already covers it. Case duplicates are in `work/case_duplicates.csv`.
+- With an IA audit workbook: the old redirects whose target the IA moves (`ia_moved_targets` in `work/run.json`), so the developer repoints them once the move is live. Merge and Remove rows that collide with an IA move already say so in their Why text.
 - The judgment calls, anything you could not get (no overlap data, missing export columns), and any differences from a pasted SOP.
 - The next human step: QA the tabs in the Recommendations order and fill every SEO fill in cell, then hand off each tab to the owner named on the Recommendations tab.
 
