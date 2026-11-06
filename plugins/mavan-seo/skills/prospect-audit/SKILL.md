@@ -34,7 +34,7 @@ Ask for what is missing in one message (use the AskUserQuestion tool for choices
 
 [references/exports.md](references/exports.md) lists the columns each tool's export has and how the scripts detect the tool.
 
-## Step 0: Confirm the plan
+## Step 0: Confirm the plan, then preflight
 
 Ask in one multiple-choice call, with options built from the person's files and chat: the competitors (offer the domain columns found in the gap export), brand terms (offer candidates from the business name and domain, plus "none"), and practice type. If the practice type is not med spa or plastic surgery, the service gap audit does not apply (its taxonomy covers only those): say so now and skip it.
 
@@ -45,6 +45,15 @@ Write `work/config.json`:
  "competitors": ["rival-one.com", "rival-two.com"],
  "brand_terms": ["example spa"], "practice_type": "medspa"}
 ```
+
+Then run the preflight. It checks every file is there and the right kind (crawl has the needed columns, the ranking and gap exports are Semrush or Ahrefs files with the right fields, the gap export has a position column for the prospect and each competitor) and that the facts above are filled in. Run it again whenever the person adds a file.
+
+```
+python $SKILL/scripts/prep.py preflight --config work/config.json --crawl URLS.csv --ranking RANK.csv --gap GAP.csv \
+  [--backlinks BACKLINKS.csv --backlink-gap BACKLINK_GAP.csv] --out work
+```
+
+Read `work/preflight.md`. If it says NOT READY, send the person **one** message listing each FAIL and exactly which export or answer is needed and where to get it, then stop. Do not build around a missing input. The backlink exports are the only inputs that can be skipped: if they are missing, ask whether to wait or continue without the backlink audit, and note it in the reply. Done when the preflight says READY.
 
 ## Step 1: Keyword exports
 
