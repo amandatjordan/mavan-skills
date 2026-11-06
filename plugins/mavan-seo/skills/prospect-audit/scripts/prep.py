@@ -2,7 +2,7 @@
 
   crawl     Check the crawl is not empty, write work/crawl.csv, and list thin-content candidates.
   keywords  Read the Semrush or Ahrefs ranking-keywords export and keyword-gap export,
-            detect which tool made each, and write work/ranking.csv, work/gap.csv and work/ranking_urls.txt.
+            detect which tool made each, and write work/ranking.csv and work/gap.csv.
 
 Everything here is a count, join or column mapping. Search volume and traffic are the tool's estimates,
 never clicks or impressions.
@@ -176,10 +176,7 @@ def cmd_keywords(a):
         r['norm'] = r['url'].map(norm_url)
         r.to_csv(os.path.join(a.out, 'ranking.csv'), index=False)
         ranking_urls = sorted(r['url'].unique())
-        with open(os.path.join(a.out, 'ranking_urls.txt'), 'w') as f:
-            f.write('\n'.join(ranking_urls) + '\n')
-        print(f'  {len(r):,} ranking keywords on {len(ranking_urls):,} URLs. Add work/ranking_urls.txt (and the sitemap) '
-              'to the crawl as a URL list so old and orphaned URLs are crawled.')
+        print(f'  {len(r):,} ranking keywords on {len(ranking_urls):,} URLs.')
         if len(df) in (1000, 5000, 10000, 20000, 25000, 30000, 50000, 100000):
             print(f'  NOTE: {len(df):,} rows is a round number, so the export may be capped. Pages with more '
                   'keywords than were exported will show fewer tracked keywords.')

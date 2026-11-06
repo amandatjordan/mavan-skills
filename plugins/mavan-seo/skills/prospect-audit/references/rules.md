@@ -40,4 +40,4 @@ Counts live, indexable crawl pages whose URL path, title or H1 contains any of t
 
 ## Ranking URLs not live
 
-A URL with tracked keywords whose crawl status is not 200 (404, redirect or error) or that is not in the crawl at all. "Not in crawl" means the URL list was not added to the crawl, so ask for a re-crawl before claiming the page is gone.
+A URL with tracked keywords whose crawl status is not 200 (404, redirect or error) or that is not in the crawl at all. "Not in crawl" only means the crawl did not find the URL (an old or orphaned page is not reached by following links). It is not proof the page is gone; say it that way.

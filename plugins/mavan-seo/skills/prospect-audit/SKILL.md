@@ -7,7 +7,7 @@ description: Run Mavan's prospect audit for a potential client where Mavan has n
 
 An outside-in audit to support a sales conversation. It finds real, site-specific problems using only what can be collected without access to the site: a crawl and Semrush or Ahrefs exports. It is the prospect version of the site diagnosis flow, with no trend or timing analysis because that needs Search Console.
 
-This skill is the orchestrator. It does three things itself (the competitor keyword gap, a thin content flag, and a check that the URLs ranking in the keyword tool are live in the crawl), then runs four existing skills and delivers one summary. It does not change those skills.
+This skill is the orchestrator. It does three things itself (the competitor keyword gap, a thin content flag, and a check of which URLs ranking in the keyword tool are not live pages in the crawl), then runs four existing skills and delivers one summary. It does not change those skills.
 
 Scripts do every count, join and column mapping; never estimate a number by reading. `$SKILL` below is this skill's folder (the base directory shown when the skill loads; `${CLAUDE_SKILL_DIR}` in Claude Code). Scripts need Python 3 with pandas and openpyxl. Work in a folder named after the prospect with a `work/` subfolder, and keep a task list with one item per step.
 
@@ -26,7 +26,7 @@ Say this in the reply and the workbook's Read Me says it too.
 
 Ask for what is missing in one message (use the AskUserQuestion tool for choices; see Step 0).
 
-1. **Crawl** (Sitebulb or Screaming Frog): the exports the information architecture audit asks for (URL export, all internal links, redirects). Crawl the right URLs: Step 2 gives the URL list to add.
+1. **Crawl** (Sitebulb or Screaming Frog, the site-crawling tools): the exports the information architecture audit asks for (URL export, all internal links, redirects).
 2. **Ranking keywords** from Semrush (Organic Positions) or Ahrefs (Organic Keywords) for the prospect: CSV.
 3. **Keyword gap** from Semrush (Keyword Gap) or Ahrefs (Content Gap) with the prospect and 2-4 competitors: CSV. Use the same tool as the ranking export where possible.
 4. **Optional, for the backlink audit**: the prospect's backlinks (live and lost) and the backlink gap from the same tool (the backlink-audit skill lists which exports). If the person has neither, skip the backlink audit and say so.
@@ -52,13 +52,13 @@ Write `work/config.json`:
 python $SKILL/scripts/prep.py keywords --config work/config.json --ranking RANK.csv --gap GAP.csv --out work
 ```
 
-It prints which tool it detected for each file ("Detected Semrush") and the column mapping. Read the mapping and tell the person which tool it found. If it cannot tell, ask which tool made the file and pass `--tool`. Fix a wrong mapping with `--map ranking.volume="Column name"`; a domain column it missed with `--gap-col "domain.com=Column name"`. It writes `work/ranking.csv`, `work/gap.csv` (searches a competitor ranks for and the prospect does not) and `work/ranking_urls.txt`.
+It prints which tool it detected for each file ("Detected Semrush") and the column mapping. Read the mapping and tell the person which tool it found. If it cannot tell, ask which tool made the file and pass `--tool`. Fix a wrong mapping with `--map ranking.volume="Column name"`; a domain column it missed with `--gap-col "domain.com=Column name"`. It writes `work/ranking.csv` and `work/gap.csv` (searches a competitor ranks for and the prospect does not).
 
 Done when each required field mapped, the prospect and every competitor have a position column, and any NOTE (capped export, mixed tools) is carried into the reply.
 
 ## Step 2: Crawl
 
-Ask the person to crawl with **both** the sitemap and `work/ranking_urls.txt` added as a URL list. A link-only crawl misses orphaned and old pages; on a past engagement most of the visibility sat on old URLs that returned 404. Then they export the crawl files. If they already crawled without the list, say what that means (ranking URLs not in the crawl will show "Not in crawl") and offer to wait for a re-crawl.
+The person crawls the site the usual way and exports the files the information architecture audit asks for. No extra URL file is needed. The catch: a crawl that follows links will not find old or orphaned pages, so a URL that ranks in the keyword tool but is missing from the crawl shows as "Not in crawl" on the Ranking URLs Not Live tab. That means "the crawl did not find it", not "the page is gone"; say so in the reply.
 
 ```
 python $SKILL/scripts/prep.py crawl --crawl URLS.csv --out work
