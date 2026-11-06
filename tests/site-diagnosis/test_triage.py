@@ -142,13 +142,11 @@ class Triage(unittest.TestCase):
         self.assertEqual(nxt["Information architecture audit"], "Yes")
         self.assertEqual(nxt["Service gap audit"], "Ask the person")
 
-    def test_url_list_and_no_crawl(self):
+    def test_no_crawl_and_no_url_list(self):
         self.build()
         n = self.sheet("What to run next")
         self.assertEqual(dict(zip(n[0], n[3]))["Information architecture audit"], "Ask the person")
-        urls = Path(str(self.out)[:-5] + " URLs to crawl.txt").read_text().split()
-        self.assertEqual(len(urls), 6)  # 6 distinct pages across both periods
-        self.assertIn(SITE + "/journal/old-post/", urls)
+        self.assertEqual([f.name for f in self.out.parent.glob("*.txt")], [])  # no URL list is written
 
     def test_same_tab_and_bad_dates_stop(self):
         args = list(self.args)
