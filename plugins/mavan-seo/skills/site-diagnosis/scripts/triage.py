@@ -22,7 +22,6 @@ Console withholds rare queries from page + query exports. They can be lower than
 """
 import argparse
 import csv
-import os
 import re
 import sys
 from collections import defaultdict
@@ -130,7 +129,7 @@ def pick_tab(tabs, tab, path):
 
 def load_period(path, tab, domain, brand):
     """-> DataFrame [page, query, clicks, impr, pos, brand] with page keys normalized and one row per
-    (page, query); also the original page URLs seen."""
+    (page, query); also the pages on other domains and the tab used."""
     tabs = read_tabs(path)
     use = pick_tab(tabs, tab, path)
     df = pd.DataFrame(tabs[use], columns=['raw', 'query', 'clicks', 'impr', 'pos'])
@@ -143,9 +142,8 @@ def load_period(path, tab, domain, brand):
     g['pos'] = (g['pw'] / g['pi']).where(g['pi'] > 0)
     g['brand'] = g['query'].map(lambda q: any(t in q for t in brand))
     g = g.drop(columns=['pw', 'pi'])
-    originals = sorted(df.drop_duplicates('page').set_index('page')['raw'].to_dict().values())
     foreign = sorted({p for p in g['page'] if p.startswith('https://')})
-    return g, originals, foreign, use
+    return g, foreign, use
 
 
 def load_crawl(path, domain):
@@ -262,6 +260,9 @@ def competing(a, b, min_impr, include_brand):
 
 # ---------------------------------------------------------------- commands
 def parse_brand(s):
+    """'none' (the person said not to filter) and an empty value both mean no brand terms."""
+    if (s or '').strip().lower() == 'none':
+        return []
     return [t.strip().lower() for t in (s or '').split(',') if t.strip()]
 
 
@@ -270,13 +271,13 @@ def periods(a):
     brand = parse_brand(a.brand)
     pa = load_period(a.a, a.a_tab, domain, brand)
     pb = load_period(a.b, a.b_tab, domain, brand)
-    if a.a == a.b and pa[3] == pb[3]:
+    if a.a == a.b and pa[2] == pb[2]:
         sys.exit('Period A and period B point at the same tab. Each period needs its own sheet or tab.')
     return domain, brand, pa, pb
 
 
 def cmd_profile(a):
-    domain, brand, (A, oa, fa, ta), (B, ob, fb, tb) = periods(a)
+    domain, brand, (A, fa, ta), (B, fb, tb) = periods(a)
     print(f'Domain: {domain}   brand terms used: {brand or "none"}')
     for tag, df, tab, fo in (('A', A, ta, fa), ('B', B, tb, fb)):
         nb = df[~df['brand']]
@@ -308,7 +309,7 @@ def r0(x):
     return round(float(x), 1) if x == x and x is not None else ''
 
 
-def write_workbook(a, domain, brand, A, B, crawl, originals):
+def write_workbook(a, domain, brand, A, B, crawl):
     ta, tb = totals(A), totals(B)
     pg = by_page(A, B)
     sr = by_search(A, B)
@@ -351,8 +352,8 @@ def write_workbook(a, domain, brand, A, B, crawl, originals):
         notes.append(['No crawl was supplied, so the status of each URL is not known. The Pages tab lists the losing '
                       'URLs; check each one returns 200.'])
     else:
-        notes.append(['"Not in crawl" means the URL was not in the crawl export. That is not proof it is dead: a crawl '
-                      'that started from the sitemap misses old URLs. Crawl the Search Console URLs as a URL list to settle it.'])
+        notes.append(['"Not in crawl" means the crawler did not reach the URL: it is not linked from the site and not in the '
+                      'sitemap. That is not proof it is dead; check it returns 200.'])
     sheets['Summary'] = (rows, status_rows, notes)
 
     # ---- Pages
@@ -510,14 +511,9 @@ def write_workbook(a, domain, brand, A, B, crawl, originals):
                 for c in row:
                     c.alignment = Alignment(wrap_text=True, vertical='top')
     wb.save(a.out)
-
-    # URL list for crawling: every Search Console URL with impressions, as exported
-    url_path = os.path.splitext(a.out)[0] + ' URLs to crawl.txt'
-    with open(url_path, 'w', encoding='utf-8') as fh:
-        fh.write('\n'.join(originals) + '\n')
     return {'summary_a': ta, 'summary_b': tb, 'pages_loss': len(pgl), 'pages_gain': len(pgg),
             'searches_loss': len(srl), 'searches_gain': len(srg), 'competing_queries': n_comp,
-            'competing_a': n_comp_a, 'competing_b': n_comp_b, 'url_list': url_path,
+            'competing_a': n_comp_a, 'competing_b': n_comp_b,
             'next': {r[0]: r[3] for r in nxt[1:]}}
 
 
@@ -529,10 +525,9 @@ def cmd_build(a):
         sys.exit('A period starts after it ends.')
     if a.a_start >= a.b_start:
         sys.exit('Period A must start before period B (A is the earlier period). Swap the sheets or dates.')
-    domain, brand, (A, oa, fa, ta_), (B, ob, fb, tb_) = periods(a)
+    domain, brand, (A, fa, ta_), (B, fb, tb_) = periods(a)
     crawl = load_crawl(a.crawl, domain) if a.crawl else None
-    originals = sorted({normalize(u, domain): u for u in oa + ob}.values())
-    res = write_workbook(a, domain, brand, A, B, crawl, originals)
+    res = write_workbook(a, domain, brand, A, B, crawl)
     for tag, f in (('A', fa), ('B', fb)):
         if f:
             print(f'WARNING: period {tag} has {len(f)} pages not on {domain}, kept under their full URL.')
@@ -545,7 +540,7 @@ def cmd_build(a):
           f'{res["searches_gain"]} gains listed.')
     print(f'Competing searches: {res["competing_queries"]} ({res["competing_a"]} in A, {res["competing_b"]} in B).')
     print(f'Next-step suggestions: {res["next"]}')
-    print(f'Wrote {a.out} and {res["url_list"]}')
+    print(f'Wrote {a.out}')
 
 
 def main():

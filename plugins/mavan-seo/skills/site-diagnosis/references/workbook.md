@@ -11,6 +11,4 @@ Written by `triage.py build`. Claude does not write or reword workbook text. Cha
 | Competing pages | Non-brand searches where two or more pages each have at least the confirmed minimum impressions, in period A, period B or both. Each page's impressions, clicks and average position for each period. The most impressions first, capped at Top N searches; the note above the table gives the full count. |
 | What to run next | Content Prune & Merge, Information architecture audit, Backlink audit, Service gap audit: the evidence, the rule that was confirmed with the person, and Yes / No / Ask the person. |
 
-Also written beside it: `... URLs to crawl.txt`, every Search Console URL (as exported, one per line) for use as a URL list in a crawl.
-
 Average position is impression-weighted across the rows listed. A page's or search's numbers are the sum of its listed page + query rows, so they can be lower than the Performance report.
