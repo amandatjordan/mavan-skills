@@ -141,6 +141,30 @@ class Pipeline(unittest.TestCase):
         wb = self.full_run('ahrefs')
         self.assertIn('Competitor Keyword Gap', wb.sheetnames)
 
+    def preflight(self, **files):
+        args = ['preflight', '--config', self.work / 'config.json', '--out', self.work]
+        for k, v in files.items():
+            args += [f'--{k.replace("_", "-")}', v]
+        return run('prep.py', *args, check=False)
+
+    def test_preflight_ready_and_not_ready(self):
+        cfg = json.loads((self.work / 'config.json').read_text())
+        cfg.update({'brand_terms': ['example spa'], 'practice_type': 'medspa'})
+        (self.work / 'config.json').write_text(json.dumps(cfg))
+        write_csv(self.root / 'crawl.csv', CRAWL_HEAD, crawl_rows())
+        write_csv(self.root / 'rank.csv', SEMRUSH_RANK, [['botox', 4, 5, 8100, 40, 2, f'https://{PROSPECT}/botox/', 300, '1.2', 500]])
+        write_csv(self.root / 'gap.csv', SEMRUSH_GAP, [[k, a, b, c, v, 40, 2, 0.5] for k, a, b, c, v in GAP])
+        ok = self.preflight(crawl=self.root / 'crawl.csv', ranking=self.root / 'rank.csv', gap=self.root / 'gap.csv')
+        self.assertEqual(ok.returncode, 0, ok.stdout)
+        self.assertIn('READY', ok.stdout)
+        self.assertIn('SKIP', ok.stdout)  # backlink exports are optional
+        # the ranking file passed as the gap file, and no crawl
+        bad = self.preflight(ranking=self.root / 'rank.csv', gap=self.root / 'rank.csv')
+        self.assertEqual(bad.returncode, 2)
+        self.assertIn('NOT READY', bad.stdout)
+        self.assertIn('Crawl URL export', bad.stdout)
+        self.assertIn('Keyword gap export', bad.stdout)
+
     def test_unknown_tool_stops(self):
         self.crawl()
         write_csv(self.root / 'rank.csv', ['Keyword', 'Position', 'URL', 'Search Volume', 'Volume'], [['a', 1, 'https://x.com/', 10, 10]])

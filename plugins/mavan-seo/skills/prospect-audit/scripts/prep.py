@@ -1,6 +1,7 @@
-"""Prospect audit prep. Two commands:
+"""Prospect audit prep. Three commands:
 
   crawl     Check the crawl is not empty, write work/crawl.csv, and list thin-content candidates.
+  preflight Check every input is present and the right kind, before any work.
   keywords  Read the Semrush or Ahrefs ranking-keywords export and keyword-gap export,
             detect which tool made each, and write work/ranking.csv and work/gap.csv.
 
@@ -228,6 +229,109 @@ def cmd_keywords(a):
     print('PASS keywords')
 
 
+# ---------------------------------------------------------------- preflight
+
+def cmd_preflight(a):
+    """Check every input exists and is the right kind before any work. Writes work/preflight.md."""
+    os.makedirs(a.out, exist_ok=True)
+    cfg = load_json(a.config, {}) if a.config and os.path.exists(a.config) else {}
+    rows = []  # (level, item, detail)
+
+    def add(level, item, detail):
+        rows.append((level, item, detail))
+
+    def load(path, item, required):
+        if not path:
+            add('FAIL' if required else 'SKIP', item, 'not provided' if required else 'not provided (optional)')
+            return None
+        if not os.path.exists(path):
+            add('FAIL', item, f'file not found: {path}')
+            return None
+        try:
+            return clean_headers(read_any(path))
+        except Exception as e:  # unreadable file
+            add('FAIL', item, f'could not be read as a table ({e})')
+            return None
+
+    def missing(df, spec):
+        return [f for f, (al, req) in spec.items() if req and not pick(df, al)]
+
+    df = load(a.crawl, 'Crawl URL export', True)
+    if df is not None:
+        miss = missing(df, CRAWL_SPEC)
+        if miss:
+            add('FAIL', 'Crawl URL export', f'missing columns for: {", ".join(miss)}. Columns found: {list(df.columns)[:12]}. '
+                'Needs URL, status code, title, H1 and content words (Sitebulb URL Explorer > Internal > HTML, or Screaming Frog Internal > HTML).')
+        else:
+            add('OK', 'Crawl URL export', f'{len(df):,} rows')
+
+    df = load(a.ranking, 'Ranking keywords export (prospect)', True)
+    if df is not None:
+        try:
+            tool = a.tool or detect_tool(df, 'ranking keywords export')
+        except SystemExit as e:
+            add('FAIL', 'Ranking keywords export (prospect)', str(e))
+        else:
+            miss = missing(df, RANKING_SPEC)
+            if miss:
+                add('FAIL', 'Ranking keywords export (prospect)', f'{tool.capitalize()} file but no column for: {", ".join(miss)}. '
+                    'Needs one row per keyword with keyword, position, URL and volume (Semrush Organic Positions, Ahrefs Organic Keywords).')
+            else:
+                add('OK', 'Ranking keywords export (prospect)', f'{tool.capitalize()}, {len(df):,} rows')
+
+    df = load(a.gap, 'Keyword gap export', True)
+    if df is not None:
+        try:
+            tool = a.tool or detect_tool(df, 'keyword gap export')
+        except SystemExit as e:
+            add('FAIL', 'Keyword gap export', str(e))
+        else:
+            miss = missing(df, GAP_SPEC)
+            doms = domain_columns(df, {pick(df, al) for al, _ in GAP_SPEC.values() if pick(df, al)})
+            prospect = bare_domain(cfg.get('domain', ''))
+            comps = [bare_domain(c) for c in cfg.get('competitors', [])]
+            problems = []
+            if miss:
+                problems.append(f'no column for: {", ".join(miss)}')
+            if prospect and prospect not in doms:
+                problems.append(f'no position column for the prospect {prospect}')
+            problems += [f'no position column for competitor {c}' for c in comps if c not in doms]
+            if len(doms) < 2:
+                problems.append(f'fewer than 2 domain columns found ({sorted(doms)}); this may be a ranking export, not a keyword gap')
+            if problems:
+                add('FAIL', 'Keyword gap export', f'{tool.capitalize()} file: ' + '; '.join(problems) + f'. Domain columns found: {sorted(doms)}.')
+            else:
+                add('OK', 'Keyword gap export', f'{tool.capitalize()}, {len(df):,} rows, domains: {", ".join(sorted(doms))}')
+
+    for path, item in ((a.backlinks, 'Backlinks export (optional)'), (a.backlink_gap, 'Backlink gap export (optional)')):
+        if not path:
+            add('SKIP', item, 'not provided: the backlink audit will be skipped')
+        elif not os.path.exists(path):
+            add('FAIL', item, f'file not found: {path}')
+        else:
+            add('OK', item, 'attached; the backlink audit checks its columns')
+
+    for key, label in (('client', 'Prospect name'), ('domain', 'Prospect domain'), ('competitors', 'Competitors (2-4)'),
+                       ('brand_terms', 'Brand terms'), ('practice_type', 'Practice type')):
+        v = cfg.get(key)
+        if not v:
+            add('FAIL', label, 'not in config.json: ask the person')
+        elif key == 'competitors' and not 2 <= len(v) <= 4:
+            add('FAIL', label, f'{len(v)} given; the audit needs 2 to 4')
+        else:
+            add('OK', label, ', '.join(v) if isinstance(v, list) else str(v))
+
+    fails = [r for r in rows if r[0] == 'FAIL']
+    lines = ['# Preflight', '', '| Result | Item | Detail |', '| --- | --- | --- |'] + [f'| {l} | {i} | {d} |' for l, i, d in rows]
+    lines += ['', 'NOT READY' if fails else 'READY']
+    text = '\n'.join(lines)
+    with open(os.path.join(a.out, 'preflight.md'), 'w') as f:
+        f.write(text + '\n')
+    print(text)
+    if fails:
+        sys.exit(2)
+
+
 def parse_map(items):
     out = {}
     for it in items or []:
@@ -251,9 +355,18 @@ def main():
     k.add_argument('--out', default='work')
     k.add_argument('--map', action='append', help='ranking.FIELD or gap.FIELD="Column name"')
     k.add_argument('--gap-col', action='append', help='domain.com="Column name" for a position column')
+    p = sub.add_parser('preflight')
+    p.add_argument('--config')
+    p.add_argument('--crawl')
+    p.add_argument('--ranking')
+    p.add_argument('--gap')
+    p.add_argument('--backlinks')
+    p.add_argument('--backlink-gap')
+    p.add_argument('--tool', choices=['semrush', 'ahrefs'])
+    p.add_argument('--out', default='work')
     a = ap.parse_args()
-    a.overrides = parse_map(a.map)
-    {'crawl': cmd_crawl, 'keywords': cmd_keywords}[a.cmd](a)
+    a.overrides = parse_map(getattr(a, 'map', None))
+    {'crawl': cmd_crawl, 'keywords': cmd_keywords, 'preflight': cmd_preflight}[a.cmd](a)
 
 
 if __name__ == '__main__':
