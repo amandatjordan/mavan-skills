@@ -265,9 +265,14 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .metric li:before{content:"";position:absolute;left:4px;top:8px;width:9px;height:9px;border-radius:50%}
 .metric li.issue:before{background:var(--bad)}.metric li.ok:before{background:var(--good)}
 .metric.lead{border:2px solid var(--accent)}
-.svc{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-.svc th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 4px}
-.svc td{border-bottom:1px solid var(--line);padding:6px 4px}.svc td.num{text-align:right}.svc th.num{text-align:right}
+.svc-cap{margin:14px 0 4px;font-size:12px;font-weight:600;color:var(--muted)}
+.svc{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.svc th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 4px;
+vertical-align:bottom}
+.svc td{border-bottom:1px solid var(--line);padding:6px 4px;overflow-wrap:anywhere;vertical-align:top}
+.svc .num{text-align:center}.svc td.num{white-space:nowrap}.svc .comp{color:var(--muted);font-size:12px;padding-left:10px}
+.svc .c-svc{width:30%}.svc .c-num{width:18%}.svc .c-comp{width:34%}
+@media (max-width:560px){.svc .comp{display:none}.svc .c-svc{width:44%}.svc .c-num{width:28%}}
 .road-intro{margin:0 0 14px;color:#344054}
 .road{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;position:relative}
 .col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;position:relative}
@@ -357,10 +362,13 @@ def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
         if k == 'Content':
             svc = [x for x in d.get('services', []) if x.get('lost')][:4]
             if svc:
-                extra = ('<table class="svc"><tr><th>Service</th><th class="num">Your page-one rankings</th>'
-                         '<th class="num">Top competitor\'s</th><th>Top competitor</th></tr>' +
+                extra = ('<div class="svc-cap">Page-one rankings by service</div>'
+                         '<table class="svc">'
+                         '<tr><th class="c-svc">Service</th><th class="num c-num">Your Rankings</th>'
+                         '<th class="num c-num">Competitor\'s</th><th class="comp c-comp">Competitor</th></tr>' +
                          ''.join(f'<tr><td>{esc(x["service"])}</td><td class="num">{n(x["prospect_top10"])}</td>'
-                                 f'<td class="num">{n(x["competitor_top10"])}</td><td>{esc(x["top_competitor"])}</td></tr>'
+                                 f'<td class="num">{n(x["competitor_top10"])}</td>'
+                                 f'<td class="comp">{esc(x["top_competitor"])}</td></tr>'
                                  for x in svc) + '</table>')
         metric_cards += (f'<div class="card metric{" lead" if k == verdict else ""}"><h4>{esc(LENS_NAME[k])}'
                          f'<span class="pill {b[1]}">{"" if s is None else str(s) + " · "}{esc(b[0])}</span></h4>'
@@ -430,25 +438,126 @@ the tool's estimates. Scores show where the site stands today, not a forecast of
 </div></body></html>"""
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--diagnosis', required=True, help='diagnosis.json from the prospect-diagnosis skill')
-    ap.add_argument('--tier', required=True, choices=sorted(TIER_COL))
-    ap.add_argument('--gbp', help='optional Google Business Profile JSON: {"score": 0-100, "findings": [{"text", "issue"}]}')
-    ap.add_argument('--verdict', choices=['architecture', 'content', 'authority', 'maps'],
-                    help='override the verdict (only when the person says so, e.g. maps after the manual GBP check)')
-    ap.add_argument('--prepared-by', default='Mavan')
-    ap.add_argument('--date', default=date.today().strftime('%B %-d, %Y'))
-    ap.add_argument('--out', required=True)
-    a = ap.parse_args()
+DIAG_TABS = {'Read Me', 'Verdict', 'Signals'}
 
-    d = json.load(open(a.diagnosis))
-    maps = json.load(open(a.gbp)) if a.gbp else None
+
+def run_checks(a):
+    """Inputs check shared by preflight and build. Returns (rows, diagnosis dict or None, gbp dict or None)."""
+    rows = []
+
+    def add(level, item, detail):
+        rows.append((level, item, detail))
+
+    d = maps = None
+    wb_prospect = wb_lead = None
+    if not a.workbook:
+        add('FAIL', 'Prospect diagnosis spreadsheet', 'not provided: run the prospect-diagnosis skill and pass its .xlsx')
+    elif not os.path.exists(a.workbook):
+        add('FAIL', 'Prospect diagnosis spreadsheet', f'file not found: {a.workbook}')
+    else:
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(a.workbook, read_only=True)
+            missing = DIAG_TABS - set(wb.sheetnames)
+            if missing:
+                add('FAIL', 'Prospect diagnosis spreadsheet', f'not a prospect diagnosis workbook (missing tabs: '
+                    f'{", ".join(sorted(missing))})')
+            else:
+                for r in wb['Read Me'].iter_rows(values_only=True):
+                    if r and r[0] == 'Prospect':
+                        wb_prospect = str(r[1] or '')
+                wb_lead = sorted(str(r[0]) for r in list(wb['Verdict'].iter_rows(values_only=True))[1:]
+                                 if r and len(r) > 4 and r[4] == 'Yes')
+                add('OK', 'Prospect diagnosis spreadsheet', f'{os.path.basename(a.workbook)} ({wb_prospect})')
+        except Exception as e:  # noqa: BLE001 - report any unreadable file as a FAIL
+            add('FAIL', 'Prospect diagnosis spreadsheet', f'cannot open: {e}')
+
+    jpath = a.diagnosis or (os.path.join(os.path.dirname(os.path.abspath(a.workbook)), 'diagnosis.json')
+                            if a.workbook else None)
+    if not jpath or not os.path.exists(jpath):
+        add('FAIL', 'diagnosis.json', f'not found{" at " + jpath if jpath else ""}: re-run prospect-diagnosis '
+            '(it writes diagnosis.json next to the workbook) or pass --diagnosis')
+    else:
+        try:
+            d = json.load(open(jpath))
+            lenses = {v['lens'] for v in d.get('lenses', [])}
+            if not {'Architecture', 'Content', 'Authority'} <= lenses or not d.get('signals') or not d.get('domain'):
+                add('FAIL', 'diagnosis.json', 'missing lenses, signals or domain: re-run prospect-diagnosis')
+                d = None
+            elif wb_prospect is not None and d['domain'] not in wb_prospect:
+                add('FAIL', 'diagnosis.json', f'is for {d["domain"]} but the spreadsheet is for {wb_prospect}: '
+                    'use the pair from the same run')
+                d = None
+            elif wb_lead is not None and sorted(d.get('lead', [])) != wb_lead:
+                add('FAIL', 'diagnosis.json', 'its lead issue differs from the spreadsheet: they are from different runs. '
+                    'Re-run prospect-diagnosis')
+                d = None
+            else:
+                add('OK', 'diagnosis.json', f'{d["domain"]}, generated {d.get("generated", "?")}')
+        except (ValueError, KeyError) as e:
+            add('FAIL', 'diagnosis.json', f'cannot read: {e}')
+            d = None
+
+    if not a.tier:
+        add('FAIL', 'Proposed plan level', 'not given: ask which plan is being proposed (Starter, VIP or Signature) '
+            'and pass --tier')
+    else:
+        add('OK', 'Proposed plan level', TIER_NAME[a.tier])
+
+    if a.gbp:
+        try:
+            maps = json.load(open(a.gbp))
+            sc = maps.get('score')
+            if sc is not None and not (isinstance(sc, (int, float)) and 0 <= sc <= 100):
+                raise ValueError('score must be a number from 0 to 100')
+            if not isinstance(maps.get('findings', []), list):
+                raise ValueError('findings must be a list')
+            add('OK', 'Google Business Profile data', f'score {sc if sc is not None else "not given"}, '
+                f'{len(maps.get("findings", []))} findings')
+        except (OSError, ValueError, AttributeError) as e:
+            add('FAIL', 'Google Business Profile data', f'{a.gbp}: {e}')
+            maps = None
+    else:
+        add('WARN', 'Google Business Profile data', 'not provided: Google Maps shows as "Checked separately" and is '
+            'left out of the overall score')
+
+    if d is not None:
+        override = a.verdict.capitalize() if a.verdict else None
+        verdict, why = pick_verdict(d['lenses'], override)
+        if verdict is None:
+            add('FAIL', 'Verdict', 'no lens scored an issue: ask the person which track to show and pass --verdict')
+        else:
+            add('OK', 'Verdict', f'{LENS_NAME[verdict]} ({why})')
+            if a.tier:
+                _, _, missing = roadmap(TRACK_FOR[verdict], a.tier, load_labels())
+                add('FAIL' if missing else 'OK', 'Roadmap task labels',
+                    f'no client label for: {", ".join(missing)} (add to references/task_labels.json)' if missing
+                    else f'{TRACK_FOR[verdict]} track, {TIER_NAME[a.tier]} plan')
+    return rows, d, maps
+
+
+def cmd_preflight(a):
+    rows, _, _ = run_checks(a)
+    ready = not any(r[0] == 'FAIL' for r in rows)
+    lines = ['# Preflight', '', '| Result | Item | Detail |', '| --- | --- | --- |']
+    lines += [f'| {r[0]} | {r[1]} | {r[2]} |' for r in rows] + ['', 'READY' if ready else 'NOT READY']
+    text = '\n'.join(lines) + '\n'
+    os.makedirs(a.out, exist_ok=True)
+    open(os.path.join(a.out, 'preflight.md'), 'w').write(text)
+    print(text)
+    sys.exit(0 if ready else 2)
+
+
+def cmd_build(a):
+    rows, d, maps = run_checks(a)
+    fails = [r for r in rows if r[0] == 'FAIL']
+    if fails:
+        for r in fails:
+            print(f'FAIL {r[1]}: {r[2]}')
+        print('NOT READY: run preflight and fix the FAIL lines first.')
+        sys.exit(2)
     override = a.verdict.capitalize() if a.verdict else None
     verdict, why = pick_verdict(d['lenses'], override)
-    if verdict is None:
-        print('STOP: no lens scored an issue, so there is no verdict. Ask the person which track to show and pass --verdict.')
-        sys.exit(2)
     labels = load_labels()
     months, recurring, missing = roadmap(TRACK_FOR[verdict], a.tier, labels)
     page = render(d, verdict, a.tier, months, recurring, maps, a.prepared_by, a.date)
@@ -472,6 +581,27 @@ def main():
     if not all(checks):
         sys.exit(1)
     print('All checks passed')
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    for name in ('preflight', 'build'):
+        p = sub.add_parser(name)
+        p.add_argument('--workbook', help='the prospect diagnosis spreadsheet (.xlsx) from prospect-diagnosis')
+        p.add_argument('--diagnosis', help='diagnosis.json (default: next to the workbook)')
+        p.add_argument('--tier', choices=sorted(TIER_COL), help='proposed plan level')
+        p.add_argument('--gbp', help='optional Google Business Profile JSON: {"score": 0-100, "findings": [{"text", "issue"}]}')
+        p.add_argument('--verdict', choices=['architecture', 'content', 'authority', 'maps'],
+                       help='override the verdict (only when the person says so, e.g. maps after the manual GBP check)')
+        if name == 'preflight':
+            p.add_argument('--out', default='work')
+        else:
+            p.add_argument('--prepared-by', default='Mavan')
+            p.add_argument('--date', default=date.today().strftime('%B %-d, %Y'))
+            p.add_argument('--out', required=True)
+    a = ap.parse_args()
+    (cmd_preflight if a.cmd == 'preflight' else cmd_build)(a)
 
 
 if __name__ == '__main__':

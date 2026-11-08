@@ -14,13 +14,17 @@ One page sales screen-shares or sends after the call. In this order:
 
 It reads `diagnosis.json` from the `prospect-diagnosis` skill, the bundled client tracks and task labels, and optional Google Business Profile data. **Never visit the live site.** Every number comes from `diagnosis.json`; the script writes all the wording and picks the verdict, so never write or reword findings or change the verdict by hand. Use no tool, dependency or extra step beyond those named here without asking the person and explaining why.
 
-`$SKILL` below is this skill's folder (the base directory shown when the skill loads). Python 3, standard library only.
+`$SKILL` below is this skill's folder (the base directory shown when the skill loads). Python 3 with openpyxl (to read the diagnosis spreadsheet).
 
 ## What you need
 
-- **`diagnosis.json`** from `prospect-diagnosis` for this prospect. If there is none, run that skill first (its inputs: crawl, ranking keywords, keyword gap, authority overview figures, service terms).
-- **Tier**: Starter, VIP or Signature. Ask with one multiple-choice question if the person has not said. Tasks not in that tier are dropped; hours are never shown.
-- **Google Business Profile data** (optional, not defined yet): without it, Google Maps shows as "Checked separately" and is left out of the overall score. When it exists it is a JSON file: `{"score": 0-100, "findings": [{"text": "...", "issue": true}]}`, and it is added to the overall score and gets its own card. The Maps track is never picked automatically.
+Step 1 checks all of this. Ask for what is missing in **one** message.
+
+| Input | Required? | Notes |
+| --- | --- | --- |
+| Prospect diagnosis spreadsheet | Required | The `.xlsx` from `prospect-diagnosis` for this prospect. Its `diagnosis.json` must sit next to it (the diagnosis writes both); pass `--diagnosis` if it was moved. The preflight checks the two are for the same prospect and the same run. If there is no diagnosis yet, run that skill first |
+| Proposed plan level | Required | Starter, VIP or Signature: the plan sales is proposing. Ask with one multiple-choice question if the person has not said. Tasks not in that plan are dropped; hours are never shown |
+| Google Business Profile data | Optional (not defined yet) | Without it, Google Maps shows as "Checked separately" and is left out of the overall score. When it exists it is a JSON file: `{"score": 0-100, "findings": [{"text": "...", "issue": true}]}`; it is added to the overall score and gets its own card. The Maps track is never picked automatically |
 
 ## Rules the script applies
 
@@ -30,20 +34,28 @@ It reads `diagnosis.json` from the `prospect-diagnosis` skill, the bundled clien
 - **Roadmap**: the track for the verdict (Site Architecture, Poor Content, or Authority & Trust) from `references/tracks.csv`. Onboarding first, then months 1-3. Monthly AM/PM, reporting, GBP posts, GMB audit, Text/GHL and front desk go in one "Every month" band. "DO FIRST" shows as "Start here"; "BLOCKED BY" shows as "After: <task>". Task names show as the client labels in `references/task_labels.json`.
 - **Copy**: written for a business owner, no signal codes, tool jargon or keyword volumes, no promised results.
 
-## Step 1: Build
+## Step 1: Preflight
 
 ```
-python $SKILL/scripts/report.py --diagnosis work/diagnosis.json --tier vip [--gbp gbp.json] \
+python $SKILL/scripts/report.py preflight --workbook "work/PROSPECT Prospect Diagnosis.xlsx" --tier vip [--gbp gbp.json] --out work
+```
+
+Read `work/preflight.md`. On NOT READY, send **one** message listing each FAIL and exactly what is needed (the diagnosis spreadsheet, a matching `diagnosis.json`, the proposed plan level, a valid GBP file, or which track to show when no lens scored an issue), then stop. Mention each WARN in the reply. Done when it says READY.
+
+## Step 2: Build
+
+```
+python $SKILL/scripts/report.py build --workbook "work/PROSPECT Prospect Diagnosis.xlsx" --tier vip [--gbp gbp.json] \
   --out "work/PROSPECT Site Health Report.html"
 ```
 
-Done when it prints "All checks passed". On "every task has a client label: FAIL", add the listed tasks to `task_labels.json` (title and one plain line) in a pull request; do not ship a page with raw task names.
+The build runs the same checks and refuses to write a page while any fails. Done when it prints "All checks passed". On "every task has a client label: FAIL", add the listed tasks to `task_labels.json` (title and one plain line) in a pull request; do not ship a page with raw task names.
 
-## Step 2: Look at it
+## Step 3: Look at it
 
-Open the page rendered (a headless browser screenshot, or the published page) and check: the verdict card names the verdict the script printed; the scores add up (overall = average of the scored metrics); the roadmap shows only the verdict's track; nothing overlaps or is cut off. Read every finding once against the diagnosis Signals tab.
+Open the page rendered (a headless browser screenshot at desktop and phone widths, or the published page) and check: the verdict card names the verdict the script printed; the scores add up (overall = average of the scored metrics); the roadmap shows only the verdict's track; nothing overlaps or is cut off. Read every finding once against the diagnosis Signals tab.
 
-## Step 3: Deliver
+## Step 4: Deliver
 
 Publish the HTML file as an artifact (a private page sales can share), or send the file when no artifact tool is available. Reply in a few lines: the verdict and why (the rule the script printed), the overall score, the tier shown, whether Google Maps was included, and anything overridden.
 
