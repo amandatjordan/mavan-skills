@@ -60,12 +60,9 @@ L_LIKELY = "Likely offered (mentioned on site), no page"
 L_BRAND = "Only has a brand/product page"
 L_SUBS = "Only has Sub-Service pages"
 L_BLOG = "Only covered in blog posts"
-L_KEYWORDS = "Missing relevant keywords"
 L_CONFIRM = "Confirm with client (parent Service offered)"
-LABELS = [L_NOIDX, L_GALLERY, L_CONCERN, L_LIKELY, L_BRAND, L_SUBS, L_BLOG, L_KEYWORDS, L_CONFIRM]  # Why Recommended, in sort order
+LABELS = [L_NOIDX, L_GALLERY, L_CONCERN, L_LIKELY, L_BRAND, L_SUBS, L_BLOG, L_CONFIRM]  # Why Recommended, in sort order
 NEXT_STEPS = ["Create new page", "Update page", "Fix indexability", "Add section to existing page", "Merge / redirect", "Ignore"]
-MISSING_KW_SHARE = 0.5   # share of a page's relevant-keyword volume not found in its title, H1, H2s or meta description
-KW_SKIP_WORDS = {"near", "me", "in", "for", "the", "of", "a", "an", "and", "to", "best"}  # ignored when matching keywords to page text
 
 ARIAL = Font(name="Arial", size=10)
 HEAD = Font(name="Arial", size=10, bold=True, color="FFFFFF")
@@ -379,7 +376,6 @@ PRIORITY = {  # gap type: (High, Medium, Low / No data)
     "No Service page (brand pages only)": ("P2", "P3", "P3"),
     "Missing page (blog only)": ("P2", "P3", "P3"),
     "Section, no page": ("P3", "P3", "P3"),
-    "Missing relevant keywords": ("P2", "P3", "P3"),
     "Confirm Sub-Service, then page": ("P2", None, None),
 }
 
@@ -525,19 +521,6 @@ def cmd_build(a):
             m = (svc_kw["Brand / Device"] == n["name"]) & (svc_kw["Sub-Service"] == "")
         return svc_kw[m].sort_values("Volume", ascending=False)
 
-    def missing_keywords(n, best):
-        """Relevant keywords (this market) whose words are not all in the page's title, H1, H2s or meta description."""
-        k = page_kws(n)
-        k = k[~k["Other Market"]]
-        if not len(k):
-            return [], 0
-        text = set(re.findall(r"[a-z0-9]+", fields(best, "all").lower()))
-        miss = [x for x in k.itertuples()
-                if not all(w in text for w in re.findall(r"[a-z0-9]+", x.kl) if w not in KW_SKIP_WORDS)]
-        mv = sum(int(x.Volume) for x in miss)
-        tv = int(k["Volume"].sum())
-        return ([x.kl for x in miss], mv / tv if tv else 0)
-
     # ---- coverage, gaps
     def best_page(ps):
         return max(ps, key=lambda r: (r["index"] == "Indexable", r["words"] >= THIN, r["words"]))
@@ -576,14 +559,10 @@ def cmd_build(a):
             cov = "None"
         vol = node_vol(n) if not n.get("new") else 0
         st = status[k]
-        gap, missing = "", []
+        gap = ""
         if not flagged_do_not(n["note"]):
             if cov == "Page exists, not indexable":
                 gap = "Indexability blocker"
-            elif cov in ("Empty / thin page", "Light page", "Page") and not n.get("new"):
-                miss, share = missing_keywords(n, best)
-                if miss and share >= MISSING_KW_SHARE:
-                    gap, missing = "Missing relevant keywords", miss
             elif cov == "Only Brand / Sub-Service pages":
                 gap = "No Service page (brand pages only)"
             elif cov == "Section (H2) only":
@@ -598,7 +577,7 @@ def cmd_build(a):
         if gap and p is None:
             gap, p = "", ""
         out.append(dict(node=n, key=k, e=e, best=best, cov=cov, vol=vol, status=st, reasons=reasons.get(k, []),
-                        gap=gap, prio=p, missing=missing))
+                        gap=gap, prio=p))
 
     gsc = load_gsc(a.gsc, a.gsc_tab) if a.gsc else None
 
@@ -610,14 +589,12 @@ def cmd_build(a):
         n, gap = o["node"], o["gap"]
         if not gap:
             continue
-        if n["level"] == "Brand / Device" and gap not in ("Indexability blocker", "Missing relevant keywords"):
+        if n["level"] == "Brand / Device" and gap != "Indexability blocker":
             continue
         e = o["e"]
         label, url, existing = "", "", ""
         if gap == "Indexability blocker":
             label, url = L_NOIDX, o["best"]["path"]
-        elif gap == "Missing relevant keywords":
-            label, url = L_KEYWORDS, o["best"]["path"]
         elif gap == "No Service page (brand pages only)":
             kids = e["child"]
             label = L_SUBS if all(r["node"]["level"] == "Sub-Service" for r in kids) else L_BRAND
@@ -632,8 +609,6 @@ def cmd_build(a):
             label = L_CONFIRM
         k = page_kws(n)
         own = k[~k["Other Market"]]
-        if gap == "Missing relevant keywords":
-            own = own[own["kl"].isin(o["missing"])]  # only the keywords the page lacks
         name = display(n)
         for x in own.itertuples():
             kmap.append([name, url, x.Keyword, int(x.Volume)])
@@ -666,7 +641,6 @@ def recommendation(o, out, tax, svc_kw, ev):
         return ""
     one = {
         "Indexability blocker": "Make the page indexable (canonical, noindex or redirect). The content already exists.",
-        "Missing relevant keywords": f"The {n['name']} page is live and indexable, but its title, H1, H2s and meta description lack these searched keywords: " + ", ".join(o["missing"][:15]) + ". Work them in or add a section for them.",
         "No Service page (brand pages only)": f"Build a {n['name']} Service page that links to the existing brand / Sub-Service page(s), or retarget a single brand page to the Service term.",
         "Missing page (blog only)": f"Only blog posts cover {n['name']}. Create a Service page and link the posts to it.",
         "Missing page (offered)": f"Create a {n['name']} page." + (" Before & after galleries already exist." if o["e"]["gallery"] else
@@ -790,9 +764,9 @@ def write_workbook(a, tax, cols, rows, live, out, recs, kmap, excl, has_gsc, has
         ("Offered Status", "Confirmed = own page, H2 section, gallery, concern page, or implied by a brand / Sub-Service. Likely = only a meta description or blog mention. Unknown (parent offered) = Sub-Service of a Confirmed Service. No evidence."),
         ("Priority", "P1 fix first, P2 next, P3 later. Set by gap type and volume tier (High >= 5,000, Medium 2,000-4,999, Low < 2,000)."),
         ("Competitor Volume", "Summed from the taxonomy's competitor keyword list (US national). Ranks gaps against each other; not local demand."),
-        ("Limits", "The export has no body text: a service mentioned only in body copy shows as not found. Check the parent page before calling it missing. Missing relevant keywords is judged from each page's title, H1, H2s and meta description only, so a keyword used in body copy still counts as missing."),
-        ("Existing pages", f"A page that is indexable is recommended only when {int(MISSING_KW_SHARE * 100)}% or more of its relevant-keyword volume is not in its title, H1, H2s or meta description (Why Recommended = Missing relevant keywords; Relevant Keywords lists only the missing ones). A service with no sign on the site is never recommended."),
-        ("Thresholds", f"Thin < {THIN} content words, light < {LIGHT} (shown in Page Inventory only). Missing relevant keywords: {int(MISSING_KW_SHARE * 100)}% of the page's relevant-keyword volume."),
+        ("Limits", "The export has no body text: a service mentioned only in body copy shows as not found. Check the parent page before calling it missing."),
+        ("Existing pages", "An existing page is recommended only when it is not indexable. A thin or light page that Google can index is not recommended (word counts are still in Page Inventory and Service Coverage). A service with no sign on the site is never recommended."),
+        ("Thresholds", f"Thin < {THIN} content words, light < {LIGHT} (shown in Page Inventory only)."),
         ("Search volume", "Relevant Keywords = keywords for that page, counted once on the most specific page. Keywords tied to another market (Geo Modified) are excluded unless they name a service-area city; see Excluded Keywords."),
         ("Not in taxonomy", "; ".join(f"{nm} ({svc}): {p}" for nm, svc, p in new_nodes) or "None"),
         ("Yellow columns", "Fill in: Next Steps on Recommendations (" + ", ".join(NEXT_STEPS) + "), Keep? on Excluded Keywords, Client Confirmed and Notes on Gap List."),
@@ -910,8 +884,7 @@ def qa(path, recs, kmap, live, out):
         if o["rec"]["label"] in (L_BRAND, L_SUBS):
             kids = o["e"]["child"]
             ok &= bool(o["rec"]["existing"]) and all(r["node"]["service"] == o["node"]["service"] for r in kids)
-    checks.append(("Existing indexable pages appear only as Missing relevant keywords",
-                   all(o["rec"]["label"] in (L_NOIDX, L_KEYWORDS) for o in recs if o["rec"]["url"])))
+    checks.append(("Existing pages appear only when not indexable", all(o["rec"]["label"] == L_NOIDX for o in recs if o["rec"]["url"])))
     checks.append(("No row recommends a service with no sign on the site", not any(o["status"] == "No evidence" for o in recs)))
     checks.append(("Brand-only rows name their existing page(s) under the same Service", ok))
     checks.append(("No gap on a node marked Do not flag / NOT US-approved", not any(o["gap"] and flagged_do_not(o["node"]["note"]) for o in out)))
