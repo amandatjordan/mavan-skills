@@ -219,7 +219,7 @@ def build(a):
         s.cell(r, 2, f'=COUNTIFS(Implementation!$C:$C,$A{r},Implementation!$A:$A,"High")').font = N
         s.cell(r, 3, f'=COUNTIFS(Implementation!$C:$C,$A{r},Implementation!$A:$A,"Low")').font = N
         s.cell(r, 4, f'=B{r}+C{r}').font = N
-        s.cell(r, 5, f'=COUNTIFS(Implementation!$C:$C,$A{r},Implementation!$J:$J,"Done")').font = N
+        s.cell(r, 5, f'=COUNTIFS(Implementation!$C:$C,$A{r},Implementation!$K:$K,"Done")').font = N
     t = 4 + len(pages); s.cell(t, 1, 'Total').font = Font(name=F, bold=True)
     for k, col in enumerate('BCDE', 2): s.cell(t, k, f'=SUM({col}4:{col}{t - 1})').font = Font(name=F, bold=True)
     r0 = t + 2; s.cell(r0, 1, 'Key findings').font = Font(name=F, bold=True)
@@ -228,23 +228,23 @@ def build(a):
         c = s.cell(r0 + 1 + i, 1, f'{i + 1}. {f}'); c.font = N; c.alignment = Wr
         s.merge_cells(start_row=r0 + 1 + i, start_column=1, end_row=r0 + 1 + i, end_column=5); s.row_dimensions[r0 + 1 + i].height = 30
     hu = r0 + 2 + len(fl)
-    s.cell(hu, 1, 'How to use: open each "Page to edit", find a natural spot in the copy, and link to "Link to" with descriptive anchor text. '
+    s.cell(hu, 1, 'How to use: open each "Page to edit", find a natural spot in the copy, and link to "Link to" with descriptive anchor text, and write the anchor you used in "Anchor text". '
                   'If the page already links there, mark the row Rejected. Set Status as you go; the counts update automatically.').font = Font(name=F, size=10, italic=True)
     s.merge_cells(start_row=hu, start_column=1, end_row=hu, end_column=5); s.cell(hu, 1).alignment = Wr; s.row_dimensions[hu].height = 45
     s.column_dimensions['A'].width = 34
     for col in 'BCDE': s.column_dimensions[col].width = 10
     im = wb.create_sheet('Implementation')
-    head(im, ['Priority', 'Type', 'Priority page', 'Action', 'Page to edit', 'Link to', 'Why', 'Owner', 'Date done', 'Status'],
-         [9, 16, 20, 18, 55, 55, 60, 12, 11, 11])
+    head(im, ['Priority', 'Type', 'Priority page', 'Action', 'Page to edit', 'Link to', 'Anchor text (SEO fills in)', 'Why', 'Owner', 'Date done', 'Status'],
+         [9, 16, 20, 18, 55, 55, 30, 60, 12, 11, 11])
     for i, r in enumerate(R.itertuples(), 2):
-        for j, v in enumerate([r.priority, r.type, r.priority_page, r.action, r.source, r.target, r.why, '', '', 'To do'], 1):
+        for j, v in enumerate([r.priority, r.type, r.priority_page, r.action, r.source, r.target, '', r.why, '', '', 'To do'], 1):
             c = im.cell(i, j, v); c.font = N; c.alignment = Wr; c.border = line
     n = len(R) + 1
-    dv = DataValidation(type='list', formula1='"To do,In progress,Done,Rejected"', allow_blank=True); im.add_data_validation(dv); dv.add(f'J2:J{n}')
+    dv = DataValidation(type='list', formula1='"To do,In progress,Done,Rejected"', allow_blank=True); im.add_data_validation(dv); dv.add(f'K2:K{n}')
     im.conditional_formatting.add(f'A2:A{n}', CellIsRule(operator='equal', formula=['"High"'], fill=PatternFill('solid', fgColor='F8D7DA')))
     im.conditional_formatting.add(f'A2:A{n}', CellIsRule(operator='equal', formula=['"Low"'], fill=PatternFill('solid', fgColor='E2E3E5')))
-    im.conditional_formatting.add(f'J2:J{n}', CellIsRule(operator='equal', formula=['"Done"'], fill=PatternFill('solid', fgColor='D4EDDA')))
-    im.freeze_panes = 'E2'; im.auto_filter.ref = f'A1:J{n}'
+    im.conditional_formatting.add(f'K2:K{n}', CellIsRule(operator='equal', formula=['"Done"'], fill=PatternFill('solid', fgColor='D4EDDA')))
+    im.freeze_panes = 'E2'; im.auto_filter.ref = f'A1:K{n}'
     b = wb.create_sheet('Baseline')
     bl = pd.read_csv(f'{W}/baseline.csv').fillna('')
     head(b, ['Priority page', 'Body links in', 'Pages linking in body copy', 'Body links out', 'Clicks from topic searches (last 3 months)'], [62, 14, 16, 14, 20])
