@@ -27,7 +27,7 @@ Every threshold below is a constant at the top of `scripts/diagnose.py`. They ar
 | Architecture | A5 | Indexable pages deeper than 3 clicks (needs a crawl depth column) | 20% | 1 |
 | Architecture | A6 | Ranking URLs on the crawled host that are not a live 200 page (404, redirect, or not found by the crawl) | 10% | 1 |
 | Content | C1 | Keywords in the gap export ranked by the top competitor vs the prospect | 2x / 3x | 1 / 2 |
-| Content | C2 | Gap-export keywords in the top 10: prospect below the median competitor | below | 1 |
+| Content | C2 | Top-10 rankings on non-branded service keywords: prospect below the median competitor | below | 1 |
 | Content | C3 | Of the gap keywords a competitor ranks top 20 for (prospect absent), the share that are buying searches | 30% | 1 |
 | Content | C4 | Other indexable pages under 300 content words | 15% | 1 |
 | Authority | U1 | Median competitor authority score minus the prospect's | 5 / 10 | 1 / 2 |
@@ -38,6 +38,7 @@ Every threshold below is a constant at the top of `scripts/diagnose.py`. They ar
 Notes:
 
 - **Buying searches** (C3): from the export's intent column when it has one (Commercial or Transactional), otherwise from buying words in the keyword (near me, cost, price, best, clinic, doctor, surgeon, consultation, financing, before and after, reviews). Searches containing a brand term or a competitor's domain name are left out of every content signal.
+- **Service keywords** (C2 and the service table): non-branded keywords in the gap export that match a `service_terms` entry or one of its synonyms (whole word or phrase, optional plural). A keyword goes to the service whose matching term is longest, so "breast lift with augmentation" counts once. Without `service_terms`, C2 uses non-branded buying searches instead. The service table shows, per service: keywords tracked, the prospect's top-10 count and best position, the competitor with the most top-10 rankings and its best position, and the keywords where a competitor is top 10 and the prospect is not top 20.
 - **Ranking URLs on another host** (a store subdomain, say) are listed as "Other host (not crawled)" and are not counted in A6.
 - **A4** counts every 3xx the crawler reached, so it includes http-to-https and trailing-slash redirects: internal links that point at redirects.
 - **U4 is a trust risk**, not proof of spam. Spam waves often hit every site in a market; compare growth with the competitors before calling it out, and never recommend a disavow without a Search Console manual action.

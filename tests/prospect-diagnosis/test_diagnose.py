@@ -67,6 +67,9 @@ def gap_rows():
     for i in range(10):   # prospect ranks too
         rows.append([f'lip filler {i}', 'Commercial', 900, 30, 1, 0.5, 15, 3, 4, '', '', '', 100])
     rows.append(['rival one spa', 'Navigational', 300, 10, 1, 0.5, 0, 1, 0, '', '', '', 100])
+    rows.append(['abdominoplasty recovery', 'Informational', 800, 30, 1, 0.5, 2, 8, 0, '', '', '', 100])
+    rows.append(['tummy tuck', 'Commercial', 5000, 30, 1, 0.5, 0, 4, 9, '', '', '', 100])
+    rows.append(['mini tummy tuck', 'Commercial', 900, 30, 1, 0.5, 0, 6, 0, '', '', '', 100])
     return rows
 
 
@@ -141,9 +144,9 @@ class Diagnosis(unittest.TestCase):
     def test_content_and_brand_exclusion(self):
         _, out = self.build(self.files())
         s = self.signals(out)
-        self.assertIn('40 vs 10', s['C1'][3])     # rival-one ranks 40 (brand search left out), prospect 10
+        self.assertIn('43 vs 11', s['C1'][3])     # rival-one ranks 43 (brand search left out), prospect 11
         self.assertEqual(s['C1'][5], 2)
-        self.assertIn('30 of 30', s['C3'][3])
+        self.assertIn('32 of 32', s['C3'][3])   # 30 botox + 2 tummy tuck buying searches
         kws = [r[0] for r in list(load_workbook(out)['Content'].values)]
         self.assertNotIn('rival one spa', kws)
 
@@ -160,6 +163,34 @@ class Diagnosis(unittest.TestCase):
         verdict = {r[0]: r for r in list(load_workbook(out)['Verdict'].values)[1:]}
         self.assertEqual(verdict['Authority'][1], 'Not enough data')
         self.assertNotEqual(verdict['Authority'][4], 'Yes')
+
+    def service_table(self, out):
+        rows = list(load_workbook(out)['Content'].values)
+        i = next(n for n, r in enumerate(rows) if r[0] and str(r[0]).startswith('Non-branded service rankings'))
+        out_rows = {}
+        for r in rows[i + 1:]:
+            if not r[0]:
+                break
+            out_rows[r[0]] = r
+        return out_rows
+
+    def test_service_rankings_with_synonyms(self):
+        cfg = dict(self.cfg, service_terms=[{'service': 'Tummy tuck', 'terms': ['abdominoplasty']}, 'botox', 'hydrafacial'])
+        _, out = self.build(self.files(cfg))
+        t = self.service_table(out)
+        self.assertEqual(t['Tummy tuck'][1], 3)       # tummy tuck, mini tummy tuck, abdominoplasty recovery
+        self.assertEqual(t['Tummy tuck'][2], 1)       # prospect top 10 once (abdominoplasty, position 2)
+        self.assertEqual(t['Tummy tuck'][4], C1)
+        self.assertEqual(t['Tummy tuck'][7], 2)       # competitor top 10, prospect not top 20
+        self.assertEqual(t['botox'][1], 30)
+        self.assertEqual(t['hydrafacial'][8], 'No tracked keywords')
+        c2 = self.signals(out)['C2']
+        self.assertIn('Top-10 rankings on non-branded service keywords', c2[2])
+        self.assertIn('1 vs', c2[3])
+
+    def test_c2_falls_back_to_buying_searches(self):
+        _, out = self.build(self.files())
+        self.assertIn('no service_terms', self.signals(out)['C2'][7])
 
     def test_estimates_never_summed_and_tabs(self):
         _, out = self.build(self.files())

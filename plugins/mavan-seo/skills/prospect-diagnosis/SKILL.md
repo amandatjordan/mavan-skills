@@ -35,10 +35,13 @@ Write `work/config.json`. Brand terms cover the prospect's and competitors' name
 {"client": "Example Spa", "domain": "example-spa.com",
  "competitors": ["rival-one.com", "rival-two.com"],
  "brand_terms": ["example spa", "rival one"],
+ "service_terms": ["botox", {"service": "Tummy tuck", "terms": ["abdominoplasty"]}],
  "overview": {
   "example-spa.com": {"authority_score": 22, "referring_domains": 6900, "referring_domains_12m_ago": 250},
   "rival-one.com":   {"authority_score": 26, "referring_domains": 2200, "referring_domains_12m_ago": 330}}}
 ```
+
+**Service terms** drive the non-branded service ranking signal (C2) and the per-service table. Propose them from the crawl: the H1s and titles of the prospect's live service pages (not hubs, blogs or galleries), one entry per service, with the names people search ("abdominoplasty" under Tummy tuck). Ask the person to confirm the list in the same message as any other missing input. A service is a string or `{"service": name, "terms": [synonyms]}`; keep broad words ("laser", "facial") out unless that service is the broad one. Without the list, C2 falls back to non-branded buying searches and there is no per-service table; say so in the reply.
 
 Optional keys: `archive_patterns` (extra regexes for this site's listing pages, only after checking examples in the crawl) and `reference_date` (YYYY-MM-DD, the export date, for the 90-day link window; defaults to the newest first-seen date in the referring domains export).
 
@@ -65,6 +68,7 @@ The crawl must have rendered: the build stops when fewer than 10 pages return 20
 - Open the Signals tab and confirm each value against its source for 3 signals (one per lens): a crawl count, a gap count, an authority figure.
 - Look at 5 URLs counted as archive pages (Architecture tab and A1). If a site's listing pages use a pattern the script does not know, add it to `archive_patterns` and rebuild; if a real page was counted as an archive, say so in the reply.
 - Read the buying searches list on the Content tab: brand and competitor searches should not be there. Add brand terms and rebuild if they are.
+- Read the non-branded service rankings table: each service's keywords belong to it. A service that collects another's keywords means a synonym is too broad; fix `service_terms` and rebuild.
 
 Say you did these checks.
 
@@ -74,8 +78,9 @@ Plain language, in this order:
 
 1. **The verdict**: the lead lens (or co-leads) and its severity, in one sentence.
 2. **The evidence**: for each lens, the 1-3 signals that scored, with their values from the Signals tab. Name a lens that was not scored or had too little data, and why.
-3. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the prospect's account, never a reason to disavow.
-4. **Limits**, one line each: volumes are the tool's estimates (never added together), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
-5. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the prospect audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
+3. **Non-branded service rankings**: the 3-5 services with the most keywords where a competitor is top 10 and the prospect is not top 20, with the top competitor and the prospect's top-10 count for each (from the Content tab). Services with no tracked keywords are not weak services: say they had no data.
+4. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the prospect's account, never a reason to disavow.
+5. **Limits**, one line each: volumes are the tool's estimates (never added together), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
+6. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the prospect audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
 
 Never promise a result. Send the workbook.

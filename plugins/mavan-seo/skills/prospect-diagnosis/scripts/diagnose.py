@@ -114,6 +114,11 @@ def domain_columns(df, skip):
     return out
 
 
+def term_re(t):
+    """Whole word or phrase, optional plural s / es."""
+    return re.compile(r'(?<![a-z0-9])' + re.escape(t.lower()) + r'(e?s)?(?![a-z0-9])')
+
+
 def parse_map(items):
     out = {}
     for it in items or []:
@@ -395,7 +400,7 @@ def not_live(c, r):
     return rows, 0, on_host
 
 
-def score_content(S, g, prospect, comps, c_detail, intent_source):
+def score_content(S, g, prospect, comps, c_detail, intent_source, service_terms):
     base = g[~g['excluded']]
     ranked = {d: int(base[d].notna().sum()) for d in [prospect] + comps}
     top10 = {d: int((base[d] <= 10).sum()) for d in [prospect] + comps}
@@ -405,9 +410,49 @@ def score_content(S, g, prospect, comps, c_detail, intent_source):
     S.add('Content', 'C1', 'Keywords in the gap export the top competitor ranks for, compared with the prospect',
           f'{best}: {ranked[best]:,} vs {ranked[prospect]:,} ({ratio:.1f}x)', '2x = 1 point, 3x = 2 points', pts, 2)
 
-    med = statistics.median(top10[d] for d in comps)
-    S.add('Content', 'C2', 'Gap-export keywords in the top 10: prospect vs the median competitor',
-          f'{top10[prospect]:,} vs {med:,.0f}', 'prospect below the median = 1 point', int(top10[prospect] < med), 1)
+    services = []   # (service name, [terms]); an entry is "name" or {"service": name, "terms": [...]}
+    for e in service_terms:
+        if isinstance(e, dict) and e.get('service'):
+            services.append((e['service'].strip(), [t.strip().lower() for t in [e['service']] + list(e.get('terms', []))
+                                                     if t.strip()]))
+        elif isinstance(e, str) and e.strip():
+            services.append((e.strip(), [e.strip().lower()]))
+    terms = [n for n, _ in services]
+    if services:
+        pats = sorted(((n, t, term_re(t)) for n, ts in services for t in ts), key=lambda x: -len(x[1]))
+        base = base.assign(service=base['keyword'].str.lower().map(
+            lambda k: next((n for n, t, rx in pats if rx.search(k)), '')))
+        svc = base[base['service'] != '']
+        scope = f'non-branded service keywords ({len(svc):,} keywords matching {len(terms)} services)'
+    else:
+        base = base.assign(service='')
+        svc = base[base['commercial']]
+        scope = f'non-branded buying searches ({len(svc):,}; no service_terms in config.json)'
+    s10 = {d: int((svc[d] <= 10).sum()) for d in [prospect] + comps}
+    med = statistics.median(s10[d] for d in comps)
+    if len(svc):
+        S.add('Content', 'C2', 'Top-10 rankings on non-branded service keywords: prospect vs the median competitor',
+              f'{s10[prospect]:,} vs {med:,.0f}', 'prospect below the median = 1 point', int(s10[prospect] < med), 1,
+              f'Scope: {scope}.')
+    else:
+        S.add('Content', 'C2', 'Top-10 rankings on non-branded service keywords', 'no matching keywords in the gap export',
+              '', None, 1, f'Scope: {scope}.')
+    svc_rows = []
+    for t in terms:
+        k = svc[svc['service'] == t]
+        if k.empty:
+            svc_rows.append([t, 0, '', '', '', '', '', '', 'No tracked keywords'])
+            continue
+        top = {d: int((k[d] <= 10).sum()) for d in comps}
+        bc = max(comps, key=lambda d: (top[d], -(k[d].min() if k[d].notna().any() else 999)))
+        lost = k[(k[comps] <= 10).any(axis=1) & ~(k[prospect] <= WIN_POS)]
+        pbest = k[prospect].min()
+        cbest = k[bc].min()
+        no_comp = pd.isna(cbest)
+        svc_rows.append([t, len(k), int((k[prospect] <= 10).sum()), '' if pd.isna(pbest) else int(pbest),
+                         '' if no_comp else bc, '' if no_comp else top[bc], '' if no_comp else int(cbest), len(lost),
+                         'No competitor ranks' if no_comp else ''])
+    svc_rows.sort(key=lambda r: (r[8] == 'No tracked keywords', -(r[7] or 0), -(r[1] or 0)))
 
     gap = base[base[prospect].isna() & base[comps].notna().any(axis=1)]
     won = gap[(gap[comps] <= WIN_POS).any(axis=1)]
@@ -421,7 +466,8 @@ def score_content(S, g, prospect, comps, c_detail, intent_source):
     t_share = share(len(thin), c_detail['other'])
     S.add('Content', 'C4', f'Non-archive indexable pages under {THIN_WORDS} content words',
           f'{len(thin):,} of {c_detail["other"]:,} ({pct(t_share)})', '15% = 1 point', int(t_share >= 0.15), 1)
-    return {'ranked': ranked, 'top10': top10, 'gap': gap, 'won': won, 'commercial': com, 'excluded': int(g['excluded'].sum()),
+    return {'ranked': ranked, 'top10': top10, 's10': s10, 'svc_rows': svc_rows, 'svc_scope': scope,
+            'gap': gap, 'won': won, 'commercial': com, 'excluded': int(g['excluded'].sum()),
             'total': len(g)}
 
 
@@ -592,7 +638,7 @@ def cmd_build(a):
 
     S = Signals()
     arch = score_architecture(S, c, has_depth, r)
-    cont = score_content(S, g, prospect, comps, arch, intent_source)
+    cont = score_content(S, g, prospect, comps, arch, intent_source, cfg.get('service_terms') or [])
     auth = score_authority(S, cfg, prospect, comps, refd, blgap)
     lenses, lead = verdict(S)
 
@@ -669,9 +715,19 @@ def cmd_build(a):
     ws.column_dimensions['B'].width = 50
     ws.column_dimensions['D'].width = 70
 
-    brows = [[d, 'Prospect' if d == prospect else 'Competitor', cont['ranked'][d], cont['top10'][d]] for d in [prospect] + comps]
-    ws = sheet(wb, 'Content', ['Domain', 'Role', 'Keywords ranked in the gap export', 'Of those in the top 10'], brows,
-               {'Domain': 35})
+    brows = [[d, 'Prospect' if d == prospect else 'Competitor', cont['ranked'][d], cont['top10'][d], cont['s10'][d]]
+             for d in [prospect] + comps]
+    ws = sheet(wb, 'Content', ['Domain', 'Role', 'Keywords ranked in the gap export', 'Of those in the top 10',
+                               'Top 10 on non-branded service keywords'], brows, {'Domain': 35})
+    if cont['svc_rows']:
+        ws.append([])
+        ws.append(['Non-branded service rankings (service)', 'Keywords tracked', 'Prospect top 10', 'Prospect best position',
+                   'Top competitor', 'Its top 10', 'Its best position',
+                   f'Competitor top 10, prospect not top {WIN_POS}', 'Note'])
+        for cell in ws[ws.max_row]:
+            cell.font, cell.fill, cell.alignment = HEAD, FILL, WRAP
+        for row in cont['svc_rows']:
+            ws.append(row)
     ws.append([])
     hdr = [f'Buying searches a competitor ranks top {WIN_POS} for and the prospect does not', 'Est. monthly searches (tool estimate)',
            'Best competitor', 'Its position']
