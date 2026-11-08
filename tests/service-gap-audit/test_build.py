@@ -75,8 +75,22 @@ class ServiceGapAudit(unittest.TestCase):
     def test_canonical_loop_without_canonical_column(self):
         self.assertEqual(self.why["Botox (Neurotoxin)"], "Existing page, not indexable")
 
-    def test_thin_service_page(self):
-        self.assertEqual(self.why["Dermal Filler"], "Existing page, thin content")
+    def test_thin_indexable_page_is_not_recommended_for_being_thin(self):
+        self.assertNotIn("Existing page, thin content", set(self.why.values()))
+        self.assertNotIn("Existing page, light content", set(self.why.values()))
+
+    def test_dermal_filler_page_lacks_its_keywords(self):
+        self.assertEqual(self.why["Dermal Filler"], "Missing relevant keywords")
+
+    def test_existing_indexable_pages_only_as_missing_keywords(self):
+        urls = self.recs[self.recs["Current URL"] != ""]
+        self.assertTrue(set(urls["Why Recommended"]) <= {"Existing page, not indexable", "Missing relevant keywords"})
+        self.assertNotIn("Restylane Kysse (Dermal Filler)", self.why)  # live, indexable, keywords on page
+
+    def test_next_steps_column_follows_current_url(self):
+        cols = list(self.recs.columns)
+        self.assertEqual(cols[cols.index("Current URL") + 1], "Next Steps")
+        self.assertTrue((self.recs["Next Steps"] == "").all())
 
     def test_gallery_proves_lip_filler(self):
         self.assertEqual(self.why["Lip Filler (Dermal Filler)"], "Offered (before & after photos), no page")
@@ -91,7 +105,7 @@ class ServiceGapAudit(unittest.TestCase):
 
     def test_new_device_counts_for_its_service_and_is_listed(self):
         self.assertIn("Emsella Chair", self.build.stdout)
-        self.assertNotEqual(self.why.get("Sexual Wellness"), "Confirm with client (no sign it is offered)")
+        self.assertNotIn("Confirm with client (no sign it is offered)", set(self.why.values()))
 
     def test_no_other_market_keywords(self):
         kws = ", ".join(self.recs["Relevant Keywords"]).lower()

@@ -1,13 +1,13 @@
 ---
 name: service-gap-audit
-description: Run Mavan's Service Gap Audit for a medspa or plastic surgery site from a Sitebulb or Screaming Frog export and the bundled Service Taxonomy, and build the gap audit workbook. Use for service gap audits, missing service pages, or thin and non-indexable service pages.
+description: Run Mavan's Service Gap Audit for a medspa or plastic surgery site from a Sitebulb or Screaming Frog export and the bundled Service Taxonomy, and build the gap audit workbook. Use for service gap audits, missing service pages, or non-indexable service pages.
 ---
 
 # Service Gap Audit (Mavan SOP)
 
 This skill carries the whole process and does not need the written SOP; a copy in a project management tool is documentation for people.
 
-The audit answers four questions for every service in the taxonomy: does the practice offer it, does it have a page Google can index, does that page have real content, and how much national search demand is behind it. The deliverable is the Recommendations tab: one row per page to build or fix.
+The audit answers four questions for every service in the taxonomy: does the practice offer it, does it have a page Google can index, does that page have real content, and how much national search demand is behind it. The deliverable is the Recommendations tab: one row per page to build or fix, with a yellow Next Steps column (Create new page, Update page, Fix indexability, Add section to existing page, Merge / redirect, Ignore) for the SEO to fill in. A service with no sign on the site is never recommended, and an existing indexable page appears only when its title, H1, H2s and meta lack the relevant keywords (Why Recommended = Missing relevant keywords).
 
 Work only from the crawl export, the bundled taxonomy, and the optional Search Console sheet. **Never visit the live site or use Composio or any other connector.** Use no tool, dependency, fallback or extra step beyond those named here without asking the person first and explaining why it is needed. If a step is unreliable, expensive or needs workarounds, stop and tell the person. Assume nothing about the site: URL structure, folder names, locations and brands differ on every site, so page types are decided per page in Step 3, never from a folder name. Every number, count and join is done by `scripts/build.py`; never type or estimate a number.
 
@@ -82,7 +82,7 @@ Done when every check prints PASS.
 
 ## Step 5: Check
 
-- Open 5 Recommendations rows (include a "not indexable" or "thin" row and a "no page" row) against Page Inventory: the label, URL and word count agree.
+- Open 5 Recommendations rows (include a "not indexable" or "Missing relevant keywords" row and a "no page" row; for a keywords row, confirm in Page Inventory that the listed keywords really are not in the page's title, H1, H2s or meta) against Page Inventory: the label, URL and word count agree.
 - Read the top 10 rows the script prints. Relevant Keywords contain no other city and no keyword from a different service. A wrong-service keyword means a match term is too broad: note it for the taxonomy pull request.
 - Read the Read Me: inputs, missing columns and "Not in taxonomy" are right.
 
