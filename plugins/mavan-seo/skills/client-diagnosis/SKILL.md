@@ -9,19 +9,45 @@ One question for an existing client: **which is the biggest underlying issue: au
 
 Work only from uploaded files: a fresh crawl, Semrush or Ahrefs exports, the Search Console download, and a few overview figures the person types in. **Never visit or fetch the live site** (the crawl is the site). **Never use Composio or a connector for Search Console** or for any other source here; the person attaches the download. Use no GA4 or DataForSEO. Use no tool, dependency, fallback or extra step beyond those named here without asking the person and explaining why. Every count, share and comparison is done by `scripts/diagnose.py`; never estimate a number by reading. Thresholds and what each signal means are in [references/rules.md](references/rules.md).
 
-`$SKILL` below is this skill's folder (the base directory shown when the skill loads). The script needs Python 3 with pandas and openpyxl. Work in a folder named after the prospect with a `work/` subfolder, and keep a task list with one item per step.
+`$SKILL` below is this skill's folder (the base directory shown when the skill loads). The script needs Python 3 with pandas and openpyxl. Work in a folder named after the client with a `work/` subfolder, and keep a task list with one item per step.
+
+## Preflight checklist
+
+Send this to the person first. Tick an item only when the file is attached or the answer is given, then run the preflight script (Step 1), which re-checks everything it can read. Do not start the build before it prints READY.
+
+**Files**
+
+- [ ] **Crawl URL export** (fresh crawl, with the site's XML sitemap as a crawl source): Sitebulb URL Explorer > Internal > HTML, or Screaming Frog Internal > HTML. **Every** status code (200, 3xx, 404), not a filtered export. Columns: URL, HTTP Status Code, Title, H1, No. Content Words; Indexable Status and Crawl Depth when the tool has them. *Script checks: columns, 10+ live pages, and the crawl rendered (pages have titles, H1s and words).*
+- [ ] **Ranking keywords for the client's domain**: Semrush Organic Positions (or Ahrefs Organic Keywords), all rows. *Script checks: the tool, the columns, and warns when the row count is a round number (capped).*
+- [ ] **Keyword gap**: the client plus 2-4 competitors, all keywords (not only "missing"): Semrush Keyword Gap or Ahrefs Content Gap. *Script checks: a position column for the client and every competitor.*
+- [ ] **Search Console sheet**, downloaded as .xlsx or .csv (tab "Claude Use This"): one row per Date, Query and Page, with Clicks and Impressions (Position optional). **At least 6 months, a year is best.** If the client has less, use what they have. *Script checks: columns, the date range and the two periods, and whether a row cap cut off the impressions.*
+- [ ] *Optional:* referring domains export and backlink gap export (each adds one authority signal).
+
+**Answers**
+
+- [ ] **Authority figures** for the client and each competitor: Authority Score (or DR), referring domains now, referring domains 12 months ago (the tool's overview or "compare domains" chart; a screenshot is fine, the values are read off and confirmed). *Without them the authority signals are Not scored.*
+- [ ] **Manual actions**: the person checked Search Console > Security & Manual actions: `yes`, `no` or `unknown`.
+- [ ] **Client facts**: name, domain, **brand terms** (name as people search it, domain root, short forms), and the **current plan level** (Starter, VIP or Signature) for the report.
+- [ ] **Service terms**: the client's services as people search them (proposed from the crawl, confirmed by the person).
+
+**Checks the script cannot make: confirm each**
+
+- [ ] Every export is for this client's domain, and the Search Console sheet is this client's property.
+- [ ] The crawl is recent, and not older than the end of the Search Console data.
+- [ ] The competitors in the gap export are real competitors in the same specialty.
+- [ ] The Search Console file's row count is not a round number such as 25,000. If it is, the export is probably capped and impressions will be unreliable; ask for an uncapped export (for example one per quarter) or accept clicks-only scoring.
 
 ## What you need
 
-Ask for what is missing in **one** message.
+Ask for what is missing in **one** message, using the checklist above.
 
 | Input | Required? | Notes |
 | --- | --- | --- |
 | Crawl URL export (Sitebulb or Screaming Frog) | Required | Every status code. URL, status, title, H1, content words; indexability and crawl depth are used when present. **No internal links export is needed.** |
-| Ranking keywords for the prospect | Required | Semrush Organic Positions or Ahrefs Organic Keywords |
-| Keyword gap, prospect plus 2-4 competitors | Required | Semrush Keyword Gap or Ahrefs Content Gap, all keywords (not only "missing") |
-| Authority overview figures | Strongly recommended | For the prospect and each competitor: Authority Score (or DR), referring domains now, and referring domains 12 months ago. From the tool's overview or the "compare domains" chart. Typed into `config.json` |
-| Prospect referring domains export | Optional | Semrush Backlink Analytics > Referring Domains (or Ahrefs). Adds the link-growth timing and quality counts |
+| Ranking keywords for the client | Required | Semrush Organic Positions or Ahrefs Organic Keywords |
+| Keyword gap, client plus 2-4 competitors | Required | Semrush Keyword Gap or Ahrefs Content Gap, all keywords (not only "missing") |
+| Authority overview figures | Strongly recommended | For the client and each competitor: Authority Score (or DR), referring domains now, and referring domains 12 months ago. From the tool's overview or the "compare domains" chart. Typed into `config.json` |
+| Client referring domains export | Optional | Semrush Backlink Analytics > Referring Domains (or Ahrefs). Adds the link-growth timing and quality counts |
 | Backlink gap export | Optional | Semrush Backlink Gap or Ahrefs Link Intersect. Adds the quality link gap |
 | Search Console export | Required | Mavan's Search Console sheet downloaded as .xlsx or .csv (tab "Claude Use This" when it has tabs): one row per **Date**, Query and Page with Clicks and Impressions (Position is used when present). **At least 6 months, a year is best**, ending on the newest date. If the person says the client has less than 6 months, use what they have: the preflight warns and the script splits it into two equal halves (14 days is the minimum). A sheet or add-on that caps rows (often at 25,000) can cut it short: the preflight checks, see "Capped exports" |
 | Manual actions | Required | Whether Search Console > Security & Manual actions shows a manual action: `yes`, `no`, or `unknown`. The person checks it; never guess |
@@ -33,7 +59,7 @@ If the person sends a screenshot of the overview chart instead of figures, read 
 
 ## Step 1: Config and preflight
 
-Write `work/config.json` (`manual_action` is `yes`, `no`, or left out when unknown). Leave out `competitors`: the script takes them from the keyword gap export's domain columns and the preflight lists them. Add a `competitors` list only to drop or replace one (a competitor in a different specialty skews the content scores). Brand terms cover the prospect's and competitors' names as people search them (with spaces): those searches are left out of the content signals.
+Write `work/config.json` (`manual_action` is `yes`, `no`, or left out when unknown). Leave out `competitors`: the script takes them from the keyword gap export's domain columns and the preflight lists them. Add a `competitors` list only to drop or replace one (a competitor in a different specialty skews the content scores). Brand terms cover the client's and competitors' names as people search them (with spaces): those searches are left out of the content signals.
 
 ```json
 {"client": "Example Spa", "domain": "example-spa.com",
@@ -44,7 +70,7 @@ Write `work/config.json` (`manual_action` is `yes`, `no`, or left out when unkno
   "rival-one.com":   {"authority_score": 26, "referring_domains": 2200, "referring_domains_12m_ago": 330}}}
 ```
 
-**Service terms** drive the non-branded service ranking signal (C2) and the per-service table. Propose them from the crawl: the H1s and titles of the prospect's live service pages (not hubs, blogs or galleries), one entry per service, with the names people search ("abdominoplasty" under Tummy tuck). Ask the person to confirm the list in the same message as any other missing input. A service is a string or `{"service": name, "terms": [synonyms]}`; keep broad words ("laser", "facial") out unless that service is the broad one. Without the list, C2 falls back to non-branded buying searches and there is no per-service table; say so in the reply.
+**Service terms** drive the non-branded service ranking signal (C2) and the per-service table. Propose them from the crawl: the H1s and titles of the client's live service pages (not hubs, blogs or galleries), one entry per service, with the names people search ("abdominoplasty" under Tummy tuck). Ask the person to confirm the list in the same message as any other missing input. A service is a string or `{"service": name, "terms": [synonyms]}`; keep broad words ("laser", "facial") out unless that service is the broad one. Without the list, C2 falls back to non-branded buying searches and there is no per-service table; say so in the reply.
 
 Optional keys: `archive_patterns` (extra regexes for this site's listing pages, only after checking examples in the crawl) and `reference_date` (YYYY-MM-DD, the export date, for the 90-day link window; defaults to the newest first-seen date in the referring domains export).
 
@@ -59,7 +85,7 @@ Read `work/preflight.md`. On NOT READY, send one message listing each FAIL and e
 
 ```
 python $SKILL/scripts/diagnose.py build --config work/config.json --crawl URLS.csv --ranking RANK.csv --gap GAP.csv --gsc GSC.csv \
-  [--click-floor N] [--impr-floor N] [--refdomains REFDOMAINS.csv] [--backlink-gap BACKLINK_GAP.csv] --out "work/PROSPECT Prospect Diagnosis Month YYYY.xlsx"
+  [--click-floor N] [--impr-floor N] [--refdomains REFDOMAINS.csv] [--backlink-gap BACKLINK_GAP.csv] --out "work/CLIENT Client Diagnosis Month YYYY.xlsx"
 ```
 
 It also writes `diagnosis.json` next to the workbook (lens scores, every signal with its numbers, the service table, `report_type: client`): the `prospect-sales-report` skill builds the client-facing report from it (it drops onboarding for a client).
@@ -87,11 +113,11 @@ Plain language, in this order:
 
 1. **The verdict**: the lead lens (or co-leads) and its severity, in one sentence. Then the traffic change in one line: non-brand clicks in period B vs period A (with both date ranges), from the Search Console tab, and the 5 keywords that lost the most clicks (from Keyword Drops), saying which basis was used.
 2. **The evidence**: for each lens, the 1-3 signals that scored, with their values from the Signals tab. Name a lens that was not scored or had too little data, and why.
-3. **Non-branded service rankings**: the 3-5 services with the most keywords where a competitor is top 10 and the prospect is not top 20, with the top competitor and the prospect's top-10 count for each (from the Content tab). Services with no tracked keywords are not weak services: say they had no data.
-4. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the prospect's account, never a reason to disavow.
+3. **Non-branded service rankings**: the 3-5 services with the most keywords where a competitor is top 10 and the client is not top 20, with the top competitor and the client's top-10 count for each (from the Content tab). Services with no tracked keywords are not weak services: say they had no data.
+4. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the client's account, never a reason to disavow.
 5. **Limits**, one line each: Search Console figures are real clicks and impressions but keyword tool volumes are estimates (never added together, never added to Search Console figures), small click counts make single keywords noisy, impressions are or are not comparable (and which signals that left unscored), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
 6. **Report**: offer the client report (`prospect-sales-report`, with the client's current plan level). The roadmap starts at month 1.
-7. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the prospect audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
+7. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
 
 Never promise a result. Send the workbook.
 
