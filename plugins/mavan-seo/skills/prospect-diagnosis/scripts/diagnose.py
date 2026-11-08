@@ -20,7 +20,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from common import bare_domain, canon, load_json, norm_url, num, pick, read_table, resolve
+from common import bare_domain, canon, load_json, norm_url, num, pick, read_table, resolve, save_json
 
 # ------------------------------------------------------------------ thresholds (references/rules.md)
 THIN_WORDS = 300
@@ -308,7 +308,11 @@ class Signals:
     def add(self, lens, sid, name, value, threshold, points, possible, note=''):
         """points None = not scored (input missing)."""
         self.rows.append({'lens': lens, 'id': sid, 'name': name, 'value': value, 'threshold': threshold,
-                          'points': points, 'possible': possible, 'note': note})
+                          'points': points, 'possible': possible, 'note': note, 'data': {}})
+
+    def data(self, **kw):
+        """Structured numbers for the last signal, written to diagnosis.json for the sales report."""
+        self.rows[-1]['data'] = {k: (round(v, 4) if isinstance(v, float) else v) for k, v in kw.items()}
 
 
 def pct(x):
@@ -327,6 +331,7 @@ def score_architecture(S, c, has_depth, r):
     pts = 2 if a_share >= 0.50 else (1 if a_share >= 0.25 else 0)
     S.add('Architecture', 'A1', 'Archive and listing pages (tags, categories, dates, paged lists) as a share of indexable pages',
           f'{len(arch):,} of {len(idx):,} ({pct(a_share)})', '25% = 1 point, 50% = 2 points', pts, 2)
+    S.data(archive=len(arch), indexable=len(idx), share=a_share)
 
     other = idx[~idx['archive']]
     counts = {}
@@ -337,6 +342,7 @@ def score_architecture(S, c, has_depth, r):
     r_share = share(len(rep), len(other))
     S.add('Architecture', 'A2', f'Non-archive indexable pages whose title or H1 is shared with {REPEAT_MIN - 1}+ other pages',
           f'{len(rep):,} of {len(other):,} ({pct(r_share)})', '20% = 1 point', int(r_share >= 0.20), 1)
+    S.data(repeated=len(rep), pages=len(other), share=r_share)
 
     ranked = set(r['norm']) if r is not None else set()
     no_kw = other[~other['norm'].isin(ranked)]
@@ -345,6 +351,7 @@ def score_architecture(S, c, has_depth, r):
         S.add('Architecture', 'A3', 'Non-archive indexable pages with no tracked keywords',
               f'{len(no_kw):,} of {len(other):,} ({pct(n_share)})', '80% = 1 point (sites with 200+ such pages)',
               int(n_share >= 0.80), 1)
+        S.data(no_keywords=len(no_kw), pages=len(other), share=n_share)
     else:
         S.add('Architecture', 'A3', 'Non-archive indexable pages with no tracked keywords',
               f'{len(no_kw):,} of {len(other):,} ({pct(n_share)})', 'only scored with 200+ such pages', None, 1,
@@ -354,12 +361,14 @@ def score_architecture(S, c, has_depth, r):
     d_share = share(len(redir), len(c))
     S.add('Architecture', 'A4', 'Redirecting URLs the crawler reached through internal links, as a share of crawled URLs',
           f'{len(redir):,} of {len(c):,} ({pct(d_share)})', '20% = 1 point', int(d_share >= 0.20), 1)
+    S.data(redirects=len(redir), crawled=len(c), share=d_share)
 
     if has_depth:
         deep = idx[idx['depth'] > DEEP_DEPTH]
         p_share = share(len(deep), len(idx))
         S.add('Architecture', 'A5', f'Indexable pages deeper than {DEEP_DEPTH} clicks from the home page',
               f'{len(deep):,} of {len(idx):,} ({pct(p_share)})', '20% = 1 point', int(p_share >= 0.20), 1)
+        S.data(deep=len(deep), indexable=len(idx), share=p_share, depth=DEEP_DEPTH)
     else:
         S.add('Architecture', 'A5', f'Indexable pages deeper than {DEEP_DEPTH} clicks', 'no crawl depth column', '20% = 1 point',
               None, 1, 'Not in the crawl export')
@@ -370,6 +379,7 @@ def score_architecture(S, c, has_depth, r):
         bad = sum(1 for x in nl_rows if x[1] != 'Other host (not crawled)')
         S.add('Architecture', 'A6', 'Ranking URLs on the crawled host that are not a live 200 page',
               f'{bad:,} of {n_on:,} ({pct(share(bad, n_on))})', '10% = 1 point', int(share(bad, n_on) >= 0.10), 1)
+        S.data(not_live=bad, ranking_urls=n_on, share=share(bad, n_on))
     detail = {'live': len(live), 'indexable': len(idx), 'archive': len(arch), 'other': len(other),
               'repeated': rep, 'counts': counts, 'thin': other[other['words'] < THIN_WORDS], 'not_live': nl_rows,
               'redirects': len(redir), 'crawled': len(c), 'nonidx': len(live) - len(idx)}
@@ -409,6 +419,7 @@ def score_content(S, g, prospect, comps, c_detail, intent_source, service_terms)
     pts = 2 if ratio >= 3 else (1 if ratio >= 2 else 0)
     S.add('Content', 'C1', 'Keywords in the gap export the top competitor ranks for, compared with the prospect',
           f'{best}: {ranked[best]:,} vs {ranked[prospect]:,} ({ratio:.1f}x)', '2x = 1 point, 3x = 2 points', pts, 2)
+    S.data(competitor=best, competitor_keywords=ranked[best], prospect_keywords=ranked[prospect], ratio=float(ratio))
 
     services = []   # (service name, [terms]); an entry is "name" or {"service": name, "terms": [...]}
     for e in service_terms:
@@ -434,6 +445,8 @@ def score_content(S, g, prospect, comps, c_detail, intent_source, service_terms)
         S.add('Content', 'C2', 'Top-10 rankings on non-branded service keywords: prospect vs the median competitor',
               f'{s10[prospect]:,} vs {med:,.0f}', 'prospect below the median = 1 point', int(s10[prospect] < med), 1,
               f'Scope: {scope}.')
+        S.data(prospect_top10=s10[prospect], median_competitor_top10=float(med), keywords=len(svc),
+               services=len(terms), by_service=bool(terms))
     else:
         S.add('Content', 'C2', 'Top-10 rankings on non-branded service keywords', 'no matching keywords in the gap export',
               '', None, 1, f'Scope: {scope}.')
@@ -461,11 +474,13 @@ def score_content(S, g, prospect, comps, c_detail, intent_source, service_terms)
     S.add('Content', 'C3', f'Gap keywords a competitor ranks top {WIN_POS} for (prospect absent) that are buying searches',
           f'{len(com):,} of {len(won):,} ({pct(c_share)})', '30% = 1 point', int(c_share >= 0.30), 1,
           f'Buying searches from {intent_source}. Competitor and brand searches left out.')
+    S.data(buying=len(com), competitor_won=len(won), share=c_share, win_position=WIN_POS)
 
     thin = c_detail['thin']
     t_share = share(len(thin), c_detail['other'])
     S.add('Content', 'C4', f'Non-archive indexable pages under {THIN_WORDS} content words',
           f'{len(thin):,} of {c_detail["other"]:,} ({pct(t_share)})', '15% = 1 point', int(t_share >= 0.15), 1)
+    S.data(thin=len(thin), pages=c_detail['other'], share=t_share, words=THIN_WORDS)
     return {'ranked': ranked, 'top10': top10, 's10': s10, 'svc_rows': svc_rows, 'svc_scope': scope,
             'gap': gap, 'won': won, 'commercial': com, 'excluded': int(g['excluded'].sum()),
             'total': len(g)}
@@ -482,6 +497,7 @@ def score_authority(S, cfg, prospect, comps, refd, blgap):
         pts = 2 if diff >= 10 else (1 if diff >= 5 else 0)
         S.add('Authority', 'U1', 'Authority score: median competitor minus prospect',
               f'{med:g} - {num(ov[prospect]["authority_score"]):g} = {diff:g}', '5 = 1 point, 10 = 2 points', pts, 2)
+        S.data(prospect=num(ov[prospect]['authority_score']), median_competitor=float(med), gap=float(diff))
     else:
         S.add('Authority', 'U1', 'Authority score: median competitor minus prospect', 'no overview figures', '', None, 2,
               'Add "overview" to config.json')
@@ -491,6 +507,7 @@ def score_authority(S, cfg, prospect, comps, refd, blgap):
         mine = num(ov[prospect]['referring_domains'])
         S.add('Authority', 'U2', 'Referring domains: prospect as a share of the median competitor',
               f'{mine:,.0f} vs {med:,.0f} ({pct(share(mine, med))})', 'under 50% = 1 point', int(share(mine, med) < 0.5), 1)
+        S.data(prospect=mine, median_competitor=float(med), share=share(mine, med))
     else:
         S.add('Authority', 'U2', 'Referring domains vs the median competitor', 'no overview figures', '', None, 1,
               'Add "overview" to config.json')
@@ -501,11 +518,13 @@ def score_authority(S, cfg, prospect, comps, refd, blgap):
         S.add('Authority', 'U3', f'Domains scoring {QUALITY_SCORE}+ that link to competitors and not the prospect, vs the '
               f'prospect\'s own {QUALITY_SCORE}+ domains', f'{gap_q:,} vs {own_q:,}', 'more in the gap = 1 point',
               int(gap_q > own_q), 1)
+        S.data(gap_quality=gap_q, own_quality=own_q, score=QUALITY_SCORE)
     else:
         S.add('Authority', 'U3', f'Quality ({QUALITY_SCORE}+) link gap', 'needs the referring domains and backlink gap exports',
               '', None, 1, 'Optional exports not attached')
 
     growth_pt, notes, evaluated = 0, [], False
+    g_mine = g_med = recent_n = None
     if have and all('referring_domains_12m_ago' in ov[d] and 'referring_domains' in ov[d] for d in [prospect] + comps):
         evaluated = True
 
@@ -514,6 +533,7 @@ def score_authority(S, cfg, prospect, comps, refd, blgap):
             return num(ov[d]['referring_domains']) / then if then else float('nan')
         mine, med = gr(prospect), statistics.median(gr(d) for d in comps)
         fast = mine >= 2 * med
+        g_mine, g_med = mine, med
         notes.append(f'12-month growth {mine:.1f}x vs median competitor {med:.1f}x')
     else:
         fast = None
@@ -523,6 +543,7 @@ def score_authority(S, cfg, prospect, comps, refd, blgap):
         ref_date = pd.to_datetime(cfg.get('reference_date')) if cfg.get('reference_date') else refd['first_seen'].max()
         recent = refd[refd['first_seen'] >= ref_date - pd.Timedelta(days=RECENT_DAYS)]
         recent_share = share(len(recent), len(refd))
+        recent_n = len(recent)
         notes.append(f'{len(recent):,} of {len(refd):,} referring domains ({pct(recent_share)}) first seen in the '
                      f'{RECENT_DAYS} days to {ref_date.date()}')
     if evaluated:
@@ -532,6 +553,8 @@ def score_authority(S, cfg, prospect, comps, refd, blgap):
               'growth 2x the median competitor; 50%+ first seen in the last 90 days (each available check must hold) = 1 point',
               growth_pt, 1,
               'A risk to check in Search Console > Manual actions, not a reason to disavow')
+        S.data(growth=g_mine, median_competitor_growth=g_med, recent=recent_n,
+               referring_domains=None if refd is None else len(refd), recent_share=recent_share, days=RECENT_DAYS)
     else:
         S.add('Authority', 'U4', 'Unusual link growth (trust risk)', 'needs overview growth figures or the referring domains export',
               '', None, 1, 'Not enough data')
@@ -780,6 +803,20 @@ def cmd_build(a):
     wb.save(a.out)
     check('workbook saved', os.path.exists(a.out), f'{a.out}; tabs: {", ".join(wb.sheetnames)}')
 
+    svc_keys = ['service', 'keywords', 'prospect_top10', 'prospect_best', 'top_competitor', 'competitor_top10',
+                'competitor_best', 'lost', 'note']
+    out_json = a.json or os.path.join(os.path.dirname(os.path.abspath(a.out)), 'diagnosis.json')
+    save_json(out_json, {
+        'client': cfg.get('client', ''), 'domain': prospect, 'competitors': comps,
+        'generated': pd.Timestamp.today().strftime('%Y-%m-%d'), 'tool': sorted(t.capitalize() for t in tools),
+        'lenses': lenses, 'lead': lead, 'signals': S.rows,
+        'services': [dict(zip(svc_keys, r)) for r in cont['svc_rows']],
+        'pages': {'crawled': arch['crawled'], 'live': arch['live'], 'indexable': arch['indexable'],
+                  'archive': arch['archive'], 'other': arch['other']},
+        'notes': notes,
+    })
+    check('diagnosis.json written', os.path.exists(out_json), out_json)
+
     print('\nVerdict:')
     for v in lenses:
         print(f'  {v["lens"]}: {v["severity"]}' + ('' if v['share'] is None else f' ({pct(v["share"])}, {v["points"]} of '
@@ -805,6 +842,10 @@ def main():
         p.add_argument('--map', action='append', help='field override, e.g. crawl.words="Word Count" or gapcol.x.com="Col"')
         if name == 'preflight':
             p.add_argument('--out', default='work')
+        else:
+            p.add_argument('--json', help='where to write diagnosis.json (default: next to the workbook)')
+        if name == 'preflight':
+            pass
         else:
             p.add_argument('--out', required=True)
     a = ap.parse_args()
