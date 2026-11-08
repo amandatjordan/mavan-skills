@@ -59,6 +59,8 @@ python $SKILL/scripts/diagnose.py build --config work/config.json --crawl URLS.c
   [--refdomains REFDOMAINS.csv] [--backlink-gap BACKLINK_GAP.csv] --out "work/PROSPECT Prospect Diagnosis Month YYYY.xlsx"
 ```
 
+It also writes `diagnosis.json` next to the workbook (lens scores, every signal with its numbers, the service table): the `prospect-sales-report` skill builds the client-facing report from it.
+
 Read the printed column mappings (fix a wrong one with `--map crawl.words="Word Count"`, or a gap domain column with `--map "gapcol.domain.com=Column name"`). Done when it prints "All checks passed" and the verdict.
 
 The crawl must have rendered: the build stops when fewer than 10 pages return 200 or 20% or more of them have no title, no H1 and no words. Ask for a re-crawl; do not diagnose around it.

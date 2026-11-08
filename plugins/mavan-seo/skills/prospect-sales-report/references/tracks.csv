@@ -1,0 +1,158 @@
+Track,Task,Month,Starter,VIP,Signature,Notes
+Onboarding,Citation audit + implementation,Onboarding,,,,Per location. Needs estimate. Not offered on Starter for existing clients
+Onboarding,Keyword research (core services + client priorities),Onboarding,,,,
+Onboarding,Core service performance audit,Onboarding,,,,
+Onboarding,Competitor snapshot,Onboarding,,,,From competitive analysis. LLM drafting may lower this.
+Onboarding,GBP optimization + implementation,Onboarding,,,,Per location. Needs estimate
+Onboarding,Monthly GBP posts,Onboarding,,,,Per location
+Onboarding,GBP product listings,Onboarding,,,,Per location. From Google products
+Onboarding,Mavan.io CRM setup,Onboarding,,,,
+Onboarding,SEMRush project + report template,Onboarding,,,,
+Onboarding,GSC + GA4 + GTM setup,Onboarding,,,,
+Authority & Trust,Link building playbook,Month 1,-,1.5,1.5,DO FIRST: blocks Link building
+Authority & Trust,Tech audit (incl. GSC manual actions review),Month 1,2.0,2.0,3.0,
+Authority & Trust,IA audit + implementation,Month 1,3.0,4.0,6.0,DO FIRST: blocks Core service page improvements
+Authority & Trust,YEXT directory listings / NAP expansion,Month 1,0.25,0.25,0.25,Per location
+Authority & Trust,YMYL audit,Month 1,1.0,2.0,2.0,
+Authority & Trust,Link building,Month 1,-,5.0,5.0,BLOCKED BY: Link building playbook
+Authority & Trust,Core service page improvements (from IA audit findings),Month 1,-,-,6,Added from Site Architecture. BLOCKED BY: IA audit + implementation
+Authority & Trust,Review strategy,Month 1,-,-,0.5,Added from Maps track.
+Authority & Trust,Breadcrumb implementation,Month 1,-,-,1,
+Authority & Trust,Monthly GMB audit,Month 1,1.0,1.0,1.0,Per location
+Authority & Trust,Monthly GBP posts,Month 1,0.5,0.5,0.5,Per location
+Authority & Trust,Monthly reporting,Month 1,1.0,1.0,1.0,
+Authority & Trust,Monthly AM/PM,Month 1,2.0,6.0,6.0,
+Authority & Trust,Link building,Month 2,-,5.0,5.0,
+Authority & Trust,Tech implementation,Month 2,1.0,2.0,2.0,
+Authority & Trust,Striking distance audit,Month 2,2.0,2.0,2.0,
+Authority & Trust,GBP review responses,Month 2,0.5,0.5,0.5,
+Authority & Trust,Schema recommendations + implementation,Month 2,1.5,1.5,4.0,
+Authority & Trust,Content refresh + pruning,Month 2,3,3,4,
+Authority & Trust,Core service content improvements incl. on-page,Month 2,-,-,8,
+Authority & Trust,Monthly GMB audit,Month 2,1.0,1.0,1.0,Per location
+Authority & Trust,Monthly GBP posts,Month 2,0.5,0.5,0.5,Per location
+Authority & Trust,Monthly reporting,Month 2,1.0,1.0,1.0,
+Authority & Trust,Monthly AM/PM,Month 2,2.0,6.0,6.0,
+Authority & Trust,YMYL implementation,Month 3,2.0,2.0,4.0,
+Authority & Trust,Content roadmap,Month 3,2.0,2.0,3.0,
+Authority & Trust,Internal linking audit + implementation,Month 3,1.0,2.0,4.0,
+Authority & Trust,UX audit + implementation,Month 3,1.0,1.0,2.0,
+Authority & Trust,CRO audit + implementation,Month 3,1.0,1.0,2.0,
+Authority & Trust,Link building,Month 3,-,5.0,5.0,
+Authority & Trust,Core service content improvements incl. on-page (based on IA findings),Month 3,-,-,6,
+Authority & Trust,Monthly GMB audit,Month 3,0.5,0.5,0.5,Per location
+Authority & Trust,Monthly GBP posts,Month 3,0.5,0.5,0.5,Per location
+Authority & Trust,Monthly reporting,Month 3,1.0,1.0,1.0,
+Authority & Trust,Monthly AM/PM,Month 3,2.0,6.0,6.0,
+Authority & Trust,Text/GHL,Month 3,-,-,2.0,
+Authority & Trust,Front desk,Month 3,-,-,2.0,
+Google Maps,Review strategy,Month 1,0.5,0.5,0.5,
+Google Maps,Tech audit (incl. indexing review),Month 1,2.0,2.0,3.0,
+Google Maps,Core service or location content improvement incl. on-page,Month 1,3.0,5.0,8.0,BLOCKED BY: Competitor maps gap audit (row 104). Do the audit first in Month 1 so the content uses its findings. From service page content updates. Leftover hours can go to more pages.
+Google Maps,YEXT directory listings / NAP expansion,Month 1,0.25,0.25,0.25,Per location
+Google Maps,Link building playbook,Month 1,-,1.5,1.5,
+Google Maps,YMYL audit,Month 1,-,-,2,
+Google Maps,Location/service page gap audit,Month 1,-,-,4,
+Google Maps,GBP review responses,Month 1,-,-,0.5,Per location.
+Google Maps,Schema recommendations + implementation,Month 1,1.5,1.5,4.0,
+Google Maps,Monthly GMB audit,Month 1,1.0,1.0,1.0,Per location
+Google Maps,Monthly GBP posts,Month 1,0.5,0.5,0.5,Per location
+Google Maps,Monthly reporting,Month 1,1.0,1.0,1.0,
+Google Maps,Monthly AM/PM,Month 1,2.0,6.0,6.0,
+Google Maps,Core service or location content improvement incl. on-page,Month 2,3.0,5.0,8.0,
+Google Maps,Tech implementation,Month 2,1.0,2.0,2.0,
+Google Maps,GBP review responses,Month 2,0.5,0.5,0.5,
+Google Maps,Striking distance audit,Month 2,2.0,2.0,2.0,
+Google Maps,Competitor maps gap audit & implementation,Month 2,1.0,2.0,2.0,
+Google Maps,Link building,Month 2,-,-,5,
+Google Maps,YMYL implementation,Month 2,-,-,4,
+Google Maps,Monthly GMB audit,Month 2,1.0,1.0,1.0,Per location
+Google Maps,Monthly GBP posts,Month 2,0.5,0.5,0.5,Per location
+Google Maps,Monthly reporting,Month 2,1.0,1.0,1.0,
+Google Maps,Monthly AM/PM,Month 2,2.0,6.0,6.0,
+Google Maps,Link building,Month 3,-,5.0,5.0,
+Google Maps,UX audit + implementation,Month 3,1.0,1.0,2.0,
+Google Maps,CRO audit + implementation,Month 3,1.0,1.0,2.0,
+Google Maps,Internal linking audit + implementation,Month 3,1.0,2.0,4.0,
+Google Maps,Content roadmap,Month 3,2.0,2.0,3.0,From content strategy creation
+Google Maps,Core service or location content improvement incl. on-page,Month 3,2,2,8,
+Google Maps,Monthly GMB audit,Month 3,0.5,0.5,0.5,Per location
+Google Maps,Monthly GBP posts,Month 3,0.5,0.5,0.5,Per location
+Google Maps,Monthly reporting,Month 3,1.0,1.0,1.0,
+Google Maps,Monthly AM/PM,Month 3,2.0,6.0,6.0,
+Google Maps,Text/GHL,Month 3,-,-,2.0,
+Google Maps,Front desk,Month 3,-,-,2.0,
+Poor Content,YEXT directory listings / NAP expansion,Month 1,0.25,0.25,0.25,Per location
+Poor Content,Tech audit (incl. indexing review),Month 1,2.0,2.0,3.0,
+Poor Content,Content refresh + pruning,Month 1,3.0,3.0,4.0,
+Poor Content,Core service content improvements or creation incl. on-page (as many as time permits),Month 1,2,4,8.0,From service page content updates. Leftover hours can go to more pages.
+Poor Content,GBP review responses,Month 1,0.5,0.5,0.5,Per location
+Poor Content,IA audit + implementation,Month 1,-,-,6,
+Poor Content,Service page gap audit,Month 1,-,-,4,
+Poor Content,Link building playbook,Month 1,-,-,1.5,
+Poor Content,Monthly GMB audit,Month 1,1.0,1.0,1.0,Per location
+Poor Content,Monthly GBP posts,Month 1,0.5,0.5,0.5,Per location
+Poor Content,Monthly reporting,Month 1,1.0,1.0,1.0,
+Poor Content,Monthly AM/PM,Month 1,2.0,6.0,6.0,
+Poor Content,Core service content improvements or creation incl. on-page (as many as time permits),Month 2,2,4,8,
+Poor Content,Tech implementation,Month 2,1.0,2.0,2.0,
+Poor Content,Striking distance audit,Month 2,2,2.0,2.0,
+Poor Content,YMYL audit,Month 2,1.0,2.0,2.0,"Cited sources, blog authors, reviews/testimonials, clinician credentials"
+Poor Content,YMYL implementation,Month 2,2.0,2.0,4.0,
+Poor Content,Link Building,Month 2,-,-,5,
+Poor Content,Breadcrumb implementation,Month 2,-,-,1,
+Poor Content,GBP review responses,Month 2,-,-,0.5,Per location.
+Poor Content,Monthly GMB audit,Month 2,1.0,1.0,1.0,Per location
+Poor Content,Monthly GBP posts,Month 2,0.5,0.5,0.5,Per location
+Poor Content,Monthly reporting,Month 2,1.0,1.0,1.0,
+Poor Content,Monthly AM/PM,Month 2,2.0,6.0,6.0,
+Poor Content,Core service content improvements or creation incl. on-page (as many as time permits),Month 3,2,4,8.0,
+Poor Content,UX audit + implementation,Month 3,1.0,1.0,2.0,
+Poor Content,Schema recommendations + implementation,Month 3,1.5,1.5,4.0,
+Poor Content,Internal linking audit + implementation,Month 3,1.0,2.0,4.0,
+Poor Content,Link building,Month 3,-,-,5,
+Poor Content,CRO audit + implementation,Month 3,1.0,1.0,2.0,
+Poor Content,Content roadmap,Month 3,2.0,2.0,3.0,
+Poor Content,Monthly GMB audit,Month 3,0.5,0.5,0.5,Per location
+Poor Content,Monthly GBP posts,Month 3,0.5,0.5,0.5,Per location
+Poor Content,Monthly reporting,Month 3,1.0,1.0,1.0,
+Poor Content,Monthly AM/PM,Month 3,2.0,6.0,6.0,
+Poor Content,Text/GHL,Month 3,-,-,2.0,
+Poor Content,Front desk,Month 3,-,-,2.0,
+Site Architecture,IA audit + implementation,Month 1,3.0,4,6,
+Site Architecture,Tech audit (incl. indexing review),Month 1,2.0,2.0,3.0,
+Site Architecture,YMYL audit,Month 1,1,2,2,
+Site Architecture,Schema recommendations + implementation,Month 1,1.5,1.5,4,
+Site Architecture,Core service page improvements (from IA audit findings),Month 1,-,1.5,6,
+Site Architecture,Service page gap audit,Month 1,-,-,4,
+Site Architecture,Breadcrumb implementation,Month 1,-,-,1,
+Site Architecture,YEXT directory listings / NAP expansion,Month 1,0.25,0.25,0.25,
+Site Architecture,Link building playbook,Month 1,-,1.5,1.5,
+Site Architecture,Monthly GMB audit,Month 1,1.0,1.0,1.0,
+Site Architecture,Monthly GBP posts,Month 1,0.5,0.5,0.5,
+Site Architecture,Monthly reporting,Month 1,1.0,1.0,1.0,
+Site Architecture,Monthly AM/PM,Month 1,2.0,6.0,6.0,
+Site Architecture,Content refresh + pruning,Month 2,3.0,3.0,4.0,
+Site Architecture,Internal linking audit + implementation,Month 2,1.0,2.0,4.0,
+Site Architecture,Core service content improvements incl. on-page,Month 2,3.0,5.0,8.0,
+Site Architecture,Tech implementation,Month 2,1.0,2.0,2.0,
+Site Architecture,Link building,Month 2,-,-,5,
+Site Architecture,YMYL implementation,Month 2,2,2,4,"Cited sources, blog authors, reviews/testimonials, clinician credentials"
+Site Architecture,Monthly GMB audit,Month 2,1.0,1.0,1.0,Per location
+Site Architecture,Monthly GBP posts,Month 2,0.5,0.5,0.5,Per location
+Site Architecture,Monthly reporting,Month 2,1.0,1.0,1.0,
+Site Architecture,Monthly AM/PM,Month 2,2.0,6.0,6.0,
+Site Architecture,Link building,Month 3,-,5.0,5.0,
+Site Architecture,UX audit + implementation,Month 3,1.0,1.0,2.0,
+Site Architecture,CRO audit + implementation,Month 3,1.0,1.0,2.0,
+Site Architecture,Content roadmap,Month 3,2.0,2.0,3.0,
+Site Architecture,Core service content improvements incl. on-page (based on IA findings),Month 3,2,2,6,
+Site Architecture,Striking Distance Audit,Month 3,-,-,2,
+Site Architecture,Review strategy,Month 3,-,-,0.5,Added from Maps track.
+Site Architecture,GBP review responses,Month 3,-,-,0.5,
+Site Architecture,Monthly GMB audit,Month 3,0.5,0.5,0.5,Per location
+Site Architecture,Monthly GBP posts,Month 3,0.5,0.5,0.5,Per location
+Site Architecture,Monthly reporting,Month 3,1.0,1.0,1.0,
+Site Architecture,Monthly AM/PM,Month 3,2.0,6.0,6.0,
+Site Architecture,Text/GHL,Month 3,-,-,2.0,
+Site Architecture,Front desk,Month 3,-,-,2.0,

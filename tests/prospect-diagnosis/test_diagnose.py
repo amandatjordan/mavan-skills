@@ -188,6 +188,15 @@ class Diagnosis(unittest.TestCase):
         self.assertIn('Top-10 rankings on non-branded service keywords', c2[2])
         self.assertIn('1 vs', c2[3])
 
+    def test_diagnosis_json(self):
+        cfg = dict(self.cfg, service_terms=['botox'])
+        self.build(self.files(cfg))
+        d = json.loads((self.root / 'diagnosis.json').read_text())
+        self.assertEqual({v['lens'] for v in d['lenses']}, {'Architecture', 'Content', 'Authority'})
+        a1 = next(x for x in d['signals'] if x['id'] == 'A1')
+        self.assertEqual(a1['data']['archive'], 40)
+        self.assertEqual(d['services'][0]['service'], 'botox')
+
     def test_c2_falls_back_to_buying_searches(self):
         _, out = self.build(self.files())
         self.assertIn('no service_terms', self.signals(out)['C2'][7])
