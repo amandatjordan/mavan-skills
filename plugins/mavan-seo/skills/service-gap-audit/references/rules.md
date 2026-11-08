@@ -65,16 +65,16 @@ Never a gap for a node whose Status / Notes says "Do not flag" or "NOT US-approv
 | Gap Type | When | High | Medium | Low / No data |
 | --- | --- | --- | --- | --- |
 | Indexability blocker | Best page is not indexable | P1 | P1 | P1 |
-| Empty / thin page | Best page indexable and < thin | P1 | P1 | P1 |
 | Missing page (offered) | Gallery, concern page or meta mention, or Confirmed / Likely with no page | P1 | P2 | P3 |
 | No Service page (brand pages only) | Service with only brand / Sub-Service pages | P2 | P3 | P3 |
 | Missing page (blog only) | Only blog posts | P2 | P3 | P3 |
 | Section, no page | Only an H2 section | P3 | P3 | P3 |
-| Light page | Best page indexable, thin <= words < light | P3 | P3 | P3 |
+| Missing relevant keywords | Best page indexable (any word count) and at least 50% of the node's relevant-keyword volume is not in its title, H1, H2s or meta description | P2 | P3 | P3 |
 | Confirm Sub-Service, then page | Unknown (parent offered) | P2 | not flagged | not flagged |
-| Ask client: not offered? | Service, No evidence, fits practice type, not Beauty Services | Ask | not flagged | not flagged |
 
-**Page brief** for an Empty / thin Service page: build the best page into the main page (with today's word count); merge and 301 each other thin page for the same node; a section per Confirmed or Likely Sub-Service; Sub-Services to confirm; brand pages to compare and link.
+**No sign, no row.** A service with no evidence on the site (No evidence) is never recommended, and there is no "ask the client" row.
+
+**Existing pages.** An indexable page is never recommended just for being thin or light (thin and light still show in Page Inventory). It gets a row only as Missing relevant keywords. A keyword counts as found when every word in it (ignoring near, me, in, for, the, of, a, an, and, to, best) appears in the page's title, H1, H2s, meta description or path. Body copy is not in the export, so it is not checked. The row's Relevant Keywords list only the keywords the page lacks. The 50% share is a script constant (`MISSING_KW_SHARE`).
 
 ## Keywords per page
 
