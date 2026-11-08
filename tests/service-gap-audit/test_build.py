@@ -79,13 +79,10 @@ class ServiceGapAudit(unittest.TestCase):
         self.assertNotIn("Existing page, thin content", set(self.why.values()))
         self.assertNotIn("Existing page, light content", set(self.why.values()))
 
-    def test_dermal_filler_page_lacks_its_keywords(self):
-        self.assertEqual(self.why["Dermal Filler"], "Missing relevant keywords")
-
-    def test_existing_indexable_pages_only_as_missing_keywords(self):
+    def test_existing_pages_only_when_not_indexable(self):
         urls = self.recs[self.recs["Current URL"] != ""]
-        self.assertTrue(set(urls["Why Recommended"]) <= {"Existing page, not indexable", "Missing relevant keywords"})
-        self.assertNotIn("Restylane Kysse (Dermal Filler)", self.why)  # live, indexable, keywords on page
+        self.assertEqual(set(urls["Why Recommended"]), {"Existing page, not indexable"})
+        self.assertNotIn("Dermal Filler", self.why)  # live, indexable, thin: not recommended
 
     def test_next_steps_column_follows_current_url(self):
         cols = list(self.recs.columns)

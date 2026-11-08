@@ -69,12 +69,11 @@ Never a gap for a node whose Status / Notes says "Do not flag" or "NOT US-approv
 | No Service page (brand pages only) | Service with only brand / Sub-Service pages | P2 | P3 | P3 |
 | Missing page (blog only) | Only blog posts | P2 | P3 | P3 |
 | Section, no page | Only an H2 section | P3 | P3 | P3 |
-| Missing relevant keywords | Best page indexable (any word count) and at least 50% of the node's relevant-keyword volume is not in its title, H1, H2s or meta description | P2 | P3 | P3 |
 | Confirm Sub-Service, then page | Unknown (parent offered) | P2 | not flagged | not flagged |
 
 **No sign, no row.** A service with no evidence on the site (No evidence) is never recommended, and there is no "ask the client" row.
 
-**Existing pages.** An indexable page is never recommended just for being thin or light (thin and light still show in Page Inventory). It gets a row only as Missing relevant keywords. A keyword counts as found when every word in it (ignoring near, me, in, for, the, of, a, an, and, to, best) appears in the page's title, H1, H2s, meta description or path. Body copy is not in the export, so it is not checked. The row's Relevant Keywords list only the keywords the page lacks. The 50% share is a script constant (`MISSING_KW_SHARE`).
+**Existing pages.** An existing page is recommended only when it is not indexable. An indexable page is never recommended for being thin or light (both still show in Page Inventory and Service Coverage).
 
 ## Keywords per page
 

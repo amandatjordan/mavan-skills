@@ -21,7 +21,7 @@ Row 1 header groups: **Page** over A–E, **Search Volume** over F onward. Row 2
 | Total National Search Volume | Sum of those keywords |
 | Client GSC Impressions | Only when a Search Console sheet was used |
 
-Rows: every gap at Service or Sub-Service level, plus Brand / Device rows whose gap is Indexability blocker or Missing relevant keywords. Existing indexable pages appear only as Missing relevant keywords (Relevant Keywords then lists only the missing ones); a service with no sign on the site never appears. **Why Recommended**, in this sort order (then by Total National Search Volume, highest first):
+Rows: every gap at Service or Sub-Service level, plus Brand / Device rows whose gap is Indexability blocker. An existing page appears only when it is not indexable; a service with no sign on the site never appears. **Why Recommended**, in this sort order (then by Total National Search Volume, highest first):
 
 1. Existing page, not indexable
 2. Offered (before & after photos), no page
@@ -30,8 +30,7 @@ Rows: every gap at Service or Sub-Service level, plus Brand / Device rows whose 
 5. Only has a brand/product page
 6. Only has Sub-Service pages
 7. Only covered in blog posts
-8. Missing relevant keywords
-9. Confirm with client (parent Service offered)
+8. Confirm with client (parent Service offered)
 
 ### 3. Keyword Map
 Service Page Recommended, Current URL, Keyword, National Search Volume. One row per keyword.
@@ -54,7 +53,7 @@ Slug (trailing number stripped), Gallery Pages, Maps To (Service > node, or "Pac
 ## Checks the script runs (all must PASS)
 
 - Every Why Recommended value is one of the labels.
-- Existing indexable pages appear only as Missing relevant keywords.
+- Existing pages appear only when not indexable.
 - No row recommends a service with no sign on the site.
 - Total National Search Volume equals the row's Keyword Map rows.
 - Brand-only rows name their existing page(s), all under the row's Service.
