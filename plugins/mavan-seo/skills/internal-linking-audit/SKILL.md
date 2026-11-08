@@ -5,9 +5,9 @@ description: "Run Mavan's internal linking audit for a client site from Sitebulb
 
 # Internal Linking Audit (Mavan SOP)
 
-Version 2.1 (Oct 2026). This skill carries the whole process and does not need the written SOP; the "Internal Linking Audit Process" page in Notion is documentation for people.
+Version 2.2 (Nov 2026). This skill carries the whole process and does not need the written SOP; the "Internal Linking Audit Process" page in Notion is documentation for people.
 
-Find which pages should link to the client's priority pages (any commercial page; usually service pages) and deliver a sheet that says **which page to edit and which page to link to**. The team finds the spot in the copy and writes the anchor themselves, so don't read pages, quote sentences or suggest anchors. Everything comes from the crawl export and Search Console. Keep the run light.
+Find which pages should link to the client's priority pages (any commercial page; usually service pages) and deliver a sheet that says **which page to edit and which page to link to**. The team finds the spot in the copy and writes the anchor themselves, so don't read pages, quote sentences or suggest anchors. The sheet has an empty "Anchor text (SEO fills in)" column for the SEO to record the anchor they used; never fill it. Everything comes from the crawl export and Search Console. Keep the run light.
 
 ## Inputs
 
