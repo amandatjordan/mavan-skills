@@ -23,7 +23,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REF = os.path.join(HERE, '..', 'references')
 
 PRIORITY = ['Architecture', 'Content', 'Authority']           # verdict order (decided with Amanda)
-LENS_NAME = {'Architecture': 'Site Architecture', 'Content': 'Content', 'Authority': 'Authority & Trust'}
+LENS_NAME = {'Architecture': 'Site Architecture', 'Content': 'Content', 'Authority': 'Authority & Trust',
+             'Maps': 'Google Maps'}
 TRACK_FOR = {'Architecture': 'Site Architecture', 'Content': 'Poor Content', 'Authority': 'Authority & Trust',
              'Maps': 'Google Maps'}
 TIER_COL = {'starter': 'Starter', 'vip': 'VIP', 'signature': 'Signature'}
@@ -38,13 +39,30 @@ LENS_ABOUT = {
     'Authority': 'How much other reputable sites vouch for your practice through links.',
     'Maps': 'How your Google Business Profile shows up in local map results.',
 }
+# Shown only when another metric scored lower than the verdict: why it still comes first.
+PRIORITY_WHY = {
+    'Architecture': 'Site architecture affects which of your pages Google considers for search results. Fixing it first '
+                    'addresses why your pages are not ranking, and gives the content and authority work a solid '
+                    'foundation to build on.',
+    'Content': 'Content affects both your regular Google rankings and your Google Maps rankings. Your site structure is '
+               'sound enough for better pages to be found, so improving and adding service pages opens up visibility '
+               'for the searches patients make. Links and reviews also point back to your content, so it comes before '
+               'authority work.',
+    'Maps': 'Your Google Business Profile drives a large share of the visibility and calls a local practice gets. '
+            'It depends less on trust signals such as links than regular search results do{trust}, so your profile can '
+            'be improved without waiting on that work.',
+}
+MAPS_TRUST_OK = ', and we found those signals are not a major issue for you'
+
 VERDICT_WHY = {
-    'Architecture': 'The way the site is organized is the biggest issue we found. Content and links build on the '
-                    'structure, so fixing it is where the work starts.',
+    'Architecture': 'The way your site is organized is the underlying issue holding it back. Content and links build '
+                    'on the structure, so fixing it is where the work starts.',
     'Content': 'Your site structure is workable, but competitors cover the searches patients make far more fully. '
                'Better and missing service pages are where the work starts.',
     'Authority': 'Your structure and content are workable; competitors are ahead on how many reputable sites vouch '
                  'for them. Earning those signals is where the work starts.',
+    'Maps': 'Your Google Business Profile is the biggest opportunity we found for being seen by local patients, so '
+            'this is where the work starts.',
 }
 
 
@@ -239,7 +257,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .pill.muted{background:#eef0f3}
 .verdict{border-left:6px solid var(--accent);display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center}
 .verdict .kicker{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700}
-.verdict h3{font-size:24px;margin:4px 0 8px}.verdict p{margin:0;color:#344054}
+.verdict h3{font-size:24px;margin:4px 0 8px}.why{margin-top:14px;background:#f2f5ff;border-radius:10px;padding:10px 14px}.why b{font-size:13px;color:var(--accent)}.why p{margin:4px 0 0;font-size:14px}.verdict p{margin:0;color:#344054}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .metric h4{margin:0;font-size:17px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 .metric .about{color:var(--muted);font-size:13px;margin:4px 0 12px}
@@ -292,6 +310,23 @@ def ring(score, size=150, stroke=14, font=34):
 
 def esc(s):
     return html.escape(str(s))
+
+
+def priority_note(verdict, scores, lenses):
+    """Scored metrics with a lower health score than the verdict (empty = no explanation needed)."""
+    mine = scores.get(verdict)
+    if mine is None:
+        return []
+    return [k for k in PRIORITY + ['Maps'] if k != verdict and scores.get(k) is not None and scores[k] < mine]
+
+
+def priority_text(verdict, lenses):
+    text = PRIORITY_WHY.get(verdict, '')
+    if verdict == 'Maps':
+        auth = next((v for v in lenses.values() if v['lens'] == 'Authority'), None)
+        ok = auth is not None and auth.get('severity') in ('Low', 'Medium')
+        text = text.format(trust=MAPS_TRUST_OK if ok else '')
+    return text
 
 
 def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
@@ -358,6 +393,12 @@ def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
                ''.join(f'<span title="{esc(l)}">{esc(t)}</span>' for t, l in recurring) + '</div></div>')
 
     track = TRACK_FOR[verdict]
+    why_box = ''
+    lower = priority_note(verdict, scores, lenses)
+    if lower:
+        names = ' and '.join(f'{LENS_NAME[k]} ({scores[k]})' for k in lower)
+        why_box = (f'<div class="why"><b>Why we start here</b><p>{esc(LENS_NAME[verdict])} scores {scores[verdict]}, '
+                   f'higher than {esc(names)}, but it comes first. {esc(priority_text(verdict, lenses))}</p></div>')
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(d.get('client') or d['domain'])}: Site Health Report</title><style>{CSS}</style></head>
@@ -373,7 +414,7 @@ above, Needs work 50 to 74, Poor below 50.</p>
 
 <h2>Verdict</h2>
 <div class="card verdict"><div><div class="kicker">Main underlying issue</div><h3>{esc(LENS_NAME[verdict])}</h3>
-<p>{esc(VERDICT_WHY[verdict])}</p></div>{ring(scores[verdict], 110, 11, 26)}</div>
+<p>{esc(VERDICT_WHY[verdict])}</p>{why_box}</div>{ring(scores[verdict], 110, 11, 26)}</div>
 
 <h2>What we found</h2>
 <div class="metrics">{metric_cards}</div>
@@ -394,8 +435,8 @@ def main():
     ap.add_argument('--diagnosis', required=True, help='diagnosis.json from the prospect-diagnosis skill')
     ap.add_argument('--tier', required=True, choices=sorted(TIER_COL))
     ap.add_argument('--gbp', help='optional Google Business Profile JSON: {"score": 0-100, "findings": [{"text", "issue"}]}')
-    ap.add_argument('--verdict', choices=['architecture', 'content', 'authority'],
-                    help='override the verdict (only when the person says so; say why in the reply)')
+    ap.add_argument('--verdict', choices=['architecture', 'content', 'authority', 'maps'],
+                    help='override the verdict (only when the person says so, e.g. maps after the manual GBP check)')
     ap.add_argument('--prepared-by', default='Mavan')
     ap.add_argument('--date', default=date.today().strftime('%B %-d, %Y'))
     ap.add_argument('--out', required=True)

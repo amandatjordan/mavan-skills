@@ -117,6 +117,26 @@ class Page(unittest.TestCase):
         # 43, 20, 60 and 90 average to 53
         self.assertIn('aria-label="Score 53 out of 100"', page)
 
+    def test_why_box_when_a_lower_score_is_not_the_verdict(self):
+        p, out = self.run_report(diagnosis())          # Architecture 43 is the verdict, Content scores 20
+        page = out.read_text()
+        self.assertIn('Why we start here', page)
+        self.assertIn('higher than Content (20)', page)
+        self.assertIn('foundation', page)
+
+    def test_no_why_box_when_verdict_is_lowest(self):
+        p, out = self.run_report(diagnosis(arch=('High', 6, 7), cont=('High', 3, 5)))   # 14 vs 40
+        self.assertNotIn('Why we start here', out.read_text())
+
+    def test_maps_verdict_override_with_trust_clause(self):
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / 'gbp.json').write_text(json.dumps({'score': 70, 'findings': [{'text': 'Few reviews', 'issue': True}]}))
+        p, out = self.run_report(diagnosis(), '--gbp', tmp / 'gbp.json', '--verdict', 'maps')
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        page = out.read_text()
+        self.assertIn('Google Maps track', page)
+        self.assertIn('not a major issue for you', page)     # Authority is Medium here
+
     def test_stops_without_any_issue(self):
         d = diagnosis(arch=('Low', 0, 7), cont=('Low', 0, 5), auth=('Low', 0, 5))
         p, _ = self.run_report(d)
