@@ -109,6 +109,14 @@ class Diagnosis(unittest.TestCase):
         self.assertIn('READY', p.stdout)
         self.assertNotIn('NOT READY', p.stdout)
 
+    def test_competitors_come_from_gap_export(self):
+        cfg = {k: v for k, v in self.cfg.items() if k != 'competitors'}
+        p = run('preflight', *self.files(cfg), '--out', self.work)
+        self.assertIn(f'{C1}, {C2} (from the keyword gap export)', p.stdout)
+        b, out = self.build(self.files(cfg))
+        self.assertIn('Competitors from the keyword gap export', b.stdout)
+        self.assertIn('40 of 62', self.signals(out)['A1'][3])
+
     def test_preflight_fails_on_missing_competitor_column(self):
         cfg = dict(self.cfg, competitors=[C1, 'nobody.com'])
         p = run('preflight', *self.files(cfg), '--out', self.work, check=False)

@@ -23,17 +23,16 @@ Ask for what is missing in **one** message.
 | Authority overview figures | Strongly recommended | For the prospect and each competitor: Authority Score (or DR), referring domains now, and referring domains 12 months ago. From the tool's overview or the "compare domains" chart. Typed into `config.json` |
 | Prospect referring domains export | Optional | Semrush Backlink Analytics > Referring Domains (or Ahrefs). Adds the link-growth timing and quality counts |
 | Backlink gap export | Optional | Semrush Backlink Gap or Ahrefs Link Intersect. Adds the quality link gap |
-| Client facts | Required | Prospect name, domain, competitors, brand terms |
+| Client facts | Required | Prospect name, domain, brand terms. Competitors come from the keyword gap export's domain columns; list them in config only to drop or replace one |
 
 A page-level backlinks export is **not** needed (it is usually over the row cap). If the person sends a screenshot of the overview chart instead of figures, read the values off it, show them in one line and ask the person to confirm or correct them before writing them: values read from a chart are approximate.
 
 ## Step 1: Config and preflight
 
-Write `work/config.json`. Brand terms cover the prospect's and competitors' names as people search them (with spaces): those searches are left out of the content signals.
+Write `work/config.json`. Leave out `competitors`: the script takes them from the keyword gap export's domain columns and the preflight lists them. Add a `competitors` list only to drop or replace one (a competitor in a different specialty skews the content scores). Brand terms cover the prospect's and competitors' names as people search them (with spaces): those searches are left out of the content signals.
 
 ```json
 {"client": "Example Spa", "domain": "example-spa.com",
- "competitors": ["rival-one.com", "rival-two.com"],
  "brand_terms": ["example spa", "rival one"],
  "service_terms": ["botox", {"service": "Tummy tuck", "terms": ["abdominoplasty"]}],
  "overview": {

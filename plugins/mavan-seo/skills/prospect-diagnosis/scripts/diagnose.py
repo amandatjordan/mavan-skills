@@ -150,8 +150,7 @@ def cmd_preflight(a):
         cfg = {}
     for key, label in (('client', 'Prospect name'), ('domain', 'Prospect domain')):
         add('OK' if cfg.get(key) else 'FAIL', label, cfg.get(key) or 'missing from config.json')
-    comps = cfg.get('competitors') or []
-    add('OK' if 2 <= len(comps) <= 4 else 'FAIL', 'Competitors (2-4)', ', '.join(comps) or 'missing from config.json')
+    comps = [bare_domain(c) for c in cfg.get('competitors') or []]
 
     def load(path, item, spec):
         if not path:
@@ -183,7 +182,13 @@ def cmd_preflight(a):
     if gap is not None:
         tool = a.tool or detect_tool(gap)
         doms = domain_columns(gap, set())
-        need = [bare_domain(cfg.get('domain', ''))] + [bare_domain(c) for c in comps]
+        source = 'config.json'
+        if not comps:
+            comps = [d for d in doms if d != bare_domain(cfg.get('domain', ''))]
+            source = 'the keyword gap export'
+        add('OK' if 2 <= len(comps) <= 4 else 'FAIL', 'Competitors (2-4)',
+            f'{", ".join(comps)} (from {source})' if comps else 'none found in the keyword gap export')
+        need = [bare_domain(cfg.get('domain', ''))] + comps
         miss = [d for d in need if d and d not in doms]
         if not tool:
             add('FAIL', 'Keyword gap export', 'cannot tell Semrush from Ahrefs: re-run with --tool')
@@ -193,7 +198,7 @@ def cmd_preflight(a):
             add('OK', 'Keyword gap export', f'{tool.capitalize()}, {len(gap):,} rows, domains: {", ".join(sorted(doms))}')
 
     ov = cfg.get('overview') or {}
-    need = [bare_domain(cfg.get('domain', ''))] + [bare_domain(c) for c in comps]
+    need = [bare_domain(cfg.get('domain', ''))] + comps
     have = [d for d in need if d in {bare_domain(k) for k in ov}]
     if len(have) == len(need) and need[0]:
         add('OK', 'Authority overview (config)', f'{len(have)} domains')
@@ -613,10 +618,18 @@ def cmd_build(a):
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     cfg = load_json(a.config, {})
     prospect = bare_domain(cfg.get('domain', ''))
-    comps = [bare_domain(x) for x in cfg.get('competitors', [])]
-    if not prospect or not comps:
-        raise SystemExit('config.json needs "domain" and "competitors".')
     ov = parse_map(a.map)
+    comps = [bare_domain(x) for x in cfg.get('competitors', [])]
+    if not prospect:
+        raise SystemExit('config.json needs "domain".')
+    if not comps:   # competitors come from the keyword gap export's domain columns unless config.json lists them
+        gdf = read_any(a.gap)
+        doms = domain_columns(gdf, {c for c in resolve(gdf, GAP_SPEC, 'gap', ov).values() if c})
+        doms.update({bare_domain(k[7:]): v for k, v in ov.items() if k.startswith('gapcol.')})
+        comps = [d for d in doms if d != prospect]
+        print(f'  Competitors from the keyword gap export: {", ".join(comps)}')
+    if not 2 <= len(comps) <= 4:
+        raise SystemExit(f'Need 2-4 competitors; found {comps}. List them in config.json "competitors".')
     checks = []
 
     def check(name, ok, detail=''):
