@@ -1,7 +1,7 @@
 """Search Console (GSC) helpers for client-diagnosis.
 
-Reads Mavan's GSC export (one row per date + page + query), splits it into two consecutive 6-month periods that end on
-the newest date in the file, checks whether impressions can be compared between the two periods, lists the keywords
+Reads Mavan's GSC export (one row per date + page + query), splits it into two consecutive equal periods that end on
+the newest date in the file: 6 months each when it spans a year, otherwise two equal halves of whatever it holds, checks whether impressions can be compared between the two periods, lists the keywords
 whose clicks fell, and scores the GSC signals. Every count, share and sum is computed here. No API and no connector:
 the downloaded .xlsx or .csv is the only source.
 
@@ -27,7 +27,8 @@ GSC_SPEC = {
 }
 ROUND_ROWS = {1000, 5000, 10000, 20000, 25000, 30000, 50000, 100000}
 PERIOD_MONTHS = 6
-MIN_SPAN_DAYS_SLACK = 14       # the data must start within this many days of the start of period A
+MIN_SPAN_DAYS_SLACK = 14       # data starting this close to a full window counts as covering it
+MIN_DAYS = 14                  # under this many days cannot be split into two periods (preflight fails)
 COMPARABLE_RATIO = 0.5         # zero-click rows' share of a period must be at least this fraction of the other period's
 
 # Defaults for the thresholds the person confirms each run (references/rules.md)
@@ -111,11 +112,27 @@ def load(path, tab, domain, brand_terms):
 # ------------------------------------------------------------------ periods
 
 def periods(df):
-    """Two consecutive 6-month periods ending on the newest date. B = the later one."""
-    end = df['date'].max().normalize()
-    b_start = end - pd.DateOffset(months=PERIOD_MONTHS) + pd.Timedelta(days=1)
-    a_start = b_start - pd.DateOffset(months=PERIOD_MONTHS)
-    return {'a_start': a_start, 'a_end': b_start - pd.Timedelta(days=1), 'b_start': b_start, 'b_end': end}
+    """Two consecutive equal periods ending on the newest date. B = the later one.
+    A year or more of data: B = the latest 6 months, A = the 6 months before it. Less: two equal halves of the span
+    (an odd day at the start is dropped), so the periods are always the same length."""
+    end, start = df['date'].max().normalize(), df['date'].min().normalize()
+    year_start = end - pd.DateOffset(months=2 * PERIOD_MONTHS) + pd.Timedelta(days=1)
+    if start <= year_start + pd.Timedelta(days=MIN_SPAN_DAYS_SLACK):
+        b_start = end - pd.DateOffset(months=PERIOD_MONTHS) + pd.Timedelta(days=1)
+        a_start = b_start - pd.DateOffset(months=PERIOD_MONTHS)
+        mode = 'six-month'
+    else:
+        half = ((end - start).days + 1) // 2
+        b_start = end - pd.Timedelta(days=half - 1)
+        a_start = b_start - pd.Timedelta(days=half)
+        mode = 'halves'
+    a_end = b_start - pd.Timedelta(days=1)
+    days_each = (a_end - a_start).days + 1
+    months = round(days_each / 30.44)
+    label = 'six months' if mode == 'six-month' else (
+        f'{months} month' + ('' if months == 1 else 's') if months >= 1 else f'{days_each} days')
+    return {'a_start': a_start, 'a_end': a_end, 'b_start': b_start, 'b_end': end, 'mode': mode, 'days_each': days_each,
+            'label': label}
 
 
 def split(df, p):
@@ -134,7 +151,10 @@ def profile(df):
     za, zb = zshare(a), zshare(b)
     hi, lo = max(za, zb), min(za, zb)
     comparable = bool(len(a) and len(b)) and (hi == 0 or lo >= COMPARABLE_RATIO * hi)
-    covered = df['date'].min() <= p['a_start'] + pd.Timedelta(days=MIN_SPAN_DAYS_SLACK)
+    span = (df['date'].max().normalize() - df['date'].min().normalize()).days + 1
+    covered = span >= MIN_DAYS
+    short = df['date'].min().normalize() > p['b_end'] - pd.DateOffset(months=PERIOD_MONTHS) + pd.Timedelta(
+        days=MIN_SPAN_DAYS_SLACK)      # under 6 months of data
     reason = ''
     if not comparable and len(a) and len(b):
         thin = 'B' if zb < za else 'A'
@@ -143,7 +163,8 @@ def profile(df):
                   f' and sorted by clicks, so impressions in period {thin} are mostly missing. Clicks are complete; '
                   'impressions are not comparable between the periods.')
     return {**p, 'min_date': df['date'].min().normalize(), 'rows': len(df), 'rows_a': len(a), 'rows_b': len(b),
-            'zero_a': za, 'zero_b': zb, 'comparable': comparable, 'covered': bool(covered), 'reason': reason,
+            'zero_a': za, 'zero_b': zb, 'comparable': comparable, 'covered': bool(covered), 'short': bool(short),
+            'span_days': span, 'reason': reason,
             'capped': len(df) in ROUND_ROWS}
 
 
@@ -246,12 +267,12 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
     zero = [p for p in other_pages if p not in have]
     z_share = share(len(zero), len(other_pages))
     if comp and len(other_pages):
-        S.add('Architecture', 'A7', 'Indexable non-archive pages with no Search Console impressions in the last 6 months',
+        S.add('Architecture', 'A7', 'Indexable non-archive pages with no Search Console impressions in the latest period',
               f'{len(zero):,} of {len(other_pages):,} ({pct(z_share)})', f'{pct(ZERO_IMPR_SHARE)} = 1 point',
               int(z_share >= ZERO_IMPR_SHARE), 1)
-        S.data(no_impressions=len(zero), pages=len(other_pages), share=z_share)
+        S.data(no_impressions=len(zero), pages=len(other_pages), share=z_share, period=prof['label'])
     else:
-        S.add('Architecture', 'A7', 'Indexable non-archive pages with no Search Console impressions in the last 6 months',
+        S.add('Architecture', 'A7', 'Indexable non-archive pages with no Search Console impressions in the latest period',
               'not scored', f'{pct(ZERO_IMPR_SHARE)} = 1 point', None, 1, why)
     out['a7_scored'] = bool(comp and len(other_pages))
     out['zero_pages'] = zero
@@ -262,7 +283,7 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
     is_arch = nb['page'].map(lambda u: bool(arch_re.search(re.sub(r'^https://[^/]+', '', u) or '/')))
     arch_i, tot_i = float(nb.loc[is_arch, 'impr'].sum()), float(nb['impr'].sum())
     if comp and tot_i > 0:
-        S.add('Architecture', 'A8', 'Archive and listing pages as a share of non-brand Search Console impressions (last 6 months)',
+        S.add('Architecture', 'A8', 'Archive and listing pages as a share of non-brand Search Console impressions (latest period)',
               f'{arch_i:,.0f} of {tot_i:,.0f} ({pct(share(arch_i, tot_i))})', f'{pct(ARCHIVE_IMPR_SHARE)} = 1 point',
               int(share(arch_i, tot_i) >= ARCHIVE_IMPR_SHARE), 1)
         S.data(archive_impressions=arch_i, impressions=tot_i, share=share(arch_i, tot_i))
@@ -284,7 +305,7 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
             comp_rows.append([qq, int(tot[qq]), len(sub), ', '.join(sub['page'].head(4))])
         comp_rows.sort(key=lambda r: -r[1])
         if len(real):
-            S.add('Architecture', 'A9', 'Searches where 2+ of the site\'s URLs each get impressions (non-brand, last 6 months)',
+            S.add('Architecture', 'A9', 'Searches where 2+ of the site\'s URLs each get impressions (non-brand, latest period)',
                   f'{len(competing):,} of {len(real):,} ({pct(c_share)})', f'{pct(COMPETING_SHARE)} = 1 point',
                   int(c_share >= COMPETING_SHARE), 1,
                   f'Searches with {MIN_QUERY_IMPR}+ impressions; a URL competes with {MIN_PAGE_IMPR}+ on that search.')
@@ -293,7 +314,7 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
             S.add('Architecture', 'A9', 'Searches where 2+ of the site\'s URLs each get impressions', 'no searches with enough '
                   'impressions', '', None, 1, 'Too little data')
     else:
-        S.add('Architecture', 'A9', 'Searches where 2+ of the site\'s URLs each get impressions (non-brand, last 6 months)',
+        S.add('Architecture', 'A9', 'Searches where 2+ of the site\'s URLs each get impressions (non-brand, latest period)',
               'not scored', f'{pct(COMPETING_SHARE)} = 1 point', None, 1, why)
     out['competing_rows'] = comp_rows
 
@@ -302,18 +323,18 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
     ia, ib = float(q['impr_a'].sum()), float(q['impr_b'].sum())
     if ca >= TREND_MIN_CLICKS:
         change = (cb - ca) / ca
-        S.add('Content', 'C5', 'Non-brand Search Console clicks: last 6 months vs the 6 months before',
+        S.add('Content', 'C5', 'Non-brand Search Console clicks: latest period vs the period before',
               f'{ca:,.0f} to {cb:,.0f} ({change:+.0%})', f'down {pct(TREND_DROP)} or more = 1 point', int(change <= -TREND_DROP),
               1, 'Clicks and impressions from Search Console.')
-        S.data(clicks_a=ca, clicks_b=cb, change=change, basis='clicks')
+        S.data(clicks_a=ca, clicks_b=cb, change=change, basis='clicks', period=prof['label'])
     elif comp and ia >= impr_floor:
         change = (ib - ia) / ia
-        S.add('Content', 'C5', 'Non-brand Search Console impressions: last 6 months vs the 6 months before (clicks too low)',
+        S.add('Content', 'C5', 'Non-brand Search Console impressions: latest period vs the period before (clicks too low)',
               f'{ia:,.0f} to {ib:,.0f} ({change:+.0%})', f'down {pct(TREND_DROP)} or more = 1 point',
               int(change <= -TREND_DROP), 1, f'Clicks in period A were under {TREND_MIN_CLICKS}, so impressions were used.')
-        S.data(impressions_a=ia, impressions_b=ib, change=change, basis='impressions')
+        S.data(impressions_a=ia, impressions_b=ib, change=change, basis='impressions', period=prof['label'])
     else:
-        S.add('Content', 'C5', 'Non-brand Search Console traffic: last 6 months vs the 6 months before', 'not scored',
+        S.add('Content', 'C5', 'Non-brand Search Console traffic: latest period vs the period before', 'not scored',
               f'down {pct(TREND_DROP)} or more = 1 point', None, 1,
               f'Fewer than {TREND_MIN_CLICKS} non-brand clicks in period A' + ('' if comp else ' and impressions are not comparable'))
 
@@ -330,7 +351,7 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
         scope = 'non-brand service searches' if names else 'non-brand searches (no service_terms)'
         S.add('Content', 'C6', f'{scope.capitalize()} at average position {STRIKE_LOW}-{STRIKE_HIGH} with real impressions',
               f'{len(strike_rows):,} searches', f'{STRIKE_MIN}+ = 1 point', int(len(strike_rows) >= STRIKE_MIN), 1,
-              f'Searches with {MIN_QUERY_IMPR}+ impressions in the last 6 months.')
+              f'Searches with {MIN_QUERY_IMPR}+ impressions in the latest period.')
         S.data(searches=len(strike_rows), low=STRIKE_LOW, high=STRIKE_HIGH)
     else:
         S.add('Content', 'C6', 'Non-brand service searches at average position 8-20 with real impressions', 'not scored',

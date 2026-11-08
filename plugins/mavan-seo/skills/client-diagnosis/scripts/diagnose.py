@@ -1,6 +1,6 @@
 """Client diagnosis: which of authority / trust, content or site architecture is an existing client's biggest issue.
 
-The prospect diagnosis plus Search Console (GSC): a 6-month period-over-period comparison of clicks and impressions,
+The prospect diagnosis plus Search Console (GSC): a period-over-period comparison (6 months each, or equal halves of shorter data) of clicks and impressions,
 the keywords whose clicks fell, and GSC versions of the structure and content signals. See gsc.py.
 
 Two commands:
@@ -234,12 +234,17 @@ def cmd_preflight(a):
         gp = gsc.profile(gdf)
         d0, d1 = gp['min_date'].date(), gp['b_end'].date()
         if not gp['covered']:
-            add('FAIL', 'Search Console export', f'covers {d0} to {d1}, less than the 12 months needed (periods start '
-                f'{gp["a_start"].date()}): ask for the full year with a Date column')
+            add('FAIL', 'Search Console export', f'covers {d0} to {d1}, under {gsc.MIN_DAYS} days: too short to split into two '
+                'periods. Ask for more data with a Date column')
         else:
             add('OK', 'Search Console export', f'tab "{ginfo["tab"]}", {gp["rows"]:,} rows, {d0} to {d1}; period A '
                 f'{gp["a_start"].date()} to {gp["a_end"].date()} ({gp["rows_a"]:,} rows), period B {gp["b_start"].date()} to '
                 f'{gp["b_end"].date()} ({gp["rows_b"]:,} rows)')
+        if gp['covered'] and gp['short']:
+            add('WARN', 'Search Console length', f'{gp["span_days"]} days is under the 6 months wanted. If the client has no '
+                f'more, use it: the two periods are equal halves of {gp["days_each"]} days each, so trends are rougher')
+        elif gp['covered'] and gp['mode'] == 'halves':
+            add('OK', 'Search Console periods', f'under a year of data: two equal periods of {gp["label"]} each')
         if gp['capped']:
             add('WARN', 'Search Console row count', f'{gp["rows"]:,} rows is a round number: the export may be capped')
         add('OK' if gp['comparable'] else 'WARN', 'Search Console impressions',
@@ -717,9 +722,15 @@ def cmd_build(a):
     gdf, ginfo = gsc.load(a.gsc, a.gsc_tab, prospect, brand)
     prof = gsc.profile(gdf)
     if not prof['covered']:
-        print(f'FAIL Search Console: the data starts {prof["min_date"].date()}; 12 months are needed (period A starts '
-              f'{prof["a_start"].date()}). Ask for the full year.')
+        print(f'FAIL Search Console: {prof["span_days"]} days of data is too short to split into two periods '
+              f'(at least {gsc.MIN_DAYS}). Ask for more data.')
         sys.exit(2)
+    if prof['short']:
+        notes.append(f'The Search Console data covers only {prof["span_days"]} days, under the 6 months wanted. The two periods '
+                     f'are equal halves of {prof["days_each"]} days, so the trend and keyword drops are rougher.')
+    elif prof['mode'] == 'halves':
+        notes.append(f'The Search Console data covers under a year, so the two periods are equal halves of {prof["label"]} '
+                     'each instead of 6 months each.')
     ga, gb = gsc.split(gdf, prof)
     gq = gsc.query_table(ga, gb)
     print(f'  Search Console: tab "{ginfo["tab"]}", {len(gdf):,} rows. Period A {prof["a_start"].date()} to '
@@ -976,7 +987,7 @@ def cmd_build(a):
         'notes': notes,
         'report_type': 'client',
         'manual_action': manual,
-        'gsc': {'period_a': [str(prof['a_start'].date()), str(prof['a_end'].date())],
+        'gsc': {'period_label': prof['label'], 'period_mode': prof['mode'], 'short': prof['short'], 'period_a': [str(prof['a_start'].date()), str(prof['a_end'].date())],
                 'period_b': [str(prof['b_start'].date()), str(prof['b_end'].date())],
                 'impressions_comparable': prof['comparable'], 'keyword_drops': int(len(drop)),
                 'nonbrand_clicks_a': float(gq['clicks_a'].sum()), 'nonbrand_clicks_b': float(gq['clicks_b'].sum())},

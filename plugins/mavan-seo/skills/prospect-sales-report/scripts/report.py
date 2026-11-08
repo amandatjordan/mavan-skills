@@ -120,9 +120,10 @@ def finding(sig):
             return (True, f'{pct(d["share"])} of your regular pages have under {d["words"]} words of content.') if issue \
                 else (False, 'Most pages have a reasonable amount of written content.')
         if sid == 'A7':
+            per = d.get('period', 'six months')
             return (True, f'{pct(d["share"])} of your regular pages ({n(d["no_impressions"])} of {n(d["pages"])}) did not '
-                          'show up in Google search at all in the last six months.') if issue else \
-                   (False, 'Most of your regular pages showed up in Google search in the last six months.')
+                          f'show up in Google search at all in the latest {per}.') if issue else \
+                   (False, f'Most of your regular pages showed up in Google search in the latest {per}.')
         if sid == 'A8':
             return (True, f'Automatically generated listing pages account for {pct(d["share"])} of the searches your site '
                           'appears for, instead of your service pages.') if issue else None
@@ -134,9 +135,10 @@ def finding(sig):
             a_, b_ = (d['impressions_a'], d['impressions_b']) if d.get('basis') == 'impressions' else \
                 (d['clicks_a'], d['clicks_b'])
             what = 'Appearances in' if d.get('basis') == 'impressions' else 'Clicks from'
-            return (True, f'{what} non-branded searches fell {pct(-d["change"])} over the last six months compared with '
-                          f'the six months before ({n(a_)} to {n(b_)}).') if issue else \
-                   (False, f'{what} non-branded searches held up over the last six months ({n(a_)} to {n(b_)}).')
+            per = d.get('period', 'six months')
+            return (True, f'{what} non-branded searches fell {pct(-d["change"])} over the latest {per} compared with '
+                          f'the {per} before ({n(a_)} to {n(b_)}).') if issue else \
+                   (False, f'{what} non-branded searches held up over the latest {per} ({n(a_)} to {n(b_)}).')
         if sid == 'C6':
             return (True, f'{n(d["searches"])} searches for your services sit just off page one (average positions '
                           f'{d["low"]} to {d["high"]}).') if issue else None

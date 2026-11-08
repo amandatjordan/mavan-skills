@@ -52,7 +52,7 @@ Notes:
 
 ## Search Console (GSC)
 
-- **Periods**: B = the 6 months ending on the newest date in the file, A = the 6 months before it; change = B minus A. The data must start within 14 days of the start of A or the preflight fails.
+- **Periods**: with a year of data (starting within 14 days of the start of the 12-month window), B = the 6 months ending on the newest date in the file and A = the 6 months before it. With less, the file is split into two equal halves of the span (A earlier, B later; an odd first day is dropped). Change = B minus A. Under 6 months is a preflight warning, not a stop; under 14 days fails because it cannot be split meaningfully.
 - **Brand**: whole-word match on `brand_terms`; brand searches are left out of every "non-brand" figure.
 - **Pages** are matched to the crawl with the same URL normalisation (https, no www, no query string, trailing slash), so tracking parameters such as `?utm_source=gbp` fold into the page.
 - **Capped exports**: if zero-click rows are under half as common in one period as in the other (the export kept only clicked rows there), impressions are not comparable. A7, A8, A9, C6 are Not scored, C5 uses clicks only, keyword drops use clicks only. A3 (the keyword-tool proxy) stays scored when A7 cannot be.

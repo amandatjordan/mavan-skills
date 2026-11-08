@@ -69,9 +69,27 @@ class Periods(unittest.TestCase):
         a, b = gsc.split(df, p)
         self.assertEqual(len(a) + len(b), len(df))
 
-    def test_short_export_does_not_cover_the_year(self):
-        df, _ = prep([(d.date(), 'q', f'https://{P}/', 1, 5, 3.0) for d in days('2026-10-09', 29)])
+    def test_under_two_weeks_cannot_be_split(self):
+        df, _ = prep([(d.date(), 'q', f'https://{P}/', 1, 5, 3.0) for d in days('2026-10-27', 10)])
         self.assertFalse(gsc.profile(df)['covered'])
+
+    def test_under_a_year_splits_into_equal_halves(self):
+        df, _ = prep([(d.date(), 'q', f'https://{P}/', 1, 5, 3.0) for d in days('2026-02-01', 280)])   # about 9 months
+        prof = gsc.profile(df)
+        self.assertTrue(prof['covered'])
+        self.assertFalse(prof['short'])
+        self.assertEqual(prof['mode'], 'halves')
+        a, b = gsc.split(df, prof)
+        self.assertEqual(len(a), len(b))
+        self.assertEqual(len(a) + len(b), 280)
+        self.assertEqual(prof['label'], '5 months')
+
+    def test_under_six_months_is_short_but_still_used(self):
+        df, _ = prep([(d.date(), 'q', f'https://{P}/', 1, 5, 3.0) for d in days('2026-10-09', 29)])
+        prof = gsc.profile(df)
+        self.assertTrue(prof['covered'])
+        self.assertTrue(prof['short'])
+        self.assertEqual(prof['days_each'], 14)
 
     def test_full_year_is_covered(self):
         df, _ = prep(year_rows())
@@ -243,14 +261,26 @@ class EndToEnd(unittest.TestCase):
         self.assertIn('not comparable', p.stdout)
         self.assertIn('READY', p.stdout)
 
-    def test_preflight_fails_on_short_export_and_missing_brand_terms(self):
+    def test_preflight_warns_on_short_export_and_uses_it(self):
         make_gsc([(d.date(), 'q', f'https://{P}/', 1, 5, 3.0) for d in days('2026-10-09', 29)]).to_csv(
+            self.root / 'gsc.csv', index=False)
+        p = self.run_script(DIAG, 'preflight', *self.args(), '--out', self.root / 'work')
+        self.assertIn('under the 6 months wanted', p.stdout)
+        self.assertIn('READY', p.stdout)
+        out = self.root / 'diag.xlsx'
+        b = self.run_script(DIAG, 'build', *self.args(), '--out', out)
+        self.assertIn('All checks passed', b.stdout)
+        data = json.loads((self.root / 'diagnosis.json').read_text())
+        self.assertTrue(data['gsc']['short'])
+
+    def test_preflight_fails_on_tiny_export_and_missing_brand_terms(self):
+        make_gsc([(d.date(), 'q', f'https://{P}/', 1, 5, 3.0) for d in days('2026-10-27', 10)]).to_csv(
             self.root / 'gsc.csv', index=False)
         (self.root / 'config.json').write_text(json.dumps({k: v for k, v in self.cfg.items() if k != 'brand_terms'}))
         p = self.run_script(DIAG, 'preflight', *self.args(), '--out', self.root / 'work', check=False)
         self.assertEqual(p.returncode, 2)
         self.assertIn('Brand terms', p.stdout)
-        self.assertIn('less than the 12 months', p.stdout)
+        self.assertIn('too short to split', p.stdout)
 
     def test_build_then_client_report(self):
         out = self.root / 'diag.xlsx'
