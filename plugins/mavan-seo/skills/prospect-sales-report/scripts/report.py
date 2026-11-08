@@ -119,6 +119,32 @@ def finding(sig):
         if sid == 'C4':
             return (True, f'{pct(d["share"])} of your regular pages have under {d["words"]} words of content.') if issue \
                 else (False, 'Most pages have a reasonable amount of written content.')
+        if sid == 'A7':
+            per = d.get('period', 'six months')
+            return (True, f'{pct(d["share"])} of your regular pages ({n(d["no_impressions"])} of {n(d["pages"])}) did not '
+                          f'show up in Google search at all in the latest {per}.') if issue else \
+                   (False, f'Most of your regular pages showed up in Google search in the latest {per}.')
+        if sid == 'A8':
+            return (True, f'Automatically generated listing pages account for {pct(d["share"])} of the searches your site '
+                          'appears for, instead of your service pages.') if issue else None
+        if sid == 'A9':
+            return (True, f'{pct(d["share"])} of the searches you appear for show two or more of your own pages, so '
+                          'your pages compete with each other.') if issue else \
+                   (False, 'Your pages rarely compete with each other for the same search.')
+        if sid == 'C5':
+            a_, b_ = (d['impressions_a'], d['impressions_b']) if d.get('basis') == 'impressions' else \
+                (d['clicks_a'], d['clicks_b'])
+            what = 'Appearances in' if d.get('basis') == 'impressions' else 'Clicks from'
+            per = d.get('period', 'six months')
+            return (True, f'{what} non-branded searches fell {pct(-d["change"])} over the latest {per} compared with '
+                          f'the {per} before ({n(a_)} to {n(b_)}).') if issue else \
+                   (False, f'{what} non-branded searches held up over the latest {per} ({n(a_)} to {n(b_)}).')
+        if sid == 'C6':
+            return (True, f'{n(d["searches"])} searches for your services sit just off page one (average positions '
+                          f'{d["low"]} to {d["high"]}).') if issue else None
+        if sid == 'U5':
+            return (True, 'Google reports a manual action on your site. It has to be resolved before other work can pay '
+                          'off.') if issue else None
         if sid == 'U1':
             return (True, f'Your authority score is {d["gap"]:g} points below the typical competitor '
                           f'({d["prospect"]:g} vs {d["median_competitor"]:g}).') if issue else \
@@ -202,11 +228,13 @@ def in_tier(row, tier):
     return v not in ('', '-')
 
 
-def roadmap(track, tier, labels):
-    rows = [r for r in load_tracks() if r['Track'] in ('Onboarding', track) and in_tier(r, tier)]
+def roadmap(track, tier, labels, onboarding=True):
+    """onboarding=False for existing clients: they are already onboarded, so the roadmap is months 1-3 only."""
+    keep = ('Onboarding', track) if onboarding else (track,)
+    rows = [r for r in load_tracks() if r['Track'] in keep and in_tier(r, tier)]
     if not any(r['Track'] == track for r in rows):
         raise SystemExit(f'No tasks for track "{track}" in references/tracks.csv.')
-    months = {m: [] for m in MONTHS}
+    months = {m: [] for m in (MONTHS if onboarding else MONTHS[1:])}
     recurring, missing = [], set()
     for r in rows:
         key = re.sub(r'\s+', ' ', r['Task'].strip().lower())
@@ -334,6 +362,10 @@ def priority_text(verdict, lenses):
     return text
 
 
+def is_client(d):
+    return (d or {}).get('report_type') == 'client'
+
+
 def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
     lenses = {v['lens']: v for v in d['lenses']}
     scores = {k: health(lenses[k]) if k in lenses else None for k in PRIORITY}
@@ -385,7 +417,8 @@ def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
                          'your Google Business Profile with you on the call.</li></ul></div>')
 
     cols = ''
-    for i, m in enumerate(MONTHS):
+    for m in months:
+        i = 0 if m == 'Onboarding' else int(m.split()[-1])
         compact = m == 'Onboarding'
         tasks = ''.join(
             f'<div class="task{" compact" if compact else ""}" title="{esc(t["line"])}"><b>{esc(t["title"])}</b>' +
@@ -407,6 +440,21 @@ def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
         names = ' and '.join(f'{LENS_NAME[k]} ({scores[k]})' for k in lower)
         why_box = (f'<div class="why"><b>Why we start here</b><p>{esc(LENS_NAME[verdict])} scores {scores[verdict]}, '
                    f'higher than {esc(names)}, but it comes first. {esc(priority_text(verdict, lenses))}</p></div>')
+    road_style = f' style="grid-template-columns:repeat({len(months)},1fr)"' if len(months) < 4 else ''
+    if is_client(d):
+        g = d.get('gsc') or {}
+        pa, pb = g.get('period_a', ['', '']), g.get('period_b', ['', ''])
+        footer = (f'Based on a crawl of {esc(d["domain"])}, Google Search Console clicks and impressions '
+                  f'({esc(pb[0])} to {esc(pb[1])} compared with {esc(pa[0])} to {esc(pa[1])}), and keyword and link data from '
+                  f'{esc(", ".join(d.get("tool") or ["the keyword tool"]))}, compared with {esc(", ".join(d.get("competitors", [])))}. '
+                  'Search Console figures are actual clicks and impressions; keyword tool figures are estimates and '
+                  'rankings are a snapshot of tracked searches. Scores show where the site stands today, not a forecast '
+                  'of results.')
+    else:
+        footer = (f'Based on a crawl of {esc(d["domain"])} and keyword and link data from '
+                  f'{esc(", ".join(d.get("tool") or ["the keyword tool"]))}, compared with {esc(", ".join(d.get("competitors", [])))}. '
+                  "Rankings are a snapshot of tracked searches; search figures are the tool's estimates. Scores show where "
+                  'the site stands today, not a forecast of results.')
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(d.get('client') or d['domain'])}: Site Health Report</title><style>{CSS}</style></head>
@@ -430,11 +478,9 @@ above, Needs work 50 to 74, Poor below 50.</p>
 <h2>Recommended roadmap · {esc(track)} track</h2>
 <p class="road-intro">The first three months for your {esc(TIER_NAME[tier])} plan, built around fixing
 {esc(LENS_NAME[verdict].lower())} first.</p>
-<div class="road">{cols}</div>{rec}
+<div class="road"{road_style}>{cols}</div>{rec}
 
-<footer>Based on a crawl of {esc(d['domain'])} and keyword and link data from {esc(', '.join(d.get('tool') or ['the keyword tool']))},
-compared with {esc(', '.join(d.get('competitors', [])))}. Rankings are a snapshot of tracked searches; search figures are
-the tool's estimates. Scores show where the site stands today, not a forecast of results.</footer>
+<footer>{footer}</footer>
 </div></body></html>"""
 
 
@@ -464,7 +510,7 @@ def run_checks(a):
                     f'{", ".join(sorted(missing))})')
             else:
                 for r in wb['Read Me'].iter_rows(values_only=True):
-                    if r and r[0] == 'Prospect':
+                    if r and r[0] in ('Prospect', 'Client'):
                         wb_prospect = str(r[1] or '')
                 wb_lead = sorted(str(r[0]) for r in list(wb['Verdict'].iter_rows(values_only=True))[1:]
                                  if r and len(r) > 4 and r[4] == 'Yes')
@@ -529,7 +575,7 @@ def run_checks(a):
         else:
             add('OK', 'Verdict', f'{LENS_NAME[verdict]} ({why})')
             if a.tier:
-                _, _, missing = roadmap(TRACK_FOR[verdict], a.tier, load_labels())
+                _, _, missing = roadmap(TRACK_FOR[verdict], a.tier, load_labels(), not is_client(d))
                 add('FAIL' if missing else 'OK', 'Roadmap task labels',
                     f'no client label for: {", ".join(missing)} (add to references/task_labels.json)' if missing
                     else f'{TRACK_FOR[verdict]} track, {TIER_NAME[a.tier]} plan')
@@ -559,7 +605,7 @@ def cmd_build(a):
     override = a.verdict.capitalize() if a.verdict else None
     verdict, why = pick_verdict(d['lenses'], override)
     labels = load_labels()
-    months, recurring, missing = roadmap(TRACK_FOR[verdict], a.tier, labels)
+    months, recurring, missing = roadmap(TRACK_FOR[verdict], a.tier, labels, not is_client(d))
     page = render(d, verdict, a.tier, months, recurring, maps, a.prepared_by, a.date)
 
     checks = []
@@ -569,12 +615,12 @@ def cmd_build(a):
         print(f'{"PASS" if ok else "FAIL"} {name}' + (f': {detail}' if detail else ''))
 
     check('verdict chosen', True, f'{LENS_NAME[verdict]} ({why})')
-    check('roadmap has tasks in every month', all(months[m] for m in MONTHS),
-          ', '.join(f'{m}: {len(months[m])}' for m in MONTHS))
+    check('roadmap has tasks in every month', all(months[m] for m in months),
+          ', '.join(f'{m}: {len(months[m])}' for m in months))
     check('every task has a client label', not missing, ', '.join(missing) or 'all labelled')
     banned = re.compile(r'\b(guarantee|will rank|will increase|you can expect|#1 ranking)\b', re.I)
     check('no promised results in the page', not banned.search(page))
-    check('no internal signal codes in the page', not re.search(r'>\s*[ACU][1-6]\b', page))
+    check('no internal signal codes in the page', not re.search(r'>\s*[ACU][1-9]\b', page))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     open(a.out, 'w').write(page)
     check('page written', os.path.exists(a.out), a.out)

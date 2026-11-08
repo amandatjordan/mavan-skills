@@ -26,6 +26,10 @@ Step 1 checks all of this. Ask for what is missing in **one** message.
 | Proposed plan level | Required | Starter, VIP or Signature: the plan sales is proposing. Ask with one multiple-choice question if the person has not said. Tasks not in that plan are dropped; hours are never shown |
 | Google Business Profile data | Optional (not defined yet) | Without it, Google Maps shows as "Checked separately" and is left out of the overall score. When it exists it is a JSON file: `{"score": 0-100, "findings": [{"text": "...", "issue": true}]}`; it is added to the overall score and gets its own card. The Maps track is never picked automatically |
 
+## Existing clients
+
+The same report works for a client diagnosis from the `client-diagnosis` skill. The script reads `report_type: client` from `diagnosis.json` and then drops the onboarding column (the roadmap is months 1-3 of the verdict's track), words the footer for Search Console clicks and impressions, and shows the Search Console findings. Pass the client's **current** plan level as `--tier`. The title stays "Site Health Report". Findings that need impressions only appear when the diagnosis could score them.
+
 ## Rules the script applies
 
 - **Health score** per metric = 100 minus that lens's issue score from the diagnosis (a lens with 4 of 7 issue points scores 43). Overall = the average of the scored metrics. Good 75+, Needs work 50-74, Poor under 50.
