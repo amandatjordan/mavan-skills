@@ -1,7 +1,7 @@
 {
   "name": "mavan-seo",
   "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, site diagnosis (Search Console triage), backlinks, prospect audit, prospect diagnosis (authority vs content vs architecture), prospect sales report, service page title & H1 review, client report from any audit",
-  "version": "1.20.0",
+  "version": "1.20.1",
   "author": {
     "name": "Mavan"
   }

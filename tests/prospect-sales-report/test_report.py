@@ -36,6 +36,7 @@ def diagnosis(arch=('High', 4, 7), cont=('High', 4, 5), auth=('Medium', 2, 5)):
             {'lens': 'Authority', 'id': 'U1', 'points': 0, 'possible': 2,
              'data': {'prospect': 25, 'median_competitor': 27, 'gap': 2}},
         ],
+        'lead': [],
         'services': [{'service': 'Botox', 'keywords': 50, 'prospect_top10': 2, 'prospect_best': 4,
                       'top_competitor': 'rival-one.com', 'competitor_top10': 20, 'competitor_best': 1, 'lost': 15,
                       'note': ''}],
@@ -88,14 +89,61 @@ class Roadmap(unittest.TestCase):
                 self.assertEqual(missing, [], f'{track} {tier}')
 
 
+def write_workbook(path, domain='example-spa.com', lead=()):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Read Me'
+    ws.append(['Item', 'Detail'])
+    ws.append(['Prospect', f'Example Spa ({domain})'])
+    v = wb.create_sheet('Verdict')
+    v.append(['Lens', 'Severity', 'Score', 'Points', 'Lead issue', 'Evidence'])
+    for name in ('Architecture', 'Content', 'Authority'):
+        v.append([name, 'High', '50%', '1 of 2', 'Yes' if name in lead else '', ''])
+    wb.create_sheet('Signals').append(['Lens'])
+    wb.save(path)
+
+
 class Page(unittest.TestCase):
-    def run_report(self, d, *extra):
+    def run_report(self, d, *extra, cmd='build', tier='vip', workbook=True, wb_domain=None):
         tmp = Path(tempfile.mkdtemp())
         (tmp / 'diagnosis.json').write_text(json.dumps(d))
+        args = [sys.executable, str(SCRIPTS / 'report.py'), cmd]
+        if workbook:
+            write_workbook(tmp / 'diag.xlsx', wb_domain or d['domain'], d.get('lead', []))
+            args += ['--workbook', tmp / 'diag.xlsx']
+        if tier:
+            args += ['--tier', tier]
         out = tmp / 'report.html'
-        p = subprocess.run([sys.executable, str(SCRIPTS / 'report.py'), '--diagnosis', tmp / 'diagnosis.json',
-                            '--tier', 'vip', '--out', out, *map(str, extra)], capture_output=True, text=True)
+        args += ['--out', out if cmd == 'build' else tmp / 'work']
+        p = subprocess.run([*map(str, args), *map(str, extra)], capture_output=True, text=True)
         return p, out
+
+    def test_preflight_ready(self):
+        p, _ = self.run_report(diagnosis(), cmd='preflight')
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('READY', p.stdout)
+        self.assertIn('WARN | Google Business Profile data', p.stdout)
+
+    def test_preflight_needs_plan_level(self):
+        p, _ = self.run_report(diagnosis(), cmd='preflight', tier=None)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn('Proposed plan level', p.stdout)
+
+    def test_preflight_needs_spreadsheet(self):
+        p, _ = self.run_report(diagnosis(), cmd='preflight', workbook=False)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn('Prospect diagnosis spreadsheet | not provided', p.stdout)
+
+    def test_preflight_catches_mismatched_pair(self):
+        p, _ = self.run_report(diagnosis(), cmd='preflight', wb_domain='other-spa.com')
+        self.assertEqual(p.returncode, 2)
+        self.assertIn('same run', p.stdout)
+
+    def test_build_refuses_without_plan_level(self):
+        p, out = self.run_report(diagnosis(), tier=None)
+        self.assertEqual(p.returncode, 2)
+        self.assertFalse(out.exists())
 
     def test_page_sections_and_no_codes(self):
         p, out = self.run_report(diagnosis())
@@ -142,6 +190,13 @@ class Page(unittest.TestCase):
         p, _ = self.run_report(d)
         self.assertEqual(p.returncode, 2)
         self.assertIn('--verdict', p.stdout)
+
+    def test_table_headers(self):
+        _, out = self.run_report(diagnosis())
+        page = out.read_text()
+        self.assertIn('Your Rankings', page)
+        self.assertIn("Competitor's", page)
+        self.assertNotIn('page-one rankings</th>', page)
 
 
 if __name__ == '__main__':
