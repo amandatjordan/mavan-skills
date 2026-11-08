@@ -11,6 +11,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | `service-gap-audit` | Finds missing, thin and non-indexable service pages for medspa and plastic surgery sites from a crawl export and the bundled service taxonomy, and builds the gap audit workbook | Service Gap Audit |
 | `backlink-audit` | Compares the client's backlinks with competitors, lists sketchy links for review (disavow only with a GSC manual action), and lists lost backlinks to win back and link opportunities, from Ahrefs or Semrush exports | Backlink Gap |
 | `prospect-audit` | For a potential client with no Search Console or GA4: from a crawl plus Semrush or Ahrefs exports, builds the competitor keyword gap, a thin content flag and the list of ranking URLs that are not live, then runs the service gap, information architecture, title and H1 and backlink audits and drafts the prospect report. Keyword numbers are the tool's estimates | Prospect audit |
+| `prospect-diagnosis` | For a potential client with no Search Console: answers which is the biggest underlying issue, authority / trust, content or site architecture, from a crawl, Semrush or Ahrefs ranking and keyword gap exports, and overview figures typed from the tool (referring domains and backlink gap exports optional; no internal links or page-level backlinks export needed). Scores fixed signals and builds a workbook with the verdict and its evidence | Prospect audit |
 | `seo-audit-client-report` | Turns any finished audit's deliverables into a short client report: an at-a-glance table, the biggest themes (why each matters, with examples) and the next steps we will take. Never promises a result | Client report |
 | `service-page-title-h1-review` | From a crawl export of the service pages, works out what each page is about and its target keywords from the path, H1 and title, adds each page's top non-branded Search Console queries from a Google Sheet of GSC data you provide, and flags the pages a person must review (keywords missing from the title and H1, no location in the Title Tag or H1, blanks, pages that look like they are not service pages) | Service Page H1 & Title Tag Review |
 
@@ -54,6 +55,7 @@ Free plans can use skills but not plugins. Download the ZIP for the skill you wa
 | Service gap audit | [service-gap-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/service-gap-audit.zip) |
 | Backlink audit | [backlink-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/backlink-audit.zip) |
 | Prospect audit | [prospect-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/prospect-audit.zip) |
+| Prospect diagnosis | [prospect-diagnosis.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/prospect-diagnosis.zip) |
 | SEO audit client report | [seo-audit-client-report.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/seo-audit-client-report.zip) |
 | Service page H1 & Title Tag review | [service-page-title-h1-review.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/service-page-title-h1-review.zip) |
 

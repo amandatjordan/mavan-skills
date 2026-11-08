@@ -1,0 +1,48 @@
+# Rules
+
+Every threshold below is a constant at the top of `scripts/diagnose.py`. They are starting values: confirm with Amanda before changing, change them in the script, and update this file in the same pull request.
+
+## Scoring
+
+- Each signal adds points when its value passes its threshold (most are worth 1, a few 2).
+- A signal whose input is missing is **Not scored** and does not count toward the points possible.
+- A lens's score = points / points possible from its scored signals. **High** 50%+, **Medium** 25-49%, **Low** under 25%.
+- The lens with the highest score leads. Any lens within **10 points** of it is a **co-lead**. A lens with fewer than 2 scored signals is **Not enough data** and cannot lead.
+
+## Page groups (crawl)
+
+- **Live** = status 200. **Indexable** = the crawler's indexable status (every live page when the export has no indexability column).
+- **Archive and listing pages** = indexable pages whose path matches a generic CMS listing pattern: `/tag(s)/`, `/category/`, `/categories/`, `/author(s)/`, `/archive(s)/`, `/page/N`, `?page=N` (or `paged`, `p`), a date archive ending at the year or month (`/2024/` or `/2024/05/`), feeds. Add a site's own pattern in `config.json` `archive_patterns` only after checking examples in the crawl.
+- **Other indexable pages** = indexable pages that are not archives. Thin, repeated-title and no-keyword signals use only these, so archive pages are not counted twice.
+- When several crawl rows normalise to the same URL (trailing slash, case, `www`), the live 200 row wins.
+
+## Signals
+
+| Lens | ID | Signal | Threshold | Points |
+| --- | --- | --- | --- | --- |
+| Architecture | A1 | Archive pages as a share of indexable pages | 25% / 50% | 1 / 2 |
+| Architecture | A2 | Other indexable pages whose title or H1 is shared by 5+ pages | 20% | 1 |
+| Architecture | A3 | Other indexable pages with no tracked keywords (only when there are 200+ such pages) | 80% | 1 |
+| Architecture | A4 | Redirecting URLs (3xx) the crawler reached, as a share of crawled HTML URLs | 20% | 1 |
+| Architecture | A5 | Indexable pages deeper than 3 clicks (needs a crawl depth column) | 20% | 1 |
+| Architecture | A6 | Ranking URLs on the crawled host that are not a live 200 page (404, redirect, or not found by the crawl) | 10% | 1 |
+| Content | C1 | Keywords in the gap export ranked by the top competitor vs the prospect | 2x / 3x | 1 / 2 |
+| Content | C2 | Gap-export keywords in the top 10: prospect below the median competitor | below | 1 |
+| Content | C3 | Of the gap keywords a competitor ranks top 20 for (prospect absent), the share that are buying searches | 30% | 1 |
+| Content | C4 | Other indexable pages under 300 content words | 15% | 1 |
+| Authority | U1 | Median competitor authority score minus the prospect's | 5 / 10 | 1 / 2 |
+| Authority | U2 | Prospect referring domains under half the median competitor | under 50% | 1 |
+| Authority | U3 | Domains scoring 30+ that link to competitors and not the prospect outnumber the prospect's own 30+ domains (needs both optional exports) | more | 1 |
+| Authority | U4 | Unusual link growth: prospect 12-month referring domain growth 2x the median competitor, and/or 50%+ of its referring domains first seen in the last 90 days. Each check that has data must hold | holds | 1 |
+
+Notes:
+
+- **Buying searches** (C3): from the export's intent column when it has one (Commercial or Transactional), otherwise from buying words in the keyword (near me, cost, price, best, clinic, doctor, surgeon, consultation, financing, before and after, reviews). Searches containing a brand term or a competitor's domain name are left out of every content signal.
+- **Ranking URLs on another host** (a store subdomain, say) are listed as "Other host (not crawled)" and are not counted in A6.
+- **A4** counts every 3xx the crawler reached, so it includes http-to-https and trailing-slash redirects: internal links that point at redirects.
+- **U4 is a trust risk**, not proof of spam. Spam waves often hit every site in a market; compare growth with the competitors before calling it out, and never recommend a disavow without a Search Console manual action.
+- **Authority overview figures** are typed by the person. They are used as given and labelled as typed from the tool.
+
+## What this does not check
+
+Internal links between pages (no link export), the live site, Search Console, page speed or Core Web Vitals, and Google Business Profile.
