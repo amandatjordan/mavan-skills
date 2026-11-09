@@ -24,7 +24,7 @@ Step 1 checks all of this. Ask for what is missing in **one** message.
 | --- | --- | --- |
 | Prospect diagnosis spreadsheet | Required | The `.xlsx` from `prospect-diagnosis` for this prospect. Its `diagnosis.json` must sit next to it (the diagnosis writes both); pass `--diagnosis` if it was moved. The preflight checks the two are for the same prospect and the same run. If there is no diagnosis yet, run that skill first |
 | Proposed plan level | Required | Starter, VIP or Signature: the plan sales is proposing. Ask with one multiple-choice question if the person has not said. Tasks not in that plan are dropped; hours are never shown |
-| Google Business Profile data | Optional (not defined yet) | Without it, Google Maps shows as "Checked separately" and is left out of the overall score. When it exists it is a JSON file: `{"score": 0-100, "findings": [{"text": "...", "issue": true}]}`; it is added to the overall score and gets its own card. The Maps track is never picked automatically |
+| Google Business Profile data | Optional | Read from `diagnosis.json` when the diagnosis was run with the GBP sheet: Google Maps gets its own card with four plain-language findings (rating, number of reviews, local ranking on the priority searches, missing categories) and a score (the share of those four checks with no issue), and is added to the overall score. Without it the report still builds: Google Maps shows as "Checked separately" and is left out of the overall score. A `--gbp` JSON file `{"score": 0-100, "findings": [{"text": "...", "issue": true}]}` overrides it. The Maps track is never picked automatically |
 
 ## Existing clients
 

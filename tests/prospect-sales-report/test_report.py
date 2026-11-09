@@ -165,6 +165,26 @@ class Page(unittest.TestCase):
         # 43, 20, 60 and 90 average to 53
         self.assertIn('aria-label="Score 53 out of 100"', page)
 
+    def test_gbp_from_diagnosis_without_a_gbp_file(self):
+        d = diagnosis()
+        pr = {'name': 'X', 'rating': 4.1, 'reviews': 40, 'categories': ['Medical spa'],
+              'rankings': {'a': 6, 'b': 2, 'c': None}}
+        d['gbp'] = {'assessed': True, 'prospect': pr, 'median_rating': 4.8, 'median_reviews': 210,
+                    'missing_categories': [['Skin care clinic', 2]],
+                    'findings': [{'id': i, 'found': f} for i, f in (('G1', True), ('G2', True), ('G3', True), ('G4', False))]}
+        p, out = self.run_report(d)
+        html = out.read_text()
+        self.assertIn('Your Google rating (4.1) is lower than the typical nearby competitor (4.8).', html)
+        self.assertIn('outside the top 3 local map results for 2 of the 3', html)
+        self.assertIn('uses the categories your competitors use', html)
+        self.assertNotIn('Checked separately', html)
+
+    def test_report_runs_when_gbp_not_assessed(self):
+        d = diagnosis()
+        d['gbp'] = {'assessed': False, 'problems': ['no GBP sheet provided']}
+        p, out = self.run_report(d)
+        self.assertIn('Checked separately', out.read_text())
+
     def test_why_box_when_a_lower_score_is_not_the_verdict(self):
         p, out = self.run_report(diagnosis())          # Architecture 43 is the verdict, Content scores 20
         page = out.read_text()

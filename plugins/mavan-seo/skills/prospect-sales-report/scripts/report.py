@@ -484,6 +484,33 @@ above, Needs work 50 to 74, Poor below 50.</p>
 </div></body></html>"""
 
 
+def gbp_from_diagnosis(d):
+    """Google Maps card from the diagnosis's GBP findings (prospect-diagnosis, typed by the SEO).
+    Returns None when the diagnosis has no assessed GBP data. Score = share of the four checks with no issue."""
+    g = (d or {}).get('gbp') or {}
+    if not g.get('assessed'):
+        return None
+    f = {x['id']: x for x in g['findings']}
+    pr = g['prospect']
+    rating, reviews = float(pr['rating']), int(float(pr['reviews']))
+    outside = sum(1 for v in pr['rankings'].values() if not (isinstance(v, (int, float)) or str(v).replace('.', '', 1).isdigit())
+                  or float(v) > 3)
+    n_kw = len(pr['rankings'])
+    items = [
+        (f['G1']['found'], f'Your Google rating ({rating:.1f}) is lower than the typical nearby competitor ({g["median_rating"]:.1f}).',
+         f'Your Google rating ({rating:.1f}) is in line with nearby competitors ({g["median_rating"]:.1f}).'),
+        (f['G2']['found'], f'You have far fewer Google reviews ({reviews:,}) than the typical nearby competitor ({g["median_reviews"]:,.0f}).',
+         f'Your number of Google reviews ({reviews:,}) is in line with nearby competitors ({g["median_reviews"]:,.0f}).'),
+        (f['G3']['found'], f'You are outside the top 3 local map results for {outside} of the {n_kw} priority searches we checked.',
+         f'You show in the top 3 local map results for most of the priority searches we checked.'),
+        (f['G4']['found'], 'Competitors list Google Business Profile categories your profile is missing: '
+         + ', '.join(n for n, _ in g['missing_categories']) + '.',
+         'Your profile uses the categories your competitors use.'),
+    ]
+    score = round(100 * sum(1 for hit, _, _ in items if not hit) / len(items))
+    return {'score': score, 'findings': [{'text': bad if hit else ok, 'issue': bool(hit)} for hit, bad, ok in items]}
+
+
 DIAG_TABS = {'Read Me', 'Verdict', 'Signals'}
 
 
@@ -563,8 +590,11 @@ def run_checks(a):
         except (OSError, ValueError, AttributeError) as e:
             add('FAIL', 'Google Business Profile data', f'{a.gbp}: {e}')
             maps = None
+    elif d is not None and gbp_from_diagnosis(d):
+        maps = gbp_from_diagnosis(d)
+        add('OK', 'Google Business Profile data', f'from the diagnosis: score {maps["score"]}, {len(maps["findings"])} findings')
     else:
-        add('WARN', 'Google Business Profile data', 'not provided: Google Maps shows as "Checked separately" and is '
+        add('WARN', 'Google Business Profile data', 'not in the diagnosis and no --gbp file: Google Maps shows as "Checked separately" and is '
             'left out of the overall score')
 
     if d is not None:
