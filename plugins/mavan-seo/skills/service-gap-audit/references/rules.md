@@ -13,13 +13,13 @@ Decide each page's type from what the page is, using its H1, title and path toge
 | Gallery | Before & after photos | Proof the treatment in its slug is offered |
 | Blog | An article, news post, or a blog / news index | A blog mention (Likely offered) |
 | Location | A city or "serving X" landing page | Nothing (not a service page) |
-| Utility | Home, about, team, contact, policies, specials, financing, forms, category hubs with no content of their own | Nothing |
+| Utility | Home, about, team, contact, policies, specials, financing, forms, hub pages that only list links, with no content of their own | Nothing |
 
-A category hub (e.g. "Injectables", "Body") whose H1 names a taxonomy Service is a Service page for that Service; one that only lists links and names no taxonomy node is Utility.
+A **service category page** (e.g. "Injectables", "Body": a page with its own content that introduces a group of treatments) whose H1 names a taxonomy Service is a Service page for that Service. A **hub page** (a page that only lists links to other pages, such as a blog tag, blog category or date archive page, or a bare list of services) that names no taxonomy node is Utility.
 
 ## Nodes
 
-- `node` is the exact name of the most specific taxonomy node the page is about (Brand / Device > Sub-Service > Service), as written on the Taxonomy tab. A page about Botox is `Botox`, not `Neurotoxin`; an empty "Neurotoxins" hub is `Neurotoxin`.
+- `node` is the exact name of the most specific taxonomy node the page is about (Brand / Device > Sub-Service > Service), as written on the Taxonomy tab. A page about Botox is `Botox`, not `Neurotoxin`; an empty "Neurotoxins" service category page is `Neurotoxin`.
 - Every Service page needs a node. Concern, Blog and other pages may leave it blank: the script finds the treatments they name.
 - A brand or device that is not in the taxonomy: `NEW: Name > Service`, with an existing taxonomy Service as parent (e.g. `NEW: Emsella Chair > Sexual Wellness`). It counts as that Service's brand page and is listed for the taxonomy pull request.
 - Practice-specific program or package names ("Signature Glow Facial") are not brands: give the page the node of the treatment it is (`Facials`), or type it Concern if it bundles several.
