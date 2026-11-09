@@ -748,7 +748,7 @@ def verdict(S):
 # ------------------------------------------------------------------ workbook
 
 HEAD = Font(bold=True, color='FFFFFF')
-FILL = PatternFill('solid', fgColor='1F3A5F')
+FILL = PatternFill('solid', fgColor='111111')
 WRAP = Alignment(wrap_text=True, vertical='top')
 
 
