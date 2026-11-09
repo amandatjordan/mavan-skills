@@ -282,6 +282,44 @@ class EndToEnd(unittest.TestCase):
         self.assertIn('Brand terms', p.stdout)
         self.assertIn('too short to split', p.stdout)
 
+    def gbp_sheet(self, n_comps=3):
+        tpl = Path(__file__).resolve().parents[2] / 'plugins/mavan-seo/skills/client-diagnosis/references/gbp-template.xlsx'
+        wb = load_workbook(tpl)
+        for i, kw in enumerate(['botox near me', 'filler', 'med spa'], 2):
+            wb['Keywords'].cell(i, 1, kw)
+        rows = [['Example Spa', 'Client', 4.0, 40, 'Medical spa', 6, 2, None],
+                ['R0', 'Competitor', 4.8, 210, 'Medical spa; Skin care clinic', 1, 1, 2],
+                ['R1', 'Competitor', 4.7, 150, 'Medical spa; Skin care clinic', 2, 3, 1],
+                ['R2', 'Competitor', 4.9, 300, 'Medical spa', 3, 4, 3]][:n_comps + 1]
+        for i, row in enumerate(rows, 2):
+            for j, v in enumerate(row, 1):
+                wb['GBP'].cell(i, j, v)
+        path = self.root / 'gbp.xlsx'
+        wb.save(path)
+        return path
+
+    def test_gbp_findings_do_not_change_lenses_and_reach_the_report(self):
+        out = self.root / 'diag.xlsx'
+        self.run_script(DIAG, 'build', *self.args(), '--out', out)
+        before = [r[:5] for r in list(load_workbook(out)['Verdict'].values)]
+        p = self.run_script(DIAG, 'build', *self.args(), '--gbp', self.gbp_sheet(), '--out', out)
+        self.assertIn('All checks passed', p.stdout)
+        wb = load_workbook(out)
+        rows = {r[0]: r for r in list(wb['Google Business Profile'].values)[1:5]}
+        self.assertEqual([rows[i][3] for i in ('G1', 'G2', 'G3', 'G4')], ['Yes', 'Yes', 'Yes', 'Yes'])
+        self.assertEqual(before, [r[:5] for r in list(wb['Verdict'].values)])
+        page = self.root / 'report.html'
+        self.run_script(REPORT, 'build', '--workbook', out, '--tier', 'signature', '--out', page)
+        self.assertIn('Your Google rating (4.0) is lower', page.read_text())
+
+    def test_gbp_missing_or_incomplete_still_runs(self):
+        out = self.root / 'diag.xlsx'
+        p = self.run_script(DIAG, 'build', *self.args(), '--out', out)
+        self.assertIn('Google Business Profile: not assessed', p.stdout)
+        p = self.run_script(DIAG, 'build', *self.args(), '--gbp', self.gbp_sheet(2), '--out', out)
+        self.assertIn('need at least 3 competitors', p.stdout)
+        self.assertIn('All checks passed', p.stdout)
+
     def test_build_then_client_report(self):
         out = self.root / 'diag.xlsx'
         p = self.run_script(DIAG, 'build', *self.args(), '--out', out)

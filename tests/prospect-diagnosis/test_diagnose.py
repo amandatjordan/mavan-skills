@@ -219,6 +219,54 @@ class Diagnosis(unittest.TestCase):
                 for v in row:
                     self.assertNotIn('total volume', str(v).lower())
 
+    def gbp_sheet(self, prospect_cats=('Medical spa',), n_comps=3, rating=4.0):
+        from openpyxl import load_workbook as lw
+        tpl = Path(__file__).resolve().parents[2] / 'plugins/mavan-seo/skills/prospect-diagnosis/references/gbp-template.xlsx'
+        wb = lw(tpl)
+        k = wb['Keywords']
+        for i, kw in enumerate(['med spa near me', 'botox', 'lip filler'], 2):
+            k.cell(i, 1, kw)
+        g = wb['GBP']
+        rows = [['Example Spa', 'Prospect', rating, 40, '; '.join(prospect_cats), 6, 2, None]]
+        for n, (r, rev, cats, pos) in enumerate([(4.8, 210, 'Medical spa; Skin care clinic', (1, 1, 2)),
+                                                  (4.7, 150, 'Medical spa; Skin care clinic', (2, 3, 1)),
+                                                  (4.9, 300, 'Medical spa; Laser hair removal service', (3, 4, 3))][:n_comps]):
+            rows.append([f'Rival {n}', 'Competitor', r, rev, cats, *pos])
+        for i, row in enumerate(rows, 2):
+            for j, v in enumerate(row, 1):
+                g.cell(i, j, v)
+        path = self.root / 'gbp.xlsx'
+        wb.save(path)
+        return path
+
+    def test_gbp_findings_and_lens_unchanged(self):
+        _, base = self.build(self.files())
+        before = [r[:5] for r in list(load_workbook(base)['Verdict'].values)]
+        _, out = self.build(self.files() + ['--gbp', self.gbp_sheet()])
+        wb = load_workbook(out)
+        self.assertIn('Google Business Profile', wb.sheetnames)
+        rows = {r[0]: r for r in list(wb['Google Business Profile'].values)[1:5]}
+        self.assertEqual([rows[i][3] for i in ('G1', 'G2', 'G3', 'G4')], ['Yes'] * 4)
+        self.assertIn('Skin care clinic', rows['G4'][4])
+        self.assertEqual(before, [r[:5] for r in list(wb['Verdict'].values)])   # GBP never changes the lens verdict
+        d = json.loads((self.root / 'diagnosis.json').read_text())
+        self.assertTrue(d['gbp']['assessed'])
+
+    def test_gbp_ok_when_close_to_competitors(self):
+        _, out = self.build(self.files() + ['--gbp', self.gbp_sheet(('Medical spa', 'Skin care clinic', 'Laser hair removal service'), rating=4.7)])
+        rows = {r[0]: r for r in list(load_workbook(out)['Google Business Profile'].values)[1:5]}
+        self.assertEqual(rows['G1'][3], 'No')
+        self.assertEqual(rows['G4'][3], 'No')
+
+    def test_gbp_missing_or_incomplete_still_runs(self):
+        r, out = self.build(self.files())
+        self.assertIn('Google Business Profile: not assessed', r.stdout)
+        self.assertNotIn('Google Business Profile', load_workbook(out).sheetnames)
+        r, out = self.build(self.files() + ['--gbp', self.gbp_sheet(n_comps=2)])
+        self.assertIn('need at least 3 competitors', r.stdout)
+        p = run('preflight', *self.files(), '--gbp', self.gbp_sheet(n_comps=2), '--out', self.work)
+        self.assertIn('WARN | Google Business Profile (sheet)', p.stdout)
+
 
 if __name__ == '__main__':
     unittest.main()
