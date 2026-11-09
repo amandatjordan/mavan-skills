@@ -533,7 +533,7 @@ def score_architecture(S, c, has_depth, r):
     arch = idx[idx['archive']]
     a_share = share(len(arch), len(idx))
     pts = 2 if a_share >= 0.50 else (1 if a_share >= 0.25 else 0)
-    S.add('Architecture', 'A1', 'Archive and listing pages (tags, categories, dates, paged lists) as a share of indexable pages',
+    S.add('Architecture', 'A1', 'Hub pages (pages that only list other pages: tags, blog categories, dates, paged lists) as a share of indexable pages',
           f'{len(arch):,} of {len(idx):,} ({pct(a_share)})', '25% = 1 point, 50% = 2 points', pts, 2)
     S.data(archive=len(arch), indexable=len(idx), share=a_share)
 
@@ -1016,18 +1016,18 @@ def cmd_build(a):
             sub = rep[rep[col] == val]
             groups.append([label, val, len(sub), sub['url'].iloc[0]])
     groups.sort(key=lambda x: -x[2])
-    mix = [['Archive and listing pages (indexable)', arch['archive']], ['Other indexable pages', arch['other']],
+    mix = [['Hub pages (indexable)', arch['archive']], ['Other indexable pages', arch['other']],
            ['Live but not indexable', arch['nonidx']], ['Redirecting URLs reached by the crawler', arch['redirects']],
            ['All crawled HTML URLs', arch['crawled']]]
     ws = sheet(wb, 'Architecture', ['Page group', 'Count'], mix, {'Page group': 45})
     ws.append([])
-    ws.append(['Repeated title or H1 (non-archive pages)', 'Text', 'Pages', 'Example URL'])
+    ws.append(['Repeated title or H1 (non-hub pages)', 'Text', 'Pages', 'Example URL'])
     for cell in ws[ws.max_row]:
         cell.font, cell.fill = HEAD, FILL
     for row in groups[:50]:
         ws.append(row)
     ws.append([])
-    ws.append([f'Non-archive pages under {THIN_WORDS} words', 'Content words', 'Title'])
+    ws.append([f'Non-hub pages under {THIN_WORDS} words', 'Content words', 'Title'])
     for cell in ws[ws.max_row]:
         cell.font, cell.fill = HEAD, FILL
     for _, t in arch['thin'].sort_values('words').iterrows():

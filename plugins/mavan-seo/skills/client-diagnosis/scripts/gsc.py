@@ -267,12 +267,12 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
     zero = [p for p in other_pages if p not in have]
     z_share = share(len(zero), len(other_pages))
     if comp and len(other_pages):
-        S.add('Architecture', 'A7', 'Indexable non-archive pages with no Search Console impressions in the latest period',
+        S.add('Architecture', 'A7', 'Indexable non-hub pages with no Search Console impressions in the latest period',
               f'{len(zero):,} of {len(other_pages):,} ({pct(z_share)})', f'{pct(ZERO_IMPR_SHARE)} = 1 point',
               int(z_share >= ZERO_IMPR_SHARE), 1)
         S.data(no_impressions=len(zero), pages=len(other_pages), share=z_share, period=prof['label'])
     else:
-        S.add('Architecture', 'A7', 'Indexable non-archive pages with no Search Console impressions in the latest period',
+        S.add('Architecture', 'A7', 'Indexable non-hub pages with no Search Console impressions in the latest period',
               'not scored', f'{pct(ZERO_IMPR_SHARE)} = 1 point', None, 1, why)
     out['a7_scored'] = bool(comp and len(other_pages))
     out['zero_pages'] = zero
@@ -283,12 +283,12 @@ def score_gsc(S, G, other_pages, service_terms, click_floor, impr_floor):
     is_arch = nb['page'].map(lambda u: bool(arch_re.search(re.sub(r'^https://[^/]+', '', u) or '/')))
     arch_i, tot_i = float(nb.loc[is_arch, 'impr'].sum()), float(nb['impr'].sum())
     if comp and tot_i > 0:
-        S.add('Architecture', 'A8', 'Archive and listing pages as a share of non-brand Search Console impressions (latest period)',
+        S.add('Architecture', 'A8', 'Hub pages as a share of non-brand Search Console impressions (latest period)',
               f'{arch_i:,.0f} of {tot_i:,.0f} ({pct(share(arch_i, tot_i))})', f'{pct(ARCHIVE_IMPR_SHARE)} = 1 point',
               int(share(arch_i, tot_i) >= ARCHIVE_IMPR_SHARE), 1)
         S.data(archive_impressions=arch_i, impressions=tot_i, share=share(arch_i, tot_i))
     else:
-        S.add('Architecture', 'A8', 'Archive and listing pages as a share of non-brand Search Console impressions',
+        S.add('Architecture', 'A8', 'Hub pages as a share of non-brand Search Console impressions',
               'not scored', f'{pct(ARCHIVE_IMPR_SHARE)} = 1 point', None, 1, why)
 
     # --- A9: searches where 2+ URLs compete

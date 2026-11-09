@@ -76,7 +76,7 @@ Write `work/config.json` (`manual_action` is `yes`, `no`, or left out when unkno
 
 **Service terms** drive the non-branded service ranking signal (C2) and the per-service table. Propose them from the crawl: the H1s and titles of the client's live service pages (not hubs, blogs or galleries), one entry per service, with the names people search ("abdominoplasty" under Tummy tuck). Ask the person to confirm the list in the same message as any other missing input. A service is a string or `{"service": name, "terms": [synonyms]}`; keep broad words ("laser", "facial") out unless that service is the broad one. Without the list, C2 falls back to non-branded buying searches and there is no per-service table; say so in the reply.
 
-Optional keys: `archive_patterns` (extra regexes for this site's listing pages, only after checking examples in the crawl) and `reference_date` (YYYY-MM-DD, the export date, for the 90-day link window; defaults to the newest first-seen date in the referring domains export).
+Optional keys: `archive_patterns` (extra regexes for this site's hub pages, only after checking examples in the crawl) and `reference_date` (YYYY-MM-DD, the export date, for the 90-day link window; defaults to the newest first-seen date in the referring domains export).
 
 ```
 python $SKILL/scripts/diagnose.py preflight --config work/config.json --crawl URLS.csv --ranking RANK.csv --gap GAP.csv \
@@ -103,7 +103,7 @@ The crawl must have rendered: the build stops when fewer than 10 pages return 20
 ## Step 3: Check
 
 - Open the Signals tab and confirm each value against its source for 3 signals (one per lens): a crawl count, a gap count, an authority figure. Confirm the Search Console tab's clicks for period A plus period B equal the file's clicks inside the two periods.
-- Look at 5 URLs counted as archive pages (Architecture tab and A1). If a site's listing pages use a pattern the script does not know, add it to `archive_patterns` and rebuild; if a real page was counted as an archive, say so in the reply.
+- Look at 5 URLs counted as hub pages (pages that only list other pages; Architecture tab and A1). If a site's hub pages use a pattern the script does not know, add it to `archive_patterns` and rebuild; if a real page (a service category page with its own content, say) was counted as a hub page, say so in the reply.
 - Read the buying searches list on the Content tab: brand and competitor searches should not be there. Add brand terms and rebuild if they are.
 - Read the Google Business Profile tab (when assessed): confirm the typed figures match what the SEO gave you and that each flagged finding follows its rule.
 - Read the non-branded service rankings table: each service's keywords belong to it. A service that collects another's keywords means a synonym is too broad; fix `service_terms` and rebuild.
@@ -112,7 +112,15 @@ The crawl must have rendered: the build stops when fewer than 10 pages return 20
 
 Say you did these checks.
 
-## Step 4: Reply
+## Step 4: Site Health Report
+
+Always build the report; do not wait to be asked. Load the `prospect-sales-report` skill and follow it with this diagnosis workbook (its `diagnosis.json` sits next to it, with `report_type: client`) and the client's current plan level from the inputs. If the plan level is still missing, ask for it in the Step 1 message with the other missing inputs, never at the end. Publish the report and include its link in the Step 5 reply. After any rebuild of the diagnosis, rebuild the report too so the two match.
+
+## Capped exports
+
+Sheet add-ons and exports often stop at a fixed row count (25,000 is common) and sort by clicks. The cap then keeps every row that had a click and drops the zero-click rows, which hold most of the impressions, for the latest dates. The result: **clicks are complete, impressions are not.** The preflight compares the share of zero-click rows in the two periods. When they differ a lot, it says so, every signal that needs impressions (A7, A8, A9, C6, and C5 when clicks are too low) shows **Not scored**, the keyword drops use clicks only, and the report leaves those findings out. Never read a falling impression count in a capped export as lost visibility. If the person wants the impression signals, ask for an export that is not capped (for example one export per quarter, joined before attaching) and rebuild.
+
+## Step 5: Reply
 
 Plain language, in this order:
 
@@ -122,11 +130,8 @@ Plain language, in this order:
 4. **Google Business Profile** (when assessed, as its own short section after the lens evidence): list the findings that were found with their priority from the GBP tab: low rating, low number of reviews and poor local ranking are High; missing categories (name them) is Medium. Say plainly that these do **not** change which lens leads. When it was not assessed, say what was missing.
 5. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the client's account, never a reason to disavow.
 6. **Limits**, one line each: Search Console figures are real clicks and impressions but keyword tool volumes are estimates (never added together, never added to Search Console figures), small click counts make single keywords noisy, impressions are or are not comparable (and which signals that left unscored), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
-7. **Report**: offer the client report (`prospect-sales-report`, with the client's current plan level). The roadmap starts at month 1.
-8. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
+7. **Report**: the Site Health Report link from Step 4 (the roadmap starts at month 1), the plan level it shows, and anything the report preflight warned about.
+8. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when hub pages lead). Content: service gap audit (med spa and plastic surgery) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
 
 Never promise a result. Send the workbook.
 
-## Capped exports
-
-Sheet add-ons and exports often stop at a fixed row count (25,000 is common) and sort by clicks. The cap then keeps every row that had a click and drops the zero-click rows, which hold most of the impressions, for the latest dates. The result: **clicks are complete, impressions are not.** The preflight compares the share of zero-click rows in the two periods. When they differ a lot, it says so, every signal that needs impressions (A7, A8, A9, C6, and C5 when clicks are too low) shows **Not scored**, the keyword drops use clicks only, and the report leaves those findings out. Never read a falling impression count in a capped export as lost visibility. If the person wants the impression signals, ask for an export that is not capped (for example one export per quarter, joined before attaching) and rebuild.

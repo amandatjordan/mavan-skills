@@ -152,7 +152,8 @@ class Page(unittest.TestCase):
         for s in ('Site health score', 'Verdict', 'What we found', 'Recommended roadmap', 'Site Architecture track',
                   'Every month', 'Checked separately'):
             self.assertIn(s, page)
-        self.assertIn('600 of your 1,000 indexable pages', page)
+        self.assertIn('600 of your 1,000 pages in Google (60%) are hub pages', page)
+        self.assertIn('Pages are easy to reach', page)  # passing checks are shown too
         self.assertNotIn('Poor Content track', page)
         self.assertIsNone(re.search(r'>\s*[ACU][1-6]\b', page))
 

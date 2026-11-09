@@ -12,22 +12,22 @@ Every threshold below is a constant at the top of `scripts/diagnose.py` or `scri
 ## Page groups (crawl)
 
 - **Live** = status 200. **Indexable** = the crawler's indexable status (every live page when the export has no indexability column).
-- **Archive and listing pages** = indexable pages whose path matches a generic CMS listing pattern: `/tag(s)/`, `/category/`, `/categories/`, `/author(s)/`, `/archive(s)/`, `/page/N`, `?page=N` (or `paged`, `p`), a date archive ending at the year or month (`/2024/` or `/2024/05/`), feeds. Add a site's own pattern in `config.json` `archive_patterns` only after checking examples in the crawl.
-- **Other indexable pages** = indexable pages that are not archives. Thin, repeated-title and no-keyword signals use only these, so archive pages are not counted twice.
+- **Hub pages** = indexable pages that only list other pages, whose path matches a generic CMS listing pattern: `/tag(s)/`, `/category/`, `/categories/`, `/author(s)/`, `/archive(s)/`, `/page/N`, `?page=N` (or `paged`, `p`), a date archive ending at the year or month (`/2024/` or `/2024/05/`), feeds. Add a site's own pattern in `config.json` `archive_patterns` only after checking examples in the crawl. A **service category page** (e.g. "Injectables" with its own content introducing a group of treatments) is not a hub page.
+- **Other indexable pages** = indexable pages that are not hub pages. Thin, repeated-title and no-keyword signals use only these, so hub pages are not counted twice.
 - When several crawl rows normalise to the same URL (trailing slash, case, `www`), the live 200 row wins.
 
 ## Signals
 
 | Lens | ID | Signal | Threshold | Points |
 | --- | --- | --- | --- | --- |
-| Architecture | A1 | Archive pages as a share of indexable pages | 25% / 50% | 1 / 2 |
+| Architecture | A1 | Hub pages as a share of indexable pages | 25% / 50% | 1 / 2 |
 | Architecture | A2 | Other indexable pages whose title or H1 is shared by 5+ pages | 20% | 1 |
 | Architecture | A3 | Other indexable pages with no tracked keywords (only when there are 200+ such pages) | 80% | 1 |
 | Architecture | A4 | Redirecting URLs (3xx) the crawler reached, as a share of crawled HTML URLs | 20% | 1 |
 | Architecture | A5 | Indexable pages deeper than 3 clicks (needs a crawl depth column) | 20% | 1 |
 | Architecture | A6 | Ranking URLs on the crawled host that are not a live 200 page (404, redirect, or not found by the crawl) | 10% | 1 |
 | Architecture | A7 | Indexable non-archive crawl pages with no GSC impressions in period B (replaces A3 when scored) | 80% | 1 |
-| Architecture | A8 | Archive pages' share of non-brand GSC impressions in period B | 30% | 1 |
+| Architecture | A8 | Hub pages' share of non-brand GSC impressions in period B | 30% | 1 |
 | Architecture | A9 | Non-brand searches (20+ impressions in B) where 2+ URLs each have 10+ impressions, as a share of those searches | 30% | 1 |
 | Content | C1 | Keywords in the gap export ranked by the top competitor vs the prospect | 2x / 3x | 1 / 2 |
 | Content | C2 | Top-10 rankings on non-branded service keywords: prospect below the median competitor | below | 1 |

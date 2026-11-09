@@ -81,14 +81,17 @@ def finding(sig):
     d, sid, issue = sig.get('data') or {}, sig['id'], bool(sig['points'])
     try:
         if sid == 'A1':
-            return (True, f'{n(d["archive"])} of your {n(d["indexable"])} indexable pages ({pct(d["share"])}) are '
-                          'automatically generated listing pages (tags, categories, date archives), so your service '
+            return (True, f'{n(d["archive"])} of your {n(d["indexable"])} pages in Google ({pct(d["share"])}) are '
+                          'hub pages that only list other pages (blog tag, blog category and date archive pages), so your service '
                           'pages are a small part of what Google sees.') if issue else \
-                   (False, f'Listing pages make up only {pct(d["share"])} of your indexable pages.')
+                   (False, f'Only {n(d["archive"])} of your {n(d["indexable"])} pages in Google '
+                           f'{"is a hub page that only lists" if d["archive"] == 1 else "are hub pages that only list"} other pages '
+                           '(blog tag, blog category and date archive pages), so Google mostly sees your real service and content pages.')
         if sid == 'A2':
             return (True, f'{n(d["repeated"])} pages share the same title or heading with several others, which makes '
                           'them hard for Google to tell apart.') if issue else \
-                   (False, 'Page titles and headings are mostly unique.')
+                   (False, f'{"None" if not d["repeated"] else n(d["repeated"])} of your {n(d["pages"])} pages share '
+                           'the same title or heading with several others, so Google can tell your pages apart.')
         if sid == 'A3':
             return (True, f'{pct(d["share"])} of your regular pages ({n(d["no_keywords"])} of {n(d["pages"])}) do not '
                           'appear for any search we track.') if issue else \
@@ -96,12 +99,17 @@ def finding(sig):
         if sid == 'A4':
             return (True, f'{n(d["redirects"])} of the {n(d["crawled"])} addresses linked across your site redirect '
                           'somewhere else, adding an extra step for visitors and Google.') if issue else \
-                   (False, 'Few links on your site point at redirected addresses.')
+                   (False, f'{"None" if not d["redirects"] else n(d["redirects"])} of the {n(d["crawled"])} addresses '
+                           'linked across your site redirect, so visitors and Google reach each page directly.')
         if sid == 'A5':
             return (True, f'{pct(d["share"])} of your pages are more than {d["depth"]} clicks from the home page.') if issue \
-                else (False, f'Pages are easy to reach: only {pct(d["share"])} are more than {d["depth"]} clicks deep.')
+                else (False, f'Every page is within {d["depth"]} clicks of the home page, so Google and visitors can '
+                             'reach all of them easily.' if not d['deep'] else
+                             f'Pages are easy to reach: only {n(d["deep"])} of {n(d["indexable"])} are more than '
+                             f'{d["depth"]} clicks from the home page.')
         if sid == 'A6':
-            return (True, f'{n(d["not_live"])} pages that still appear in Google no longer load properly.') if issue else \
+            return (True, f'{n(d["not_live"])} of the {n(d["ranking_urls"])} pages that rank in Google are no longer on '
+                          'your site, so people who click those results land on a missing page.') if issue else \
                    (False, 'Nearly every page that appears in Google loads properly.')
         if sid == 'C1':
             return (True, f'{d["competitor"]} appears for {d["ratio"]:.1f} times as many of the searches we compared '
@@ -125,7 +133,7 @@ def finding(sig):
                           f'show up in Google search at all in the latest {per}.') if issue else \
                    (False, f'Most of your regular pages showed up in Google search in the latest {per}.')
         if sid == 'A8':
-            return (True, f'Automatically generated listing pages account for {pct(d["share"])} of the searches your site '
+            return (True, f'Hub pages that only list other pages account for {pct(d["share"])} of the searches your site '
                           'appears for, instead of your service pages.') if issue else None
         if sid == 'A9':
             return (True, f'{pct(d["share"])} of the searches you appear for show two or more of your own pages, so '
@@ -172,10 +180,8 @@ def lens_findings(signals, lens, limit=3):
     rows.sort(key=lambda s: (-(s['points'] or 0), s['id']))
     issues = [f for f in (finding(s) for s in rows if s['points']) if f]
     good = [f for f in (finding(s) for s in rows if not s['points']) if f]
-    out = issues[:limit]
-    if len(out) < 2:
-        out += good[:2 - len(out)] if issues else good[:2]
-    return out
+    # Every scored check is shown, issues first, so the score is explained by what passed as well as what failed.
+    return issues + good
 
 
 # ------------------------------------------------------------------ verdict and scores
