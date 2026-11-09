@@ -60,6 +60,19 @@ Notes:
 - **Average position** is impression-weighted.
 - **Numbers**: GSC figures are real clicks and impressions. Semrush or Ahrefs volumes are estimates and are never added together or added to GSC figures.
 
+## Google Business Profile findings
+
+Typed by the SEO on the GBP template (`--gbp`). Needs the client and at least 3 competitors, each with rating, review count, categories and local position for the same 3 priority keywords; otherwise it is not assessed. These findings have their own priority and add **no points** to any lens: they never change which lens leads or the playbook order (architecture, content and authority are scored exactly as before).
+
+| ID | Finding | Flagged when | Priority |
+| --- | --- | --- | --- |
+| G1 | Low review rating | Client rating is 0.3 stars or more below the median competitor | High |
+| G2 | Low number of reviews | Client reviews are under 50% of the median competitor | High |
+| G3 | Poor local ranking | Client is outside the top 3 (or not shown) on 2 or more of the 3 priority keywords | High |
+| G4 | Missing GBP categories | A category used by 2+ competitors that the client does not have (names listed) | Medium |
+
+Optional typed details (photo count, linked page, attributes, services listed) are shown for comparison and not scored. Local position is read by the SEO from Google; competitors' positions are shown for comparison and are not part of G3.
+
 ## What this does not check
 
-Internal links between pages (no link export), the live site, GA4, why traffic changed (migrations, updates, seasonality), page speed or Core Web Vitals, and Google Business Profile.
+Internal links between pages (no link export), the live site, GA4, why traffic changed (migrations, updates, seasonality), page speed or Core Web Vitals, and anything about Google Business Profile beyond the typed figures above (no live lookups, no review content, no citations).

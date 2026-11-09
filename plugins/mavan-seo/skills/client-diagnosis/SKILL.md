@@ -28,6 +28,7 @@ Send this to the person first. Tick an item only when the file is attached or th
 - [ ] **Authority figures** for the client and each competitor: Authority Score (or DR), referring domains now, referring domains 12 months ago (the tool's overview or "compare domains" chart; a screenshot is fine, the values are read off and confirmed). *Without them the authority signals are Not scored.*
 - [ ] **Manual actions**: the person checked Search Console > Security & Manual actions: `yes`, `no` or `unknown`.
 - [ ] **Client facts**: name, domain, **brand terms** (name as people search it, domain root, short forms), and the **current plan level** (Starter, VIP or Signature) for the report.
+- [ ] **Google Business Profile template** (strongly recommended): the filled `references/gbp-template.xlsx` for the client and at least 3 competitors, with the same 3 priority keywords.
 - [ ] **Service terms**: the client's services as people search them (proposed from the crawl, confirmed by the person).
 
 **Checks the script cannot make: confirm each**
@@ -51,6 +52,7 @@ Ask for what is missing in **one** message, using the checklist above.
 | Backlink gap export | Optional | Semrush Backlink Gap or Ahrefs Link Intersect. Adds the quality link gap |
 | Search Console export | Required | Mavan's Search Console sheet downloaded as .xlsx or .csv (tab "Claude Use This" when it has tabs): one row per **Date**, Query and Page with Clicks and Impressions (Position is used when present). **At least 6 months, a year is best**, ending on the newest date. If the person says the client has less than 6 months, use what they have: the preflight warns and the script splits it into two equal halves (14 days is the minimum). A sheet or add-on that caps rows (often at 25,000) can cut it short: the preflight checks, see "Capped exports" |
 | Manual actions | Required | Whether Search Console > Security & Manual actions shows a manual action: `yes`, `no`, or `unknown`. The person checks it; never guess |
+| Google Business Profile figures | Strongly recommended | The SEO types these into the GBP template (`references/gbp-template.xlsx`) from Google, for the client **and at least 3 competitors**: current review rating, number of reviews, GBP categories, and the local (Maps / local pack) position for the same **3 high-priority keywords**. Optional: photo count, linked page, attributes, services listed |
 | Client facts | Required | Client name, domain, brand terms (whole words; confirm, never guess), and the client's current plan level for the report. Competitors come from the keyword gap export's domain columns; list them in config only to drop or replace one |
 
 A page-level backlinks export is **not** needed (it is usually over the row cap). Brand terms are matched as whole words, so "balance" matches "balance spa" and "hormone balance" but not "balanced". Add the client's name as people search it, the domain root, and any short form. Competitor names may be added too: those searches are left out of the non-brand figures.
@@ -70,13 +72,15 @@ Write `work/config.json` (`manual_action` is `yes`, `no`, or left out when unkno
   "rival-one.com":   {"authority_score": 26, "referring_domains": 2200, "referring_domains_12m_ago": 330}}}
 ```
 
+**Google Business Profile** comes from the filled template [references/gbp-template.xlsx](references/gbp-template.xlsx): a Keywords tab (the 3 priority keywords) and a GBP tab (one row for the client, at least 3 for competitors: rating, number of reviews, categories, local position for each keyword; photos, linked page, attributes and services are optional). Ask the SEO for it in the same message as any other missing input, and offer 3 priority keywords from the client's top services for them to confirm. Local competitors can differ from the gap export's, so the sheet lists them by business name. A blank position means the business did not show. Pass the file with `--gbp`. If it is missing or incomplete, the preflight warns and the GBP findings are not assessed; the rest of the diagnosis still runs. Nothing is fetched from Google: the SEO types the figures.
+
 **Service terms** drive the non-branded service ranking signal (C2) and the per-service table. Propose them from the crawl: the H1s and titles of the client's live service pages (not hubs, blogs or galleries), one entry per service, with the names people search ("abdominoplasty" under Tummy tuck). Ask the person to confirm the list in the same message as any other missing input. A service is a string or `{"service": name, "terms": [synonyms]}`; keep broad words ("laser", "facial") out unless that service is the broad one. Without the list, C2 falls back to non-branded buying searches and there is no per-service table; say so in the reply.
 
 Optional keys: `archive_patterns` (extra regexes for this site's listing pages, only after checking examples in the crawl) and `reference_date` (YYYY-MM-DD, the export date, for the 90-day link window; defaults to the newest first-seen date in the referring domains export).
 
 ```
 python $SKILL/scripts/diagnose.py preflight --config work/config.json --crawl URLS.csv --ranking RANK.csv --gap GAP.csv \
-  --gsc GSC.csv [--gsc-tab NAME] [--refdomains REFDOMAINS.csv] [--backlink-gap BACKLINK_GAP.csv] --out work
+  --gsc GSC.csv [--gsc-tab NAME] [--refdomains REFDOMAINS.csv] [--backlink-gap BACKLINK_GAP.csv] [--gbp GBP.xlsx] --out work
 ```
 
 Read `work/preflight.md`. On NOT READY, send one message listing each FAIL and exactly what is needed, then stop. WARN lines (no overview figures, no optional export) mean some authority signals are not scored; say so in the reply. If the tool cannot be detected, ask which tool made the file and pass `--tool`. Done when it says READY.
@@ -84,11 +88,11 @@ Read `work/preflight.md`. On NOT READY, send one message listing each FAIL and e
 ## Step 2: Build
 
 ```
-python $SKILL/scripts/diagnose.py build --config work/config.json --crawl URLS.csv --ranking RANK.csv --gap GAP.csv --gsc GSC.csv \
+python $SKILL/scripts/diagnose.py build --config work/config.json --crawl URLS.csv --ranking RANK.csv --gap GAP.csv --gsc GSC.csv [--gbp GBP.xlsx] \
   [--click-floor N] [--impr-floor N] [--refdomains REFDOMAINS.csv] [--backlink-gap BACKLINK_GAP.csv] --out "work/CLIENT Client Diagnosis Month YYYY.xlsx"
 ```
 
-It also writes `diagnosis.json` next to the workbook (lens scores, every signal with its numbers, the service table, `report_type: client`): the `prospect-sales-report` skill builds the client-facing report from it (it drops onboarding for a client).
+It also writes `diagnosis.json` next to the workbook (lens scores, every signal with its numbers, the service table, the GBP findings, `report_type: client`): the `prospect-sales-report` skill builds the client-facing report from it (it drops onboarding for a client).
 
 **Periods.** With a year or more of data, period B is the latest 6 months ending on the newest date in the file and period A is the 6 months before it. With less, the file is split into two equal halves (A earlier, B later); the Read Me and the report footer say so. With under 6 months the preflight warns and trends are rougher: say that in the reply. Say both date ranges in the reply. **Floors.** `--click-floor` (default 3) is the clicks a keyword needs in either period to be judged by clicks only; `--impr-floor` (default 50) is the impressions a keyword needs in period A to be judged by impressions when its clicks are too low. Show the person the defaults and the counts they give, and confirm them or change them.
 
@@ -101,6 +105,7 @@ The crawl must have rendered: the build stops when fewer than 10 pages return 20
 - Open the Signals tab and confirm each value against its source for 3 signals (one per lens): a crawl count, a gap count, an authority figure. Confirm the Search Console tab's clicks for period A plus period B equal the file's clicks inside the two periods.
 - Look at 5 URLs counted as archive pages (Architecture tab and A1). If a site's listing pages use a pattern the script does not know, add it to `archive_patterns` and rebuild; if a real page was counted as an archive, say so in the reply.
 - Read the buying searches list on the Content tab: brand and competitor searches should not be there. Add brand terms and rebuild if they are.
+- Read the Google Business Profile tab (when assessed): confirm the typed figures match what the SEO gave you and that each flagged finding follows its rule.
 - Read the non-branded service rankings table: each service's keywords belong to it. A service that collects another's keywords means a synonym is too broad; fix `service_terms` and rebuild.
 
 - Open Keyword Drops: the top 5 keywords' clicks in each period are right, and no brand search is in the list. A brand search there means a brand term is missing: add it and rebuild.
@@ -114,10 +119,11 @@ Plain language, in this order:
 1. **The verdict**: the lead lens (or co-leads) and its severity, in one sentence. Then the traffic change in one line: non-brand clicks in period B vs period A (with both date ranges), from the Search Console tab, and the 5 keywords that lost the most clicks (from Keyword Drops), saying which basis was used.
 2. **The evidence**: for each lens, the 1-3 signals that scored, with their values from the Signals tab. Name a lens that was not scored or had too little data, and why.
 3. **Non-branded service rankings**: the 3-5 services with the most keywords where a competitor is top 10 and the client is not top 20, with the top competitor and the client's top-10 count for each (from the Content tab). Services with no tracked keywords are not weak services: say they had no data.
-4. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the client's account, never a reason to disavow.
-5. **Limits**, one line each: Search Console figures are real clicks and impressions but keyword tool volumes are estimates (never added together, never added to Search Console figures), small click counts make single keywords noisy, impressions are or are not comparable (and which signals that left unscored), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
-6. **Report**: offer the client report (`prospect-sales-report`, with the client's current plan level). The roadmap starts at month 1.
-7. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
+4. **Google Business Profile** (when assessed, as its own short section after the lens evidence): list the findings that were found with their priority from the GBP tab: low rating, low number of reviews and poor local ranking are High; missing categories (name them) is Medium. Say plainly that these do **not** change which lens leads. When it was not assessed, say what was missing.
+5. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the client's account, never a reason to disavow.
+6. **Limits**, one line each: Search Console figures are real clicks and impressions but keyword tool volumes are estimates (never added together, never added to Search Console figures), small click counts make single keywords noisy, impressions are or are not comparable (and which signals that left unscored), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
+7. **Report**: offer the client report (`prospect-sales-report`, with the client's current plan level). The roadmap starts at month 1.
+8. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when archive pages lead). Content: service gap audit (med spa and plastic surgery) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
 
 Never promise a result. Send the workbook.
 
