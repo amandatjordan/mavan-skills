@@ -81,4 +81,4 @@ Each keyword is counted once, on its most specific page: Service page = that Ser
 
 **Other markets**: a keyword with Geo Modified = Y (All Keywords tab) is excluded unless it names one of the client's cities. Suburbs the person did not name are other markets; the Excluded Keywords tab's Keep? column is how a person adds one back. Near Me keywords are kept.
 
-**Search Console**: with the sheet, Client GSC Impressions = impressions summed across the site for queries that exactly match the row's Relevant Keywords.
+**Search Console**: with the sheet, Client GSC Impressions = impressions summed across the site for queries that exactly match any of the row's keywords in the Keyword Map (not only the 20 shown in Relevant Keywords).

@@ -108,6 +108,14 @@ class ServiceGapAudit(unittest.TestCase):
         kws = ", ".join(self.recs["Relevant Keywords"]).lower()
         self.assertNotIn("miami", kws)
 
+    def test_relevant_keywords_capped_at_20(self):
+        for cell in self.recs["Relevant Keywords"]:
+            self.assertLessEqual(len([k for k in str(cell).split(", ") if k]), 20)
+
+    def test_relevant_pages_for_concern_named_service(self):
+        row = self.recs[self.recs["Service Page Recommended"] == "Cellulite Treatment"].iloc[0]
+        self.assertTrue(str(row["Relevant Pages"]).strip())
+
     def test_taxonomy_is_not_accepted_as_gsc(self):
         r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--practice", "medspa",
                 "--gsc", str(TAXONOMY), "--out", str(Path(self.tmp.name) / "x.xlsx"))

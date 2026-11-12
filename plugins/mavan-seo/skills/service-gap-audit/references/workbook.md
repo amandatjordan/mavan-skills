@@ -8,7 +8,7 @@
 Inputs (crawl file, URL counts, taxonomy version, Search Console used or not and why), Fields used (and missing columns, e.g. no H2s), Practice type and service-area cities, Level names, Page types, Offered Status, Priority, Competitor Volume, Limits, Thresholds, Search volume, Not in taxonomy (NEW nodes with their pages), Yellow columns.
 
 ### 2. Recommendations (the deliverable)
-Row 1 header groups: **Page** over A–E, **Search Volume** over F onward. Row 2 headers:
+Row 1 header groups: **Page** over A–F, **Search Volume** over G onward. Row 2 headers:
 
 | Column | Content |
 | --- | --- |
@@ -17,7 +17,8 @@ Row 1 header groups: **Page** over A–E, **Search Volume** over F onward. Row 2
 | Next Steps | Yellow, blank, dropdown for the SEO to fill in: Create new page, Update page, Fix indexability, Add section to existing page, Merge / redirect, Ignore |
 | Existing Brand / Sub-Service Page(s) | Only on "Only has a brand/product page" and "Only has Sub-Service pages" rows: "Node: path; Node: path" |
 | Why Recommended | One label below |
-| Relevant Keywords | One cell, comma-separated, highest volume first, or "None in competitor keyword list (check GSC / keyword tool)" |
+| Relevant Pages | Existing pages the service is named on, as paths, "; " separated: concern pages, H2 sections, before & after galleries, meta descriptions and blog posts. Blank when nothing names it. Never the row's own Current URL |
+| Relevant Keywords | One cell, comma-separated, highest volume first, at most 20 (the Keyword Map has the full list), or "None in competitor keyword list (check GSC / keyword tool)" |
 | Total National Search Volume | Sum of those keywords |
 | Client GSC Impressions | Only when a Search Console sheet was used |
 
