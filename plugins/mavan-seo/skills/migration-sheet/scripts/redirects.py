@@ -30,7 +30,7 @@ def resolve_all(master, live, audits, crawl_redirects, new_urls=(), seo=None):
     audits           the audits.json structure (prune, ia, gap)
     crawl_redirects  {source key: final key} redirects already on the old site
     new_urls         keys of new pages (URL filled in by the SEO)
-    seo              pass 2 only: {'targets': {old: target or 'GONE'/'GONE 410'}, 'reasons': {old: text},
+    seo              QA check only: {'targets': {old: target or 'GONE'/'GONE 410'}, 'reasons': {old: text},
                                     'media': {key: {'decision': 'keep'|'redirect', 'new': key}}}
     Returns {'rows', 'discrepancies', 'problems', 'finals', 'counts'}.
     """

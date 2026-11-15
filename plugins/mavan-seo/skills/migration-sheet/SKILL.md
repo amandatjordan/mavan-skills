@@ -27,16 +27,20 @@ This skill merges the audits' decisions into **one workbook**: the single source
 
 The crawl's images and documents lists are **not required**. If the person includes them, nothing is penalized.
 
-**Inside the skill, pass 1:** preflight, prep, import the audits, build, write the workbook.
-**Outside the skill, between the passes:** the SEO fills in the orange cells.
-**Inside the skill, pass 2:** preflight on the SEO's working copy, build again with every check, write the final workbook and the developer redirect CSV.
+The skill runs twice, and the two runs do different jobs:
+
+- **Run 1, the template:** builds the migration workbook with the audits' decisions filled in and the cells only the SEO can decide left orange. It is a template for the SEO to finish. Nothing in it is final.
+- **Between the runs (outside the skill):** the SEO finishes the template: reviews All pages and fills in every orange cell.
+- **Run 2, the QA check:** takes the SEO's finished copy, checks that everything is filled in and consistent, and only then writes the final workbook and the developer redirect CSV.
+
+Which run am I in? **No finished copy attached: run 1 (template). The SEO's finished copy attached: run 2 (QA check).** Never start run 2 without the SEO's copy.
 **Outside the skill, after:** client approval, then SOP step 1D (build and check staging; the `migration-check` skill is planned for that).
 
 ## How to ask the person questions
 
 Use AskUserQuestion (multiple choice) whenever the answer is a choice; plain text only when that tool is not available. Build every option from this run's data (the file names, the counts in `work/preflight.md`), never from a list written in this skill. Put the best-supported option first and mark it "(Recommended)". Ask only what the data cannot settle. The only question this skill always asks is the preflight confirmation.
 
-## Pass 1
+## Run 1: build the template
 
 ### Step 0: Preflight (always first, blocks on problems)
 
@@ -74,7 +78,7 @@ Writes `work/audits.json`. It must print no unresolved cells (preflight already 
 python $SKILL/scripts/build.py --domain DOMAIN --work work
 ```
 
-Gives every old URL one decision: Content Prune's action first, then the IA move for a page that stays, then keep at the same URL. Resolves every redirect target to its final URL in one hop (existing site redirects included), lists every discrepancy, and runs the checks (see `references/rules.md`). Exit code 1 means a structural problem (a chain or loop, a target that is not a page that stays, a page inside a wildcard rule): show the person the lines, say which audit workbook to change, and stop. Cells the SEO still has to fill in are expected in pass 1 and show as OPEN.
+Gives every old URL one decision: Content Prune's action first, then the IA move for a page that stays, then keep at the same URL. Resolves every redirect target to its final URL in one hop (existing site redirects included), lists every discrepancy, and runs the checks (see `references/rules.md`). Exit code 1 means a structural problem (a chain or loop, a target that is not a page that stays, a page inside a wildcard rule): show the person the lines, say which audit workbook to change, and stop. Cells the SEO still has to fill in are expected in run 1 and show as OPEN.
 
 ### Step 4: Write the workbook
 
@@ -84,11 +88,11 @@ python $SKILL/scripts/make_xlsx.py --work work --out CLIENT-migration-sheet.xlsx
 
 Send the workbook with SendUserFile. Then tell the person, in a few lines: the counts, how many discrepancies are on the Summary tab (read them before approving), and that the **All pages** tab needs their review (the light orange columns: page type, title and H1 each page will launch with, which start from the crawl and the prune's Update pages; they can change any of them and fill them in for new pages), and which orange cells are theirs to fill: the **Final menu and nav** tab (the SEO MUST set the navigation, always with parent and child levels), **Media with backlinks** (decide each file), **New pages** (the URL, and the anchor text for the pages suggested to link to each new page, up to 3 per page), and any redirect target or Gone reason marked SEO fill in on **Pages to redirect**. Do not propose a menu, a media decision, a new URL or a redirect target.
 
-## Between the passes (outside the skill)
+## Between the runs (outside the skill)
 
-The SEO reviews and updates the light orange columns on All pages, fills in the orange cells in the workbook and uploads their working copy. Their edits to page type, title and H1 on All pages are kept in the final workbook. Nothing else changes: to change a keep, merge, remove or move decision, they edit the audit workbook and the skill is re-run from pass 1.
+The SEO reviews and updates the light orange columns on All pages, fills in the orange cells in the workbook and uploads their working copy. Their edits to page type, title and H1 on All pages are kept in the final workbook. Nothing else changes: to change a keep, merge, remove or move decision, they edit the audit workbook and the skill is re-run from run 1.
 
-## Pass 2
+## Run 2: QA check
 
 Run preflight again with `--working-copy WORKING_COPY.xlsx` (and the same files), then:
 
@@ -97,8 +101,8 @@ python $SKILL/scripts/build.py --domain DOMAIN --work work --working-copy WORKIN
 python $SKILL/scripts/make_xlsx.py --work work --out CLIENT-migration-sheet-final.xlsx --client "Client name"
 ```
 
-Pass 2 re-runs every check, now including the Final menu and nav and Media with backlinks checks, and **fails while any cell the SEO was supposed to fill is blank**. Only when every check passes does it write the final workbook and the **developer redirect CSV** next to it (the CSV is the only copy of the developer list; the workbook has no dev tab). Send both with SendUserFile. Remind the person the README tab and the banner rows are for the SEO and are deleted before the client and developer see the sheet.
+The QA check re-runs every check, now including the Final menu and nav and Media with backlinks checks, and **fails while any cell the SEO was supposed to fill is blank**. Only when every check passes does it write the final workbook and the **developer redirect CSV** next to it (the CSV is the only copy of the developer list; the workbook has no dev tab). Send both with SendUserFile. Remind the person the README tab and the banner rows are for the SEO and are deleted before the client and developer see the sheet.
 
 ## What the person gets
 
-One workbook: Summary, All pages, Final menu and nav, Pages to merge, Pages to redirect, Media with backlinks, New pages, README. The developer redirect CSV is a separate file written in pass 2. Tab contents are in `references/rules.md`.
+One workbook: Summary, All pages, Final menu and nav, Pages to merge, Pages to redirect, Media with backlinks, New pages, README. The developer redirect CSV is a separate file written in run 2. Tab contents are in `references/rules.md`.

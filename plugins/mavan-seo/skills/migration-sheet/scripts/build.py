@@ -2,13 +2,13 @@
 """Build the migration sheet content: every decision, the redirect list, the checks. make_xlsx.py writes the workbook.
 
 Usage:
-  python build.py --domain example.com --work work                      # pass 1
-  python build.py --domain example.com --work work --working-copy MIGRATION_SHEET.xlsx   # pass 2 (the SEO's working copy)
+  python build.py --domain example.com --work work                      # template run
+  python build.py --domain example.com --work work --working-copy MIGRATION_SHEET.xlsx   # QA check (the SEO's finished copy)
 
 Reads work/ (prep.py, import_audits.py output). Writes work/sheet.json. Exit code 1 when the checks fail:
-  pass 1  only structural problems stop the run (a chain or loop, a target that is not a page that stays, ...). Cells the SEO
+  template run  only structural problems stop the run (a chain or loop, a target that is not a page that stays, ...). Cells the SEO
           still has to fill in are expected and listed on the Summary tab.
-  pass 2  anything still open also stops the run, so no final workbook or dev CSV is written until every check passes.
+  QA check  anything still open also stops the run, so no final workbook or dev CSV is written until every check passes.
 Never makes a live request: every number comes from the uploaded exports.
 """
 import argparse
@@ -35,12 +35,12 @@ def csv_or_empty(path, cols):
 
 
 def read_working_copy(path, dom):
-    """What the SEO filled in on the pass 1 workbook: redirect targets and Gone reasons, media decisions, new page URLs, the menu."""
+    """What the SEO filled in on the template workbook: redirect targets and Gone reasons, media decisions, new page URLs, the menu."""
     T = workbook_tabs(path)
     seo = {'targets': {}, 'reasons': {}, 'media': {}, 'new_pages': {}, 'new_links': {}, 'menu': [], 'all_pages': {}}
     missing = [t for t in (REDIR, MEDIA, NEWP, MENU) if t not in T and t != NEWP]
     if missing:
-        sys.exit(f'{os.path.basename(path)} is missing the tab(s) {missing}. Give the SEO\'s working copy of the migration sheet from pass 1.')
+        sys.exit(f'{os.path.basename(path)} is missing the tab(s) {missing}. Give the SEO\'s finished copy of the migration sheet (the template, filled in).')
     h, rs = table(T[REDIR])
     for r in rs:
         o = cell(r, 0)
