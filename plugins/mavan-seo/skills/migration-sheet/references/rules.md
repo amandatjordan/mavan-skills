@@ -27,9 +27,11 @@ Only media files with backlinks in the backlink export are handled; all other me
 
 A Junk folders rule is counted once as a rule, not once per URL. The developer list gets one row with Regex = 1. A page that stays inside a wildcard rule, or a target that matches one, is a failure.
 
-## Retained internal links
+## Internal links
 
-For each page that stays and each merged page, the retained links are its **body** links (menus, footers and breadcrumbs are rebuilt by the template and the Final menu and nav tab). Each target is mapped to its final URL, so a link to a merged or moved page points to where that page ends up. A link that would point to the page itself is dropped; a link to a Gone page is dropped.
+Every internal link on a page that stays is kept, so the sheet does not list them. Menus, footers and breadcrumbs are rebuilt from the Final menu and nav tab.
+
+New pages: up to 3 existing pages that should link TO the new page are suggested from the Service Gap data (the existing related pages first, then the pages that name the service), each shown at its final URL. Pages that are removed or not on the new site are skipped. The SEO changes or adds pages and fills in the anchor text each one uses.
 
 ## Internal link cutoff
 
@@ -44,7 +46,7 @@ Bottom quartile of pages linking in, per page type (a type needs 4 pages). The c
 5. Every redirect target is a page that stays or a new page.
 6. No kept page and no target sits inside a wildcard rule.
 7. Every media file with backlinks has an SEO decision, and every one set to redirect has a new URL.
-8. Every new page has a URL and the internal links it must include.
+8. Every new page has a URL and at least one page linking to it with anchor text (every listed page has anchor text), and those pages are on the new site.
 9. Final menu and nav: every URL is a page that stays or a new page (not merged, redirected or Gone), and every child has a parent. The tab must not be empty.
 
 Checks 7 to 9 are OPEN in pass 1 (the SEO has not filled them in yet) and FAIL in pass 2.
@@ -54,13 +56,14 @@ Checks 7 to 9 are OPEN in pass 1 (the SEO has not filled them in yet) and FAIL i
 | Tab | Contents |
 | --- | --- |
 | Summary | Counts per decision, the check results, every discrepancy, the internal link cutoff |
-| Pages to keep | Final URL, old URL when it moves, page type, title and H1 at migration (Update pages' new ones when filled in, otherwise the crawl's), internal links to retain, backlinks, pages linking in |
+| All pages | Every page on the new site: final URL, old URL when it moves, origin (Stays, Moved, New page), page type, title and H1 at migration (Update pages' new ones when filled in, otherwise the crawl's), notes. Merged pages are not listed. **The SEO reviews and updates page type, title and H1** (light orange columns); the edits are read back in pass 2, matched by final URL (new pages by their Service Gap note) |
 | Final menu and nav | The SEO fills in: parent label, parent URL, child label, child URL, order. Always parent and child levels |
-| Pages to merge | Page that goes away, surviving URL, unique content to copy, body links to carry over |
-| Pages to redirect | Old URL, target (or Gone), HTTP code, reason for Gone, backlinks, which audit decided it. Merge and wildcard redirects are included |
+| Pages to merge | Page that goes away, surviving URL, unique content to copy over. Its redirect is on Pages to redirect and in the dev list |
+| Pages to redirect | Old URL, target (or Gone), HTTP code, reason for Gone, which audit decided it. Merge and wildcard redirects are included |
 | Media with backlinks | Media URL, backlinks, SEO decision, new URL |
-| New pages | Page to create (Service Gap rows set to Create new page), URL and internal links to include (SEO fills in), keywords |
-| Redirects - Handoff to Dev (pass 2) | Source URL, Target URL, Regex (0 or 1), HTTP Code. Headers in row 1 so it downloads as a CSV |
+| New pages | Page to create (Service Gap rows set to Create new page), URL (SEO fills in), keywords, up to 3 suggested pages that link to it, with the anchor text (SEO fills in the anchor text) |
 | README | SEO only: how to use, files and tabs read, thresholds, what was not checked |
+
+The developer redirect list is not a tab: pass 2 writes it as a separate CSV (Source URL, Target URL, Regex 0 or 1, HTTP Code; headers in row 1), the only copy. It holds every 301 redirect, every Gone row with its 404 or 410 code, one row per wildcard rule with Regex = 1, and media files the SEO set to redirect.
 
 Excel does not allow "/" in a tab name, so the navigation tab is called **Final menu and nav**.

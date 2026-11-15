@@ -24,8 +24,8 @@ from common import bare_domain, cell, col, is_media, is_open, key, table, workbo
 from redirects import resolve_all  # noqa: E402
 
 # tab names
-KEEP, MENU, MERGE, REDIR, MEDIA, NEWP, DEV, SUMMARY, README = (
-    'Pages to keep', 'Final menu and nav', 'Pages to merge', 'Pages to redirect', 'Media with backlinks', 'New pages',
+ALLP, MENU, MERGE, REDIR, MEDIA, NEWP, DEV, SUMMARY, README = (
+    'All pages', 'Final menu and nav', 'Pages to merge', 'Pages to redirect', 'Media with backlinks', 'New pages',
     'Redirects - Handoff to Dev', 'Summary', 'README')
 GONE_NOTE = 'Gone'
 
@@ -37,7 +37,7 @@ def csv_or_empty(path, cols):
 def read_working_copy(path, dom):
     """What the SEO filled in on the pass 1 workbook: redirect targets and Gone reasons, media decisions, new page URLs, the menu."""
     T = workbook_tabs(path)
-    seo = {'targets': {}, 'reasons': {}, 'media': {}, 'new_pages': {}, 'new_links': {}, 'menu': []}
+    seo = {'targets': {}, 'reasons': {}, 'media': {}, 'new_pages': {}, 'new_links': {}, 'menu': [], 'all_pages': {}}
     missing = [t for t in (REDIR, MEDIA, NEWP, MENU) if t not in T and t != NEWP]
     if missing:
         sys.exit(f'{os.path.basename(path)} is missing the tab(s) {missing}. Give the SEO\'s working copy of the migration sheet from pass 1.')
@@ -65,7 +65,16 @@ def read_working_copy(path, dom):
         for r in rs:
             u = cell(r, 1)
             seo['new_pages'][cell(r, 0)] = '' if is_open(u) else key(u, dom)
-            seo['new_links'][cell(r, 0)] = '' if is_open(cell(r, 4)) else cell(r, 4)
+            seo['new_links'][cell(r, 0)] = [
+                {'link': key(cell(r, i), dom) if cell(r, i).startswith(('http', '/')) else cell(r, i),
+                 'anchor': '' if is_open(cell(r, i + 1)) else cell(r, i + 1)}
+                for i in (3, 5, 7) if cell(r, i) and not is_open(cell(r, i))]
+    if ALLP in T:
+        h, rs = table(T[ALLP])
+        for r in rs:
+            note = cell(r, 6)
+            # a new page is matched by its Service Gap note (its URL may not be filled in yet), every other page by its final URL
+            seo['all_pages'][note if note.startswith('Service Gap:') else cell(r, 0)] = {'type': cell(r, 3), 'title': cell(r, 4), 'h1': cell(r, 5)}
     if MENU in T:
         h, rs = table(T[MENU])
         for r in rs:
@@ -120,27 +129,11 @@ def main():
     gone_set = {r['old'] for r in rows if r['action'] == 'gone'}
     titles = pages.drop_duplicates('key').set_index('key')[['title', 'h1']].to_dict('index')
 
-    # ---- internal links: body links only; a link to a page that moved or merged points at its final URL
-    L = links[links.cls == 'Body'] if len(links) else links
-    out_body = {}
-    for r in L.itertuples():
-        out_body.setdefault(r.src, []).append(r.dst)
+    # internal links in per page, for the bottom-quartile cutoff shown on the Summary tab
     inl = links.groupby('dst')['src'].nunique().to_dict() if len(links) else {}
 
-    def retained(page, owner_final):
-        seen, out = set(), []
-        for d in out_body.get(page, []):
-            f = old2final.get(d, d)
-            if d in gone_set:
-                continue
-            if f == owner_final or f in seen:
-                continue
-            seen.add(f)
-            out.append(f)
-        return out
-
     # ---- tabs
-    keep_rows, ptype = [], {}
+    keep_rows, ptype, type_inl = [], {}, []
     upd = audits['prune']['update']
     for r in rows:
         if r['action'] != 'keep':
@@ -150,36 +143,66 @@ def main():
         ptype[k] = t
         c = titles.get(k, {'title': '', 'h1': ''})
         u = upd.get(k, {})
-        keep_rows.append([r['final'], k if r['final'] != k else '', t, u.get('title') or c['title'], u.get('h1') or c['h1'],
-                          len(retained(k, r['final'])), '\n'.join(retained(k, r['final'])), 'Yes' if r['backlinks'] else 'No',
-                          int(inl.get(k, 0))])
+        keep_rows.append([r['final'], k if r['final'] != k else '', 'Moved' if r['final'] != k else 'Stays', t,
+                          u.get('title') or c['title'], u.get('h1') or c['h1'], ''])
+        type_inl.append((t or 'Page type not set', int(inl.get(k, 0))))
     # bottom quartile of internal links in, per page type (needs 4 pages of the type)
-    cutoffs = {}
-    by_type = {}
-    for row in keep_rows:
-        by_type.setdefault(row[2] or 'Page type not set', []).append(row[8])
+    cutoffs, by_type = {}, {}
+    for t, n in type_inl:
+        by_type.setdefault(t, []).append(n)
     for t, v in sorted(by_type.items()):
-        s = pd.Series(v)
-        cutoffs[t] = {'pages': len(v), 'cutoff': float(s.quantile(0.25)) if len(v) >= 4 else None}
-    merge_rows = []
-    for r in rows:
-        if r['action'] == 'merge':
-            k = r['old']
-            merge_rows.append([k, r['final'], audits['prune']['carry'].get(k, ''), len(retained(k, r['final'])),
-                               '\n'.join(retained(k, r['final'])), 'Yes' if r['backlinks'] else 'No'])
+        cutoffs[t] = {'pages': len(v), 'cutoff': float(pd.Series(v).quantile(0.25)) if len(v) >= 4 else None}
+    merge_rows = [[r['old'], r['final'], audits['prune']['carry'].get(r['old'], '')] for r in rows if r['action'] == 'merge']
     redir_rows = []
     for r in rows:
         if r['action'] in ('merge', 'redirect'):
-            redir_rows.append([r['old'], r['final'] or 'SEO fill in', 301, '', r['backlinks'], r['by'] + (' (merge)' if r['action'] == 'merge' else '')])
+            redir_rows.append([r['old'], r['final'] or 'SEO fill in', 301, '', r['by'] + (' (merge)' if r['action'] == 'merge' else '')])
         elif r['action'] == 'gone':
-            redir_rows.append([r['old'], GONE_NOTE, r['code'], r['reason'] or 'SEO fill in', r['backlinks'], r['by']])
+            redir_rows.append([r['old'], GONE_NOTE, r['code'], r['reason'] or 'SEO fill in', r['by']])
         elif r['action'] == 'wildcard':
-            redir_rows.append([r['old'], r['final'], 301, '', 0, f'{r["by"]} (rule covers {r["covers"]} URLs, counted once)'])
+            redir_rows.append([r['old'], r['final'], 301, '', f'{r["by"]} (rule covers {r["covers"]} URLs, counted once)'])
     media_rows = [[m['old'], m['backlinks'], {'keep': 'Keep at the same URL', 'redirect': 'Redirect'}.get(m['decision'], 'SEO fill in'),
                    m['new'] or ('SEO fill in' if m['decision'] == 'redirect' else '')] for m in res['media']]
-    new_rows = [[n['name'], seo.get('new_pages', {}).get(n['name'], '') or 'SEO fill in', n['keywords'], n['existing'],
-                 seo.get('new_links', {}).get(n['name'], '') or 'SEO fill in']
-                for n in new_pages]
+    def reviewed(row, k):
+        e = seo.get('all_pages', {}).get(k)
+        if e:
+            row[3], row[4], row[5] = e['type'], e['title'], e['h1']
+        return row
+
+    keep_rows = [reviewed(r, r[0]) for r in keep_rows]
+    keep_rows.sort(key=lambda r: r[0])
+    valid_finals = set(res['finals'].values())
+
+    def suggest(n):
+        """Up to 3 pages that should link TO the new page: Service Gap's existing related pages first, then pages that name the
+        service, each shown at its final URL. Pages that are removed or not on the new site are skipped."""
+        out = []
+        for c in re.split(r'[;\n]\s*', (n['existing'] or '') + ';' + (n['relevant'] or '')):
+            c = c.strip()
+            if not c.startswith(('http', '/')):
+                continue
+            k = key(c, dom)
+            f = old2final.get(k, k) if k not in gone_set else None
+            if f in valid_finals and f not in out:
+                out.append(f)
+        return out[:3]
+
+    def new_links(n):
+        mine = seo.get('new_links', {}).get(n['name'])
+        return (mine or []) if pass2 else [{'link': f, 'anchor': ''} for f in suggest(n)]
+
+    new_rows = []
+    for n in new_pages:
+        lk = new_links(n)
+        row = [n['name'], seo.get('new_pages', {}).get(n['name'], '') or 'SEO fill in', n['keywords']]
+        for i in range(3):
+            if i < len(lk):
+                row += [lk[i]['link'], lk[i]['anchor'] or 'SEO fill in']
+            else:
+                row += ['', '']
+        new_rows.append(row)
+        keep_rows.append(reviewed([seo.get('new_pages', {}).get(n['name'], '') or 'SEO fill in', '', 'New page', '', '', '', f"Service Gap: {n['name']}"],
+                                  f"Service Gap: {n['name']}"))
     menu_rows = [[m['parent'], m['parent_url'], m['child'], m['child_url'], m['order']] for m in seo.get('menu', [])]
 
     # ---- developer redirect list (final targets only)
@@ -203,7 +226,16 @@ def main():
     gone_no_reason = [r['old'] for r in rows if r['action'] == 'gone' and not r['reason']]
     media_open = [m['old'] for m in res['media'] if m['decision'] not in ('keep', 'redirect')]
     media_no_url = [m['old'] for m in res['media'] if m['decision'] == 'redirect' and not m['new']]
-    new_open = [n['name'] for n in new_pages if not seo.get('new_pages', {}).get(n['name']) or not seo.get('new_links', {}).get(n['name'])]
+    new_open, new_bad = [], []
+    for n in new_pages:
+        lk = new_links(n)
+        if not seo.get('new_pages', {}).get(n['name']):
+            new_open.append(f"{n['name']} has no URL")
+        if not any(x['anchor'] for x in lk):
+            new_open.append(f"{n['name']} has no page linking to it with anchor text")
+        new_open += [f"{n['name']}: the link from {x['link']} has no anchor text" for x in lk if x['link'] and not x['anchor'] and any(y['anchor'] for y in lk)]
+        new_bad += [f"{n['name']}: {x['link']} is set to link to it but is not a page on the new site" for x in lk
+                    if x['link'] not in (valid_finals | new_urls)]
     menu_problems = []
     redirect_sources = {r['old'] for r in rows if r['action'] in ('merge', 'redirect', 'gone')}
     for m in seo.get('menu', []):
@@ -229,7 +261,7 @@ def main():
         ('No kept page or target sits inside a wildcard rule', group(['wildcard']), []),
         ('Every media file with backlinks has an SEO decision, and every redirect has a new URL', [],
          [f'{m} has no decision' for m in media_open] + [f'{m} is set to redirect with no new URL' for m in media_no_url]),
-        ('Every new page has a URL and internal links to include', [], [f'{n} has no URL or no internal links' for n in new_open]),
+        ('Every new page has a URL and at least one page linking to it with anchor text, and those pages are on the new site', new_bad if pass2 else [], new_open),
         ('Final menu and nav: every URL is a page that stays or a new page, every child has a parent', menu_problems if pass2 else [], menu_open),
     ]
     structural = [p for _, bad, _ in checks for p in bad]
@@ -241,7 +273,7 @@ def main():
         pass
     sheet = {
         'domain': dom, 'pass': 2 if pass2 else 1, 'counts': res['counts'], 'discrepancies': disc, 'checks': result,
-        'cutoffs': cutoffs, 'read': audits['read'], 'tabs': {KEEP: keep_rows, MENU: menu_rows, MERGE: merge_rows, REDIR: redir_rows,
+        'cutoffs': cutoffs, 'read': audits['read'], 'tabs': {ALLP: keep_rows, MENU: menu_rows, MERGE: merge_rows, REDIR: redir_rows,
                                                               MEDIA: media_rows, NEWP: new_rows, DEV: dev},
         'open': len(open_items), 'problems': structural + (open_items if pass2 else []),
     }

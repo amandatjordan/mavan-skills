@@ -21,6 +21,6 @@ Not required: the crawl's images and documents lists. They are accepted but noth
 
 **IA audit:** Moves (old URL, new URL), Check page type (page types), Fix links (a new URL still "SEO fill in" blocks), Menu cleanup (Keep or Remove must be filled; reference only, the SEO sets the navigation), README.
 
-**Service Gap:** Recommendations (Service Page Recommended, Current URL, Next Steps, Relevant Keywords).
+**Service Gap:** Recommendations (Service Page Recommended, Current URL, Next Steps, Existing Brand / Sub-Service Page(s), Relevant Pages, Relevant Keywords). Current URL is blank for a page that does not exist yet, so the SEO fills in each new page's URL; the two page columns are where the suggested links come from.
 
 A tab an audit left out (it had no rows) is skipped. The implementer copies (without Kept pages and Check page type, or without README and Check page type) are refused: they cannot show what the SEO approved.

@@ -1,6 +1,6 @@
 ---
 name: migration-sheet
-description: Merge the Content Prune & Merge, IA audit and (when it applies) Service Gap workbooks, plus the old-site crawl exports, a backlink export and the Search Console sheet, into one migration workbook for a site migration - pages to keep, merge and redirect, media with backlinks, new pages, the final navigation the SEO fills in, and the developer redirect list. Use for migration sheets, redirect maps for a rebuild or re-platform, or step 1C of the Site Migration SOP.
+description: Merge the Content Prune & Merge, IA audit and (when it applies) Service Gap workbooks, plus the old-site crawl exports, a backlink export and the Search Console sheet, into one migration workbook for a site migration - all pages on the new site, pages to merge and redirect, media with backlinks, new pages, the final navigation the SEO fills in, and the developer redirect list. Use for migration sheets, redirect maps for a rebuild or re-platform, or step 1C of the Site Migration SOP.
 ---
 
 # Migration sheet (Mavan SOP: Site Migration, step 1C)
@@ -82,11 +82,11 @@ Gives every old URL one decision: Content Prune's action first, then the IA move
 python $SKILL/scripts/make_xlsx.py --work work --out CLIENT-migration-sheet.xlsx --client "Client name"
 ```
 
-Send the workbook with SendUserFile. Then tell the person, in a few lines: the counts, how many discrepancies are on the Summary tab (read them before approving), and which orange cells are theirs to fill: the **Final menu and nav** tab (the SEO MUST set the navigation, always with parent and child levels), **Media with backlinks** (decide each file), **New pages** (URL and internal links), and any redirect target or Gone reason marked SEO fill in on **Pages to redirect**. Do not propose a menu, a media decision, a new URL or a redirect target.
+Send the workbook with SendUserFile. Then tell the person, in a few lines: the counts, how many discrepancies are on the Summary tab (read them before approving), and that the **All pages** tab needs their review (the light orange columns: page type, title and H1 each page will launch with, which start from the crawl and the prune's Update pages; they can change any of them and fill them in for new pages), and which orange cells are theirs to fill: the **Final menu and nav** tab (the SEO MUST set the navigation, always with parent and child levels), **Media with backlinks** (decide each file), **New pages** (the URL, and the anchor text for the pages suggested to link to each new page, up to 3 per page), and any redirect target or Gone reason marked SEO fill in on **Pages to redirect**. Do not propose a menu, a media decision, a new URL or a redirect target.
 
 ## Between the passes (outside the skill)
 
-The SEO fills in the orange cells in the workbook and uploads their working copy. Nothing else changes: to change a keep, merge, remove or move decision, they edit the audit workbook and the skill is re-run from pass 1.
+The SEO reviews and updates the light orange columns on All pages, fills in the orange cells in the workbook and uploads their working copy. Their edits to page type, title and H1 on All pages are kept in the final workbook. Nothing else changes: to change a keep, merge, remove or move decision, they edit the audit workbook and the skill is re-run from pass 1.
 
 ## Pass 2
 
@@ -97,8 +97,8 @@ python $SKILL/scripts/build.py --domain DOMAIN --work work --working-copy WORKIN
 python $SKILL/scripts/make_xlsx.py --work work --out CLIENT-migration-sheet-final.xlsx --client "Client name"
 ```
 
-Pass 2 re-runs every check, now including the Final menu and nav and Media with backlinks checks, and **fails while any cell the SEO was supposed to fill is blank**. Only when every check passes does it write the final workbook (with the **Redirects - Handoff to Dev** tab) and a CSV of that tab next to it. Send both with SendUserFile. Remind the person the README tab and the banner rows are for the SEO and are deleted before the client and developer see the sheet.
+Pass 2 re-runs every check, now including the Final menu and nav and Media with backlinks checks, and **fails while any cell the SEO was supposed to fill is blank**. Only when every check passes does it write the final workbook and the **developer redirect CSV** next to it (the CSV is the only copy of the developer list; the workbook has no dev tab). Send both with SendUserFile. Remind the person the README tab and the banner rows are for the SEO and are deleted before the client and developer see the sheet.
 
 ## What the person gets
 
-One workbook: Summary, Pages to keep, Final menu and nav, Pages to merge, Pages to redirect, Media with backlinks, New pages, Redirects - Handoff to Dev (pass 2), README. Tab contents are in `references/rules.md`.
+One workbook: Summary, All pages, Final menu and nav, Pages to merge, Pages to redirect, Media with backlinks, New pages, README. The developer redirect CSV is a separate file written in pass 2. Tab contents are in `references/rules.md`.
