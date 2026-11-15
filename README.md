@@ -5,6 +5,7 @@ Claude skills for Mavan's SEO processes, packaged as one plugin (`mavan-seo`) so
 | Skill | What it does | Matching SOP |
 | --- | --- | --- |
 | `information-architecture-audit` | Checks the inputs first (preflight), types every page, and builds a standalone workbook: Recommendations plus tabs for page types to check, moves and their redirects, links to fix, menu cleanup and internal linking opportunities. Search Console comes from a Google Sheet (GA4 optional, through Composio); when the client has a content prune workbook, its page types are adopted | Information Architecture Audit Process |
+| `migration-sheet` | Step 1C of the Site Migration SOP. Merges the Content Prune & Merge, IA audit and (med spa and plastic surgery) Service Gap workbooks with the old-site crawl, a backlink export and the Search Console sheet into one migration workbook: pages to keep, merge and redirect, media with backlinks, new pages, the final navigation the SEO fills in, and the developer redirect list. Blocks on unresolved audit cells, fixes redirect chains and lists every discrepancy, never makes a live request | Site Migration SOP |
 | `site-diagnosis` | One entry point for an existing site that is losing traffic. Compares two periods of Search Console page + query data (overall change, pages and searches that gained or lost, pages behind the biggest losing searches, pages competing for the same search, losing URLs that no longer return 200 when a crawl is attached), then runs the information architecture audit and the service gap audit as the evidence calls for and recommends Content Prune & Merge or the backlink audit. Reports what changed, not why | Site diagnosis |
 | `internal-linking-audit` | From a crawl export and Search Console, lists which pages should link to each priority page (page to edit + page to link to) and builds the implementation sheet | Internal Linking Audit Process |
 | `content-prune-merge` | Runs the Content Prune & Merge audit and delivers a workbook with a Recommendations tab, one tab per issue and a dev redirect CSV tab | Content Prune & Merge |
@@ -51,6 +52,7 @@ Free plans can use skills but not plugins. Download the ZIP for the skill you wa
 | Skill | Download |
 | --- | --- |
 | Information architecture audit | [information-architecture-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/information-architecture-audit.zip) |
+| Migration sheet | [migration-sheet.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/migration-sheet.zip) |
 | Site diagnosis | [site-diagnosis.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/site-diagnosis.zip) |
 | Internal linking audit | [internal-linking-audit.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/internal-linking-audit.zip) |
 | Content prune & merge | [content-prune-merge.zip](https://github.com/amandatjordan/mavan-skills/releases/latest/download/content-prune-merge.zip) |
