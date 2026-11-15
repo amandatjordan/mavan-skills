@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Write the migration workbook (and, in pass 2, the developer redirect CSV) from work/sheet.json.
+"""Write the migration workbook (and, after the QA check, the developer redirect CSV) from work/sheet.json.
 
 Usage:
   python make_xlsx.py --work work --out migration-sheet.xlsx [--client "Name"]
-Pass 1 writes the workbook for the SEO to fill in. Pass 2 writes the final workbook and, next to it, the developer redirect CSV
+The template run writes the workbook for the SEO to finish. The QA run writes the final workbook and, next to it, the developer redirect CSV
 (the only copy of the developer list: the workbook has no dev tab). All wording is fixed here; Claude writes none of it.
 """
 import argparse
@@ -31,7 +31,7 @@ BANNERS = {
           'change. Fill in the same for new pages. This tab lists every page that will exist on the new site (stays, moved, new). Merged pages are not '
           'listed because they redirect to the page they merge into. Every internal link on a page that stays is kept. Delete this row before handoff.',
     MENU: 'The SEO MUST set the final navigation here, always with parent and child levels. Parent label, Parent URL (leave blank for a label-only '
-          'dropdown), Child label, Child URL, order. Every URL must be a page on the All pages tab. Pass 2 fails while this tab is empty.',
+          'dropdown), Child label, Child URL, order. Every URL must be a page on the All pages tab. The QA check fails while this tab is empty.',
     MERGE: 'Pages that go away and are folded into another page. Column C is the unique content to copy over to the surviving page. The redirect for '
            'each is on the Pages to redirect tab and in the developer list. Delete this row before handoff.',
     REDIR: "Every old URL that does not stay, with the one-hop target. Fill every orange cell: a target for URLs nobody decided (type Gone to remove "
@@ -41,7 +41,7 @@ BANNERS = {
            'Keep at the same URL, or Redirect (and fill in the new URL). Files without backlinks are ignored.',
     NEWP: 'Pages to create (Service Gap rows set to Create new page). Service Gap names the page but not its URL, so fill in the URL. Up to 3 existing '
           'pages that should link TO the new page are suggested from the Service Gap data, shown at their final URLs: change or add pages, and fill in the '
-          'anchor text each one uses to link to the new page. Pass 2 fails while an orange cell is left.',
+          'anchor text each one uses to link to the new page. The QA check fails while an orange cell is left.',
 }
 HEADS = {
     ALLP: [('Final URL', 'impl'), ('Old URL (when it moves)', 'info'), ('Origin', 'info'), ('Page type (SEO: review and update)', 'review'),
@@ -114,8 +114,8 @@ def main():
     ws = wb.active
     ws.title = SUMMARY
     ws.sheet_properties.tabColor = TAB_ORANGE
-    put(ws, 1, 1, f"Migration sheet{' for ' + a.client if a.client else ''}: {S['domain']} (pass {S['pass']}). "
-        + ('Final: every check passed.' if pass2 else 'Fill in every orange cell on the other tabs, then give Claude the working copy for pass 2.'),
+    put(ws, 1, 1, f"Migration sheet{' for ' + a.client if a.client else ''}: {S['domain']} ({'QA check' if pass2 else 'template'}). "
+        + ('Final: every check passed.' if pass2 else 'Fill in every orange cell on the other tabs, then send the finished sheet back for the QA check.'),
         fill=YELLOW, bold=True)
     ws.merge_cells('A1:E1')
     r = block(ws, 3, 'What the SEO does with this sheet', ['Step', 'Where'], [
@@ -155,8 +155,8 @@ def main():
     ws.merge_cells('A1:C1')
     files = sorted({x['file'] for x in S['read']})
     lines = [
-        ('How to use', 'Pass 1 builds this workbook. Review and update the light orange columns on All pages (page type, title and H1 at launch). Fill every orange cell (the Final menu and nav tab, Media with backlinks, New pages, and the Pages to '
-                       'redirect cells marked SEO fill in). Give Claude this working copy for pass 2, which re-runs every check and writes the final workbook '
+        ('How to use', 'This is the template for the SEO to finish. Review and update the light orange columns on All pages (page type, title and H1 at launch). Fill every orange cell (the Final menu and nav tab, Media with backlinks, New pages, and the Pages to '
+                       'redirect cells marked SEO fill in). Send the finished sheet back for the QA check, which re-runs every check and writes the final workbook '
                        'and the developer redirect CSV. A change to a keep, merge, remove or move decision is made in the audit workbook, never here.'),
         ('Audit workbooks read', ', '.join(files) or 'none'),
         ('Tabs read', '; '.join(f"{x['file']} / {x['tab']} ({x['rows']} rows)" for x in S['read'])),

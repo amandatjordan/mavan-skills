@@ -145,7 +145,7 @@ def main():
         if need('Working copy of the migration sheet', a.working_copy):
             T = workbook_tabs(a.working_copy)
             miss = [t for t in ('Pages to redirect', 'Media with backlinks', 'Final menu and nav') if t not in T]
-            add('FAIL' if miss else 'PASS', f'Working copy: missing the tab(s) {miss}.' if miss else 'Working copy: the pass 1 tabs are there.')
+            add('FAIL' if miss else 'PASS', f'Working copy: missing the tab(s) {miss}.' if miss else 'Working copy: the template tabs are there.')
     # ---- report
     fails = [m for lv, m in lines if lv == 'FAIL']
     out = ['# Migration sheet preflight', ''] + [f'{lv}: {m}' for lv, m in lines]

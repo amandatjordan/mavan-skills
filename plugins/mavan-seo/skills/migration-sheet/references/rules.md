@@ -17,11 +17,11 @@ To change an outcome, the SEO edits the audit workbook and re-runs.
 
 ## Removing a URL
 
-404 or 410 is allowed. In the audit workbook the SEO types **Gone** (or **Gone 410**) as the target. On the migration sheet the row shows the code and no target, and the SEO writes the **reason** in the orange cell; pass 2 fails without it.
+404 or 410 is allowed. In the audit workbook the SEO types **Gone** (or **Gone 410**) as the target. On the migration sheet the row shows the code and no target, and the SEO writes the **reason** in the orange cell; the QA check fails without it.
 
 ## Media with backlinks
 
-Only media files with backlinks in the backlink export are handled; all other media is ignored. Nobody can know whether the new site keeps a file at the same URL, so each file gets a row on its own tab and **the SEO decides**: Keep at the same URL, or Redirect with the new URL filled in. Redirects chosen there go to the developer list in pass 2.
+Only media files with backlinks in the backlink export are handled; all other media is ignored. Nobody can know whether the new site keeps a file at the same URL, so each file gets a row on its own tab and **the SEO decides**: Keep at the same URL, or Redirect with the new URL filled in. Redirects chosen there go to the developer list in the QA check.
 
 ## Wildcard rules
 
@@ -49,14 +49,14 @@ Bottom quartile of pages linking in, per page type (a type needs 4 pages). The c
 8. Every new page has a URL and at least one page linking to it with anchor text (every listed page has anchor text), and those pages are on the new site.
 9. Final menu and nav: every URL is a page that stays or a new page (not merged, redirected or Gone), and every child has a parent. The tab must not be empty.
 
-Checks 7 to 9 are OPEN in pass 1 (the SEO has not filled them in yet) and FAIL in pass 2.
+Checks 7 to 9 are OPEN in run 1, the template (the SEO has not filled them in yet), and FAIL in run 2, the QA check.
 
 ## Tabs
 
 | Tab | Contents |
 | --- | --- |
 | Summary | Counts per decision, the check results, every discrepancy, the internal link cutoff |
-| All pages | Every page on the new site: final URL, old URL when it moves, origin (Stays, Moved, New page), page type, title and H1 at migration (Update pages' new ones when filled in, otherwise the crawl's), notes. Merged pages are not listed. **The SEO reviews and updates page type, title and H1** (light orange columns); the edits are read back in pass 2, matched by final URL (new pages by their Service Gap note) |
+| All pages | Every page on the new site: final URL, old URL when it moves, origin (Stays, Moved, New page), page type, title and H1 at migration (Update pages' new ones when filled in, otherwise the crawl's), notes. Merged pages are not listed. **The SEO reviews and updates page type, title and H1** (light orange columns); the edits are read back by the QA check, matched by final URL (new pages by their Service Gap note) |
 | Final menu and nav | The SEO fills in: parent label, parent URL, child label, child URL, order. Always parent and child levels |
 | Pages to merge | Page that goes away, surviving URL, unique content to copy over. Its redirect is on Pages to redirect and in the dev list |
 | Pages to redirect | Old URL, target (or Gone), HTTP code, reason for Gone, which audit decided it. Merge and wildcard redirects are included |
@@ -64,6 +64,6 @@ Checks 7 to 9 are OPEN in pass 1 (the SEO has not filled them in yet) and FAIL i
 | New pages | Page to create (Service Gap rows set to Create new page), URL (SEO fills in), keywords, up to 3 suggested pages that link to it, with the anchor text (SEO fills in the anchor text) |
 | README | SEO only: how to use, files and tabs read, thresholds, what was not checked |
 
-The developer redirect list is not a tab: pass 2 writes it as a separate CSV (Source URL, Target URL, Regex 0 or 1, HTTP Code; headers in row 1), the only copy. It holds every 301 redirect, every Gone row with its 404 or 410 code, one row per wildcard rule with Regex = 1, and media files the SEO set to redirect.
+The developer redirect list is not a tab: the QA check writes it as a separate CSV (Source URL, Target URL, Regex 0 or 1, HTTP Code; headers in row 1), the only copy. It holds every 301 redirect, every Gone row with its 404 or 410 code, one row per wildcard rule with Regex = 1, and media files the SEO set to redirect.
 
 Excel does not allow "/" in a tab name, so the navigation tab is called **Final menu and nav**.

@@ -142,7 +142,7 @@ class Pass1(unittest.TestCase):
         p = run('build.py', '--domain', DOM, '--work', self.w, '--working-copy', self.w / 'wc.xlsx', ok=False)
         self.assertEqual(p.returncode, 1)
         self.assertIn('navigation', p.stdout)
-        run('build.py', '--domain', DOM, '--work', self.w)  # restore pass 1 sheet.json for other tests
+        run('build.py', '--domain', DOM, '--work', self.w)  # restore the template sheet.json for other tests
 
 
 class Pass2(unittest.TestCase):
@@ -176,7 +176,7 @@ class Pass2(unittest.TestCase):
             run('make_xlsx.py', '--work', w, '--out', Path(d) / 'final.xlsx')
             final = openpyxl.load_workbook(Path(d) / 'final.xlsx')
             rows = {x[0]: x for x in final['All pages'].iter_rows(min_row=3, values_only=True)}
-            self.assertEqual(rows['/fillers/'][4], 'Dermal Fillers in Denver | Example')  # the SEO's edit is kept in pass 2
+            self.assertEqual(rows['/fillers/'][4], 'Dermal Fillers in Denver | Example')  # the SEO's edit is kept by the QA check
             self.assertEqual(rows['/services/lip-filler/'][4:6], ('Lip Filler Denver', 'Lip Filler'))
             names = final.sheetnames
             self.assertNotIn('Redirects - Handoff to Dev', names)  # the developer list is the separate CSV only
