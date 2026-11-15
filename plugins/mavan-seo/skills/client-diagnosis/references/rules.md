@@ -62,17 +62,17 @@ Notes:
 
 ## Google Business Profile findings
 
-Typed by the SEO on the GBP template (`--gbp`). Needs the client and at least 3 competitors, each with rating, review count, categories and local position for the same 3 priority keywords; otherwise it is not assessed. These findings have their own priority and add **no points** to any lens: they never change which lens leads or the playbook order (architecture, content and authority are scored exactly as before).
+Read from GMB Everywhere Search Export files (`--gbp`, one per priority search) and the business name in `config.json` (`gbp_business`). Every other business in the exports is a competitor; a business missing from an export did not show for that search. Each finding is scored only when the exports have the data it needs; otherwise it is listed as Not scored with the reason, and the others still run. If nothing can be scored, the GBP section is not assessed. These findings have their own priority and add **no points** to any lens: they never change which lens leads or the playbook order (architecture, content and authority are scored exactly as before).
 
-| ID | Finding | Flagged when | Priority |
-| --- | --- | --- | --- |
-| G1 | Low review rating | Client rating is 0.3 stars or more below the median competitor | High |
-| G2 | Low number of reviews | Client reviews are under 50% of the median competitor | High |
-| G3 | Poor local ranking | Client is outside the top 3 (or not shown) on 2 or more of the 3 priority keywords | High |
-| G4 | Missing GBP categories | A category used by 2+ competitors that the client does not have (names listed) | Medium |
+| ID | Finding | Flagged when | Needs | Priority |
+| --- | --- | --- | --- | --- |
+| G1 | Low review rating | The client's rating is 0.3 stars or more below the median competitor | A rating for the client and 3+ competitors | High |
+| G2 | Low number of reviews | The client's reviews are under 50% of the median competitor | 3+ competitors | High |
+| G3 | Poor local ranking | The client is outside the top 3 (or not shown) on 2 or more of the 3 priority searches | Exactly 3 exports | High |
+| G4 | Missing GBP categories | A category used by at least 50% of competitors (never fewer than 2) that the client does not have (names listed) | Categories for the client and 3+ competitors | Medium |
 
-Optional typed details (photo count, linked page, attributes, services listed) are shown for comparison and not scored. Local position is read by the SEO from Google; competitors' positions are shown for comparison and are not part of G3.
+The export lists at most 5 categories per business (primary plus 4), so G4 can miss a category a business has beyond the fifth. Photo count, website and appointment URL are not scored (photo count is often empty). The tool's summary tables (attributes, category totals, rating and review stats) are not used. Competitors are every other business in the export, so a few from another specialty (a pediatric dentist, say) are included; the median and the 50% rule keep them from deciding the result. Competitors' positions are shown for comparison and are not part of G3.
 
 ## What this does not check
 
-Internal links between pages (no link export), the live site, GA4, why traffic changed (migrations, updates, seasonality), page speed or Core Web Vitals, and anything about Google Business Profile beyond the typed figures above (no live lookups, no review content, no citations).
+Internal links between pages (no link export), the live site, GA4, why traffic changed (migrations, updates, seasonality), page speed or Core Web Vitals, and anything about Google Business Profile beyond the export columns above (no live lookups, no review content, no citations).

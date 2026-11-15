@@ -513,28 +513,34 @@ above, Needs work 50 to 74, Poor below 50.</p>
 
 
 def gbp_from_diagnosis(d):
-    """Google Maps card from the diagnosis's GBP findings (prospect-diagnosis, typed by the SEO).
-    Returns None when the diagnosis has no assessed GBP data. Score = share of the four checks with no issue."""
+    """Google Maps card from the diagnosis's GBP findings (prospect-diagnosis / client-diagnosis, read from the local search exports).
+    Returns None when the diagnosis has no assessed GBP data. A finding the exports could not score is left out.
+    Score = share of the scored checks with no issue."""
     g = (d or {}).get('gbp') or {}
     if not g.get('assessed'):
         return None
-    f = {x['id']: x for x in g['findings']}
+    f = {x['id']: x for x in g['findings'] if x.get('found') is not None}
     pr = g['prospect']
-    rating, reviews = float(pr['rating']), int(float(pr['reviews']))
-    outside = sum(1 for v in pr['rankings'].values() if not (isinstance(v, (int, float)) or str(v).replace('.', '', 1).isdigit())
-                  or float(v) > 3)
-    n_kw = len(pr['rankings'])
-    items = [
-        (f['G1']['found'], f'Your Google rating ({rating:.1f}) is lower than the typical nearby competitor ({g["median_rating"]:.1f}).',
-         f'Your Google rating ({rating:.1f}) is in line with nearby competitors ({g["median_rating"]:.1f}).'),
-        (f['G2']['found'], f'You have far fewer Google reviews ({reviews:,}) than the typical nearby competitor ({g["median_reviews"]:,.0f}).',
-         f'Your number of Google reviews ({reviews:,}) is in line with nearby competitors ({g["median_reviews"]:,.0f}).'),
-        (f['G3']['found'], f'You are outside the top 3 local map results for {outside} of the {n_kw} priority searches we checked.',
-         f'You show in the top 3 local map results for most of the priority searches we checked.'),
-        (f['G4']['found'], 'Competitors list Google Business Profile categories your profile is missing: '
-         + ', '.join(n for n, _ in g['missing_categories']) + '.',
-         'Your profile uses the categories your competitors use.'),
-    ]
+    items = []
+    if 'G1' in f:
+        rating = float(pr['rating'])
+        items.append((f['G1']['found'], f'Your Google rating ({rating:.1f}) is lower than the typical nearby competitor ({g["median_rating"]:.1f}).',
+                      f'Your Google rating ({rating:.1f}) is in line with nearby competitors ({g["median_rating"]:.1f}).'))
+    if 'G2' in f:
+        reviews = int(float(pr['reviews'] or 0))
+        items.append((f['G2']['found'], f'You have far fewer Google reviews ({reviews:,}) than the typical nearby competitor ({g["median_reviews"]:,.0f}).',
+                      f'Your number of Google reviews ({reviews:,}) is in line with nearby competitors ({g["median_reviews"]:,.0f}).'))
+    if 'G3' in f:
+        outside = sum(1 for v in pr['rankings'].values() if not (isinstance(v, (int, float)) or str(v).replace('.', '', 1).isdigit())
+                      or float(v) > 3)
+        items.append((f['G3']['found'], f'You are outside the top 3 local map results for {outside} of the {len(pr["rankings"])} priority searches we checked.',
+                      'You show in the top 3 local map results for most of the priority searches we checked.'))
+    if 'G4' in f:
+        items.append((f['G4']['found'], 'Competitors list Google Business Profile categories your profile is missing: '
+                      + ', '.join(n for n, _ in g['missing_categories']) + '.',
+                      'Your profile uses the categories your competitors use.'))
+    if not items:
+        return None
     score = round(100 * sum(1 for hit, _, _ in items if not hit) / len(items))
     return {'score': score, 'findings': [{'text': bad if hit else ok, 'issue': bool(hit)} for hit, bad, ok in items]}
 
