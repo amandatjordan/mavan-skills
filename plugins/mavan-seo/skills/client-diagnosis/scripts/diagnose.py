@@ -14,6 +14,8 @@ Every number is a count, share, join or comparison done here. Search volume is t
 and is never added across keywords; GSC numbers are real clicks and impressions. Nothing is fetched from the live site.
 """
 import argparse
+import json
+import math
 import os
 import re
 import statistics
@@ -38,6 +40,14 @@ LOW_SCORE = 5             # at or below this is a low-score referring domain
 RECENT_DAYS = 90
 WIN_POS = 20             # a competitor at this position or better is winning the search
 CO_LEAD_MARGIN = 0.10
+GBP_MIN_COMPS = 3         # Google Business Profile: at least this many competitors with data
+GBP_RATING_GAP = 0.3      # G1: prospect rating at least this many stars below the median competitor
+GBP_REVIEW_SHARE = 0.5    # G2: prospect review count under this share of the median competitor
+GBP_TOP = 3               # G3: local pack = positions 1-3
+GBP_POOR_KEYWORDS = 2     # G3: outside the top 3 on at least this many of the priority keywords
+GBP_CAT_MIN_COMPS = 2     # G4: never flag a category used by fewer competitors than this
+GBP_CAT_SHARE = 0.5       # G4: a category counts as missing when this share of competitors use it and the client does not
+GBP_KEYWORDS = 3          # priority keywords the SEO checks
 ROUND_ROWS = {1000, 5000, 10000, 20000, 25000, 30000, 50000, 100000}
 
 ARCHIVE_PATTERNS = [
@@ -148,6 +158,8 @@ def cmd_preflight(a):
         rows.append((level, item, detail))
 
     cfg = load_json(a.config, None)
+    if cfg is not None and getattr(a, 'gbp', None):
+        cfg['gbp'] = read_gbp_exports(a.gbp, cfg.get('gbp_business'))
     if cfg is None:
         add('FAIL', 'config.json', f'not found at {a.config}')
         cfg = {}
@@ -208,6 +220,16 @@ def cmd_preflight(a):
     else:
         add('WARN', 'Authority overview (config)',
             f'missing for {[d for d in need if d not in have]}: authority score and referring domain signals are not scored')
+    gs = score_gbp(cfg)
+    if not gs['assessed']:
+        add('WARN', 'Google Business Profile (local search exports)',
+            '; '.join(gs['problems']) + ': the GBP findings are not assessed')
+    else:
+        done = [x['id'] for x in gs['findings'] if x['found'] is not None]
+        skipped = [f'{x["id"]} ({x["value"][len("Not scored: "):]})' for x in gs['findings'] if x['found'] is None]
+        add('WARN' if skipped else 'OK', 'Google Business Profile (local search exports)',
+            f'{len(cfg["gbp"]["keywords"])} search(es), {len(cfg["gbp"]["competitors"]) + 1} businesses; scored: {", ".join(done)}'
+            + (f'; not scored: {"; ".join(skipped)}' if skipped else ''))
     for path, item, spec in ((a.refdomains, 'Referring domains export (optional)', REFDOM_SPEC),
                              (a.backlink_gap, 'Backlink gap export (optional)', BLGAP_SPEC)):
         if path:
@@ -348,6 +370,180 @@ def load_scored_domains(path, spec, label, ov):
     return out, df
 
 
+# ------------------------------------------------------------------ Google Business Profile
+# Read from local-search exports (one file per priority search; columns Position, Business Name, Rating, Reviews,
+# Primary Category, Category 2-5). Findings have their own priority and add no points to any lens. Anything an export does not
+# include (for example photo counts, which come back empty) is not scored.
+
+GBP_WHO = 'client'
+
+
+def _pos(v):
+    """Local position as a number, or None when the business did not show (blank, null, 'none')."""
+    try:
+        f = float(v)
+        return f if f > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _gbp_table(path):
+    if path.lower().endswith('.json'):
+        with open(path, encoding='utf-8') as fh:
+            raw = json.load(fh)
+        df = pd.DataFrame((raw.get('data') if isinstance(raw, dict) else raw) or [])
+    else:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+def _num_or_none(v):
+    try:
+        f = float(str(v).replace(',', ''))
+        return None if f != f else f
+    except (TypeError, ValueError):
+        return None
+
+
+def read_gbp_exports(specs, business):
+    """specs: ['search words=path', ...] (a bare path is labelled 'search 1', 'search 2', ...), one export per
+    priority search. business: the exact name of the business under diagnosis, as written in the exports.
+    Returns the structure score_gbp uses; 'errors' lists what blocks the GBP findings."""
+    out = {'keywords': [], 'prospect': {}, 'competitors': [], 'errors': [], 'business': (business or '').strip()}
+    if not specs:
+        out['errors'].append('no local search export provided')
+        return out
+    ents, order = {}, []
+    for i, spec in enumerate(specs, 1):
+        if '=' in spec and not os.path.exists(spec):
+            kw, path = [s.strip() for s in spec.split('=', 1)]
+        else:
+            kw, path = f'search {i}', spec
+        out['keywords'].append(kw)
+        if not os.path.exists(path):
+            out['errors'].append(f'{path}: file not found')
+            continue
+        try:
+            df = _gbp_table(path)
+        except Exception as e:  # unreadable or malformed file
+            out['errors'].append(f'{path}: could not be read ({e})')
+            continue
+        missing = [c for c in ('Business Name', 'Position') if c not in df.columns]
+        if missing:
+            out['errors'].append(f'{path}: columns not found: {", ".join(missing)}')
+            continue
+        for _, row in df.iterrows():
+            name = str(row.get('Business Name', '')).strip()
+            if not name:
+                continue
+            e = ents.get(name.lower())
+            if e is None:
+                e = ents[name.lower()] = {'name': name, 'rating': None, 'reviews': None, 'categories': [], 'rankings': {}}
+                order.append(name.lower())
+            if e['rating'] is None:
+                e['rating'] = _num_or_none(row.get('Rating'))
+            if e['reviews'] is None:
+                e['reviews'] = _num_or_none(row.get('Reviews'))
+            for c in ['Primary Category'] + [c for c in df.columns if re.fullmatch(r'Category \d+', c)]:
+                cat = str(row.get(c, '')).strip()
+                if cat and cat not in e['categories']:
+                    e['categories'].append(cat)
+            e['rankings'][kw] = _pos(row.get('Position'))
+    for e in ents.values():
+        for kw in out['keywords']:
+            e['rankings'].setdefault(kw, None)    # not in that export = did not show
+    key = out['business'].lower()
+    if not key:
+        out['errors'].append(f'no gbp_business in config.json: the exact name of the {GBP_WHO}\'s business as written in the export')
+    elif key not in ents:
+        out['errors'].append(f'"{out["business"]}" is not in any export: check the spelling against the export')
+    else:
+        out['prospect'] = ents[key]
+        out['competitors'] = [ents[k] for k in order if k != key]
+    return out
+
+
+def gbp_problems(cfg):
+    """What blocks every GBP finding. Empty list = findings can be scored (each one still needs its own data)."""
+    g = cfg.get('gbp')
+    if not g:
+        return ['no local search export provided']
+    out = list(g.get('errors') or [])
+    if not out and not g.get('prospect'):
+        out.append(f'the {GBP_WHO} was not found in the exports')
+    return out
+
+
+def score_gbp(cfg):
+    """Scores each finding the exports have the data for; the rest are 'not scored' with the reason.
+    Returns assessed False (reasons in 'problems') when nothing could be scored."""
+    problems = gbp_problems(cfg)
+    if problems:
+        return {'assessed': False, 'problems': problems}
+    g = cfg['gbp']
+    pr, comps, kws = g['prospect'], g['competitors'], g['keywords']
+    f = []
+
+    def finding(fid, name, hit, value, detail, priority='High'):
+        f.append({'id': fid, 'name': name, 'priority': priority, 'found': hit, 'value': value, 'detail': detail})
+
+    def not_scored(fid, name, why, detail, priority='High'):
+        finding(fid, name, None, 'Not scored: ' + why, detail, priority)
+
+    rates = [c['rating'] for c in comps if c['rating'] is not None]
+    revs = [c['reviews'] if c['reviews'] is not None else 0.0 for c in comps]
+    med_rating = float(statistics.median(rates)) if len(rates) >= GBP_MIN_COMPS else None
+    med_rev = float(statistics.median(revs)) if len(revs) >= GBP_MIN_COMPS else None
+
+    d1 = f'Flagged when the {GBP_WHO} is {GBP_RATING_GAP} stars or more below the median competitor.'
+    if pr['rating'] is None:
+        not_scored('G1', 'Low review rating', f'the {GBP_WHO} has no rating in the exports', d1)
+    elif med_rating is None:
+        not_scored('G1', 'Low review rating', f'need at least {GBP_MIN_COMPS} competitors with a rating, found {len(rates)}', d1)
+    else:
+        finding('G1', 'Low review rating', round(med_rating - pr['rating'], 2) >= GBP_RATING_GAP - 1e-9,
+                f'{GBP_WHO} {pr["rating"]:.1f} vs median competitor {med_rating:.1f}', d1)
+    d2 = f'Flagged when the {GBP_WHO} has under {pct(GBP_REVIEW_SHARE)} of the median competitor\'s reviews.'
+    if med_rev is None:
+        not_scored('G2', 'Low number of reviews', f'need at least {GBP_MIN_COMPS} competitors, found {len(revs)}', d2)
+    else:
+        n_rev = pr['reviews'] if pr['reviews'] is not None else 0.0
+        finding('G2', 'Low number of reviews', n_rev < GBP_REVIEW_SHARE * med_rev,
+                f'{GBP_WHO} {int(n_rev):,} vs median competitor {med_rev:,.0f}', d2)
+    d3 = (f'Flagged when the {GBP_WHO} is outside the top {GBP_TOP} (or not shown) on {GBP_POOR_KEYWORDS} or more of the '
+          f'{GBP_KEYWORDS} priority searches.')
+    if len(kws) != GBP_KEYWORDS:
+        not_scored('G3', 'Poor local ranking on priority keywords', f'needs exactly {GBP_KEYWORDS} exports (one per priority search), found {len(kws)}', d3)
+    else:
+        outside = [k for k, v in pr['rankings'].items() if _pos(v) is None or _pos(v) > GBP_TOP]
+        finding('G3', 'Poor local ranking on priority keywords', len(outside) >= GBP_POOR_KEYWORDS,
+                f'outside the top {GBP_TOP} on {len(outside)} of {GBP_KEYWORDS}: ' + (', '.join(outside) or 'none'), d3)
+    d4 = (f'A category counts as missing when at least {GBP_CAT_SHARE:.0%} of the competitors (and never fewer than {GBP_CAT_MIN_COMPS}) '
+          f'use it and the {GBP_WHO} does not. The export lists at most 5 categories per business.')
+    cat_comps = [c for c in comps if c['categories']]
+    missing = []
+    if not pr['categories']:
+        not_scored('G4', 'Missing GBP categories competitors use', f'the {GBP_WHO} has no categories in the exports', d4, 'Medium')
+    elif len(cat_comps) < GBP_MIN_COMPS:
+        not_scored('G4', 'Missing GBP categories competitors use',
+                   f'need at least {GBP_MIN_COMPS} competitors with categories, found {len(cat_comps)}', d4, 'Medium')
+    else:
+        need = max(GBP_CAT_MIN_COMPS, math.ceil(GBP_CAT_SHARE * len(cat_comps)))
+        have = {x.lower() for x in pr['categories']}
+        use = {}
+        for c in cat_comps:
+            for x in c['categories']:
+                use.setdefault(x.lower(), [x, 0])[1] += 1
+        missing = sorted([(v[0], v[1]) for k, v in use.items() if k not in have and v[1] >= need], key=lambda t: (-t[1], t[0]))
+        finding('G4', 'Missing GBP categories competitors use', bool(missing),
+                ', '.join(f'{n} ({k} of {len(cat_comps)})' for n, k in missing) or 'none', d4, 'Medium')
+    if not any(x['found'] is not None for x in f):
+        return {'assessed': False, 'problems': [x['value'] for x in f]}
+    return {'assessed': True, 'findings': f, 'prospect': pr, 'competitors': comps,
+            'median_rating': med_rating, 'median_reviews': med_rev, 'missing_categories': missing}
+
+
 # ------------------------------------------------------------------ signals
 
 class Signals:
@@ -378,7 +574,7 @@ def score_architecture(S, c, has_depth, r):
     arch = idx[idx['archive']]
     a_share = share(len(arch), len(idx))
     pts = 2 if a_share >= 0.50 else (1 if a_share >= 0.25 else 0)
-    S.add('Architecture', 'A1', 'Archive and listing pages (tags, categories, dates, paged lists) as a share of indexable pages',
+    S.add('Architecture', 'A1', 'Hub pages (pages that only list other pages: tags, blog categories, dates, paged lists) as a share of indexable pages',
           f'{len(arch):,} of {len(idx):,} ({pct(a_share)})', '25% = 1 point, 50% = 2 points', pts, 2)
     S.data(archive=len(arch), indexable=len(idx), share=a_share)
 
@@ -639,7 +835,7 @@ def verdict(S, manual=None):
 # ------------------------------------------------------------------ workbook
 
 HEAD = Font(bold=True, color='FFFFFF')
-FILL = PatternFill('solid', fgColor='1F3A5F')
+FILL = PatternFill('solid', fgColor='111111')
 WRAP = Alignment(wrap_text=True, vertical='top')
 
 
@@ -663,6 +859,8 @@ def sheet(wb, name, header, rows, widths=None):
 def cmd_build(a):
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     cfg = load_json(a.config, {})
+    if a.gbp:
+        cfg['gbp'] = read_gbp_exports(a.gbp, cfg.get('gbp_business'))
     prospect = bare_domain(cfg.get('domain', ''))
     ov = parse_map(a.map)
     comps = [bare_domain(x) for x in cfg.get('competitors', [])]
@@ -756,6 +954,7 @@ def cmd_build(a):
     auth = score_authority(S, cfg, prospect, comps, refd, blgap)
     manual = gsc.manual_action_signal(S, cfg.get('manual_action'))
     lenses, lead = verdict(S, manual)
+    gbp = score_gbp(cfg)
     drop = gsc.drops(gq, prof['comparable'], a.click_floor, a.impr_floor)
     svc_gsc, _ = gsc.service_rows(gq, cfg.get('service_terms') or [], prof['comparable'])
 
@@ -775,6 +974,7 @@ def cmd_build(a):
           drop['basis'].str.startswith('Impr')).all()), f'{len(drop):,} keywords')
     check('Search Console periods do not overlap', prof['a_end'] < prof['b_start'])
 
+    check('GBP findings are only made from complete data', gbp['assessed'] or not gbp.get('findings'))
     # --- workbook
     wb = Workbook()
     wb.remove(wb.active)
@@ -802,6 +1002,9 @@ def cmd_build(a):
           'Impressions are NOT comparable between the periods (see the note below), so every signal that needs them is "Not scored".')],
         ['Number types', 'Search Console figures are real clicks and impressions. Keyword tool figures (Semrush or Ahrefs) are '
          'estimates and are never added to Search Console figures.'],
+        ['Google Business Profile', 'Read from the local search exports (rating, reviews, primary category and local position for each priority search); anything an export does not include is not scored. Findings are on the Google Business Profile '
+         'tab and carry their own priority (High / Medium). They do not add points to any lens and do not change which lens leads.'
+         if gbp['assessed'] else 'Not assessed: ' + '; '.join(gbp['problems']) + '.'],
         ['Not checked', 'Nothing was fetched from the live site. Internal links between pages are not analysed (no link export '
          'is needed). Manual actions are as the person reported them.'],
     ] + [['Note', n] for n in notes]
@@ -821,6 +1024,22 @@ def cmd_build(a):
             x['possible'], x['note']] for x in S.rows],
           {'What it measures': 55, 'Value': 40, 'Threshold': 35, 'Note': 40})
 
+    if gbp['assessed']:
+        fr = [[x['id'], x['name'], x['priority'], 'Not scored' if x['found'] is None else 'Yes' if x['found'] else 'No',
+               x['value'], x['detail']] for x in gbp['findings']]
+        ws = sheet(wb, 'Google Business Profile', ['ID', 'Finding', 'Priority', 'Found', 'Value', 'Rule'], fr,
+                   {'Finding': 42, 'Value': 60, 'Rule': 70})
+        ws.append([])
+        ws.append(['Business', 'Role', 'Rating (export)', 'Reviews (export)', 'Primary category (export)'] + [
+            f'Local position: {k}' for k in gbp['prospect']['rankings']])
+        for cell in ws[ws.max_row]:
+            cell.font, cell.fill, cell.alignment = HEAD, FILL, WRAP
+        for role, e in [('Client', gbp['prospect'])] + [('Competitor', c) for c in gbp['competitors']]:
+            ws.append([e.get('name', ''), role, e['rating'] if e['rating'] is not None else '',
+                       int(e['reviews']) if e['reviews'] is not None else '', ', '.join(e['categories'])] +
+                      [(_pos(v) if _pos(v) is not None else 'Not shown') for v in e['rankings'].values()])
+        ws.column_dimensions['E'].width = 45
+
     rep = arch['repeated']
     groups = []
     for col, label in (('title', 'Title'), ('h1', 'H1')):
@@ -828,18 +1047,18 @@ def cmd_build(a):
             sub = rep[rep[col] == val]
             groups.append([label, val, len(sub), sub['url'].iloc[0]])
     groups.sort(key=lambda x: -x[2])
-    mix = [['Archive and listing pages (indexable)', arch['archive']], ['Other indexable pages', arch['other']],
+    mix = [['Hub pages (indexable)', arch['archive']], ['Other indexable pages', arch['other']],
            ['Live but not indexable', arch['nonidx']], ['Redirecting URLs reached by the crawler', arch['redirects']],
            ['All crawled HTML URLs', arch['crawled']]]
     ws = sheet(wb, 'Architecture', ['Page group', 'Count'], mix, {'Page group': 45})
     ws.append([])
-    ws.append(['Repeated title or H1 (non-archive pages)', 'Text', 'Pages', 'Example URL'])
+    ws.append(['Repeated title or H1 (non-hub pages)', 'Text', 'Pages', 'Example URL'])
     for cell in ws[ws.max_row]:
         cell.font, cell.fill = HEAD, FILL
     for row in groups[:50]:
         ws.append(row)
     ws.append([])
-    ws.append([f'Non-archive pages under {THIN_WORDS} words', 'Content words', 'Title'])
+    ws.append([f'Non-hub pages under {THIN_WORDS} words', 'Content words', 'Title'])
     for cell in ws[ws.max_row]:
         cell.font, cell.fill = HEAD, FILL
     for _, t in arch['thin'].sort_values('words').iterrows():
@@ -984,6 +1203,7 @@ def cmd_build(a):
         'services': [dict(zip(svc_keys, r)) for r in cont['svc_rows']],
         'pages': {'crawled': arch['crawled'], 'live': arch['live'], 'indexable': arch['indexable'],
                   'archive': arch['archive'], 'other': arch['other']},
+        'gbp': gbp,
         'notes': notes,
         'report_type': 'client',
         'manual_action': manual,
@@ -999,6 +1219,12 @@ def cmd_build(a):
         print(f'  {v["lens"]}: {v["severity"]}' + ('' if v['share'] is None else f' ({pct(v["share"])}, {v["points"]} of '
                                                      f'{v["possible"]} points)'))
     print(f'  Lead issue: {lead_text}')
+    if gbp['assessed']:
+        print('  Google Business Profile (separate from the lead issue):')
+        for x in gbp['findings']:
+            print(f'    {x["id"]} {x["name"]} ({x["priority"]}): ' + ('not scored' if x['found'] is None else 'FOUND' if x['found'] else 'not found') + f' - {x["value"]}')
+    else:
+        print('  Google Business Profile: not assessed (' + '; '.join(gbp['problems']) + ')')
     if not all(checks):
         sys.exit(1)
     print('All checks passed')
@@ -1021,6 +1247,7 @@ def main():
                        help='impressions a keyword needs in period A to be judged by impressions')
         p.add_argument('--refdomains')
         p.add_argument('--backlink-gap')
+        p.add_argument('--gbp', action='append', help='a local search export, one per priority search: "search words=path.json" (repeat the option)')
         p.add_argument('--tool', choices=['semrush', 'ahrefs'])
         p.add_argument('--map', action='append', help='field override, e.g. crawl.words="Word Count" or gapcol.x.com="Col"')
         if name == 'preflight':

@@ -81,14 +81,17 @@ def finding(sig):
     d, sid, issue = sig.get('data') or {}, sig['id'], bool(sig['points'])
     try:
         if sid == 'A1':
-            return (True, f'{n(d["archive"])} of your {n(d["indexable"])} indexable pages ({pct(d["share"])}) are '
-                          'automatically generated listing pages (tags, categories, date archives), so your service '
+            return (True, f'{n(d["archive"])} of your {n(d["indexable"])} pages in Google ({pct(d["share"])}) are '
+                          'hub pages that only list other pages (blog tag, blog category and date archive pages), so your service '
                           'pages are a small part of what Google sees.') if issue else \
-                   (False, f'Listing pages make up only {pct(d["share"])} of your indexable pages.')
+                   (False, f'Only {n(d["archive"])} of your {n(d["indexable"])} pages in Google '
+                           f'{"is a hub page that only lists" if d["archive"] == 1 else "are hub pages that only list"} other pages '
+                           '(blog tag, blog category and date archive pages), so Google mostly sees your real service and content pages.')
         if sid == 'A2':
             return (True, f'{n(d["repeated"])} pages share the same title or heading with several others, which makes '
                           'them hard for Google to tell apart.') if issue else \
-                   (False, 'Page titles and headings are mostly unique.')
+                   (False, f'{"None" if not d["repeated"] else n(d["repeated"])} of your {n(d["pages"])} pages share '
+                           'the same title or heading with several others, so Google can tell your pages apart.')
         if sid == 'A3':
             return (True, f'{pct(d["share"])} of your regular pages ({n(d["no_keywords"])} of {n(d["pages"])}) do not '
                           'appear for any search we track.') if issue else \
@@ -96,12 +99,17 @@ def finding(sig):
         if sid == 'A4':
             return (True, f'{n(d["redirects"])} of the {n(d["crawled"])} addresses linked across your site redirect '
                           'somewhere else, adding an extra step for visitors and Google.') if issue else \
-                   (False, 'Few links on your site point at redirected addresses.')
+                   (False, f'{"None" if not d["redirects"] else n(d["redirects"])} of the {n(d["crawled"])} addresses '
+                           'linked across your site redirect, so visitors and Google reach each page directly.')
         if sid == 'A5':
             return (True, f'{pct(d["share"])} of your pages are more than {d["depth"]} clicks from the home page.') if issue \
-                else (False, f'Pages are easy to reach: only {pct(d["share"])} are more than {d["depth"]} clicks deep.')
+                else (False, f'Every page is within {d["depth"]} clicks of the home page, so Google and visitors can '
+                             'reach all of them easily.' if not d['deep'] else
+                             f'Pages are easy to reach: only {n(d["deep"])} of {n(d["indexable"])} are more than '
+                             f'{d["depth"]} clicks from the home page.')
         if sid == 'A6':
-            return (True, f'{n(d["not_live"])} pages that still appear in Google no longer load properly.') if issue else \
+            return (True, f'{n(d["not_live"])} of the {n(d["ranking_urls"])} pages that rank in Google are no longer on '
+                          'your site, so people who click those results land on a missing page.') if issue else \
                    (False, 'Nearly every page that appears in Google loads properly.')
         if sid == 'C1':
             return (True, f'{d["competitor"]} appears for {d["ratio"]:.1f} times as many of the searches we compared '
@@ -125,7 +133,7 @@ def finding(sig):
                           f'show up in Google search at all in the latest {per}.') if issue else \
                    (False, f'Most of your regular pages showed up in Google search in the latest {per}.')
         if sid == 'A8':
-            return (True, f'Automatically generated listing pages account for {pct(d["share"])} of the searches your site '
+            return (True, f'Hub pages that only list other pages account for {pct(d["share"])} of the searches your site '
                           'appears for, instead of your service pages.') if issue else None
         if sid == 'A9':
             return (True, f'{pct(d["share"])} of the searches you appear for show two or more of your own pages, so '
@@ -172,10 +180,8 @@ def lens_findings(signals, lens, limit=3):
     rows.sort(key=lambda s: (-(s['points'] or 0), s['id']))
     issues = [f for f in (finding(s) for s in rows if s['points']) if f]
     good = [f for f in (finding(s) for s in rows if not s['points']) if f]
-    out = issues[:limit]
-    if len(out) < 2:
-        out += good[:2 - len(out)] if issues else good[:2]
-    return out
+    # Every scored check is shown, issues first, so the score is explained by what passed as well as what failed.
+    return issues + good
 
 
 # ------------------------------------------------------------------ verdict and scores
@@ -264,81 +270,103 @@ def roadmap(track, tier, labels, onboarding=True):
 # ------------------------------------------------------------------ HTML
 
 CSS = """
-:root{--ink:#1d2433;--muted:#667085;--line:#e4e7ec;--bg:#f7f8fa;--card:#fff;--accent:#2d5be3;
---good:#1f8a5b;--good-bg:#e7f6ee;--warn:#b26b00;--warn-bg:#fff4e0;--bad:#c2410c;--bad-bg:#fdece4;}
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-color:var(--ink);background:var(--bg);line-height:1.5}
-.page{max-width:980px;margin:0 auto;padding:40px 28px 56px}
-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:28px}
-header h1{font-size:28px;margin:0 0 4px;letter-spacing:-.01em}header .sub{color:var(--muted);font-size:14px}
-header .prep{color:var(--muted);font-size:13px;text-align:right}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:36px 0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+:root{--ink:#111111;--body:#2b2b2b;--muted:#6b6b6b;--line:#e6e4df;--bg:#f3f3f1;--card:#fff;--dark:#111111;
+--accent:#9a6a3a;--accent-soft:#f2e9e0;--accent-line:#d9c3aa;
+--good:#1e7a4c;--good-bg:#e6f2ec;--warn:#b7700f;--warn-bg:#fbf0dc;--bad:#b3261e;--bad-bg:#f9e4e2;}
+*{box-sizing:border-box}body{margin:0;font-family:Montserrat,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+color:var(--body);background:var(--bg);line-height:1.55}
+.page{max-width:1000px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:8px;background:var(--dark);
+color:#fff;border-radius:18px;padding:26px 28px}
+header .brand{display:flex;align-items:center;gap:18px}header .mark{flex:none}
+header h1{font-size:28px;font-weight:800;margin:0 0 2px;letter-spacing:-.01em;color:#fff}
+header .sub{color:#cfcac2;font-size:14px}
+header .prep{color:#cfcac2;font-size:12px;text-align:right}
+header .prep .wm{display:block;color:#fff;font-size:13px;font-weight:500;letter-spacing:.42em;margin-bottom:6px}
+h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink);margin:34px 0 12px;
+display:flex;align-items:center;gap:10px}
+h2:before{content:"";width:4px;height:16px;border-radius:2px;background:var(--accent)}
+.card{background:var(--card);border-radius:16px;padding:22px}
 .summary{display:grid;grid-template-columns:220px 1fr;gap:22px;align-items:center}
 .overall{text-align:center}.overall .lbl{font-size:13px;color:var(--muted);margin-top:6px}
 .scores{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.mini{border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
-.mini .name{font-size:13px;font-weight:600;margin-top:6px}.mini .state{font-size:12px;margin-top:2px}
-.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px}
+.mini{border-left:4px solid var(--accent);background:#faf9f7;border-radius:10px;padding:14px;text-align:center}
+.mini .name{font-size:13px;font-weight:700;color:var(--ink);margin-top:6px}.mini .state{font-size:12px;font-weight:600;margin-top:2px}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px}
 .good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}.muted{color:var(--muted)}
 .pill.good{background:var(--good-bg)}.pill.warn{background:var(--warn-bg)}.pill.bad{background:var(--bad-bg)}
-.pill.muted{background:#eef0f3}
+.pill.muted{background:#ecebe8}
 .verdict{border-left:6px solid var(--accent);display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center}
-.verdict .kicker{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700}
-.verdict h3{font-size:24px;margin:4px 0 8px}.why{margin-top:14px;background:#f2f5ff;border-radius:10px;padding:10px 14px}.why b{font-size:13px;color:var(--accent)}.why p{margin:4px 0 0;font-size:14px}.verdict p{margin:0;color:#344054}
+.verdict .kicker{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);font-weight:700}
+.verdict h3{font-size:26px;font-weight:800;color:var(--ink);margin:4px 0 8px}
+.why{margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:12px 16px}.why b{font-size:13px;color:var(--ink)}
+.why p{margin:4px 0 0;font-size:14px}.verdict p{margin:0}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.metric h4{margin:0;font-size:17px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.metric h4{margin:0;font-size:17px;font-weight:800;color:var(--ink);display:flex;justify-content:space-between;align-items:center;gap:8px}
 .metric .about{color:var(--muted);font-size:13px;margin:4px 0 12px}
 .metric ul{margin:0;padding-left:0;list-style:none}.metric li{position:relative;padding-left:22px;margin:8px 0;font-size:14px}
-.metric li:before{content:"";position:absolute;left:4px;top:8px;width:9px;height:9px;border-radius:50%}
-.metric li.issue:before{background:var(--bad)}.metric li.ok:before{background:var(--good)}
-.metric.lead{border:2px solid var(--accent)}
-.svc-cap{margin:14px 0 4px;font-size:12px;font-weight:600;color:var(--muted)}
+.metric li:before{content:"";position:absolute;left:4px;top:8px;width:8px;height:8px;border-radius:2px}
+.metric li.issue:before{background:var(--accent)}.metric li.ok:before{background:var(--good)}
+.metric.lead{box-shadow:inset 0 0 0 2px var(--accent)}
+.svc-cap{margin:14px 0 4px;font-size:12px;font-weight:700;color:var(--ink)}
 .svc{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
-.svc th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 4px;
+.svc th{text-align:left;color:var(--muted);font-size:11px;font-weight:600;border-bottom:1px solid var(--line);padding:6px 4px;
 vertical-align:bottom}
 .svc td{border-bottom:1px solid var(--line);padding:6px 4px;overflow-wrap:anywhere;vertical-align:top}
 .svc .num{text-align:center}.svc td.num{white-space:nowrap}.svc .comp{color:var(--muted);font-size:12px;padding-left:10px}
 .svc .c-svc{width:30%}.svc .c-num{width:18%}.svc .c-comp{width:34%}
 @media (max-width:560px){.svc .comp{display:none}.svc .c-svc{width:44%}.svc .c-num{width:28%}}
-.road-intro{margin:0 0 14px;color:#344054}
+.road-intro{margin:0 0 14px}
 .road{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;position:relative}
-.col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;position:relative}
+.col{background:var(--card);border-radius:16px;padding:14px;position:relative}
 .col .head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .col .dot{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;
-display:flex;align-items:center;justify-content:center}.col.onb .dot{background:#98a2b3}
-.col .head b{font-size:14px}.col .head span{font-size:12px;color:var(--muted)}
-.task{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:#fcfcfd}
-.task b{font-size:13px;display:block}.task.compact{padding:6px 10px;margin-bottom:6px}.task small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
-.badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:#e9efff;border-radius:6px;
-padding:1px 7px;margin-top:6px}.badge.first{color:#fff;background:var(--accent)}
+display:flex;align-items:center;justify-content:center}.col.onb .dot{background:var(--dark)}
+.col .head b{font-size:14px;font-weight:800;color:var(--ink)}.col .head span{font-size:12px;color:var(--muted)}
+.task{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:#faf9f7}
+.task b{font-size:13px;font-weight:700;color:var(--ink);display:block}.task.compact{padding:6px 10px;margin-bottom:6px}
+.task small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.badge{display:inline-block;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:6px;
+padding:1px 7px;margin-top:6px}.badge.first{color:#fff;background:var(--dark)}
 .col:not(:last-child):after{content:"";position:absolute;right:-12px;top:26px;width:12px;height:2px;background:var(--accent)}
-.recurring{margin-top:12px;background:#eef2ff;border:1px dashed #b7c4f5;border-radius:12px;padding:12px 14px}
-.recurring b{font-size:13px}.recurring .items{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.recurring .items span{background:#fff;border:1px solid #d5ddfb;border-radius:999px;padding:3px 10px;font-size:12px}
+.recurring{margin-top:12px;background:var(--accent-soft);border-radius:14px;padding:12px 16px}
+.recurring b{font-size:13px;color:var(--ink)}.recurring .items{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.recurring .items span{background:#fff;border:1px solid var(--accent-line);border-radius:999px;padding:3px 10px;font-size:12px}
 p.note{color:var(--muted);font-size:12px;margin:8px 2px 0}
-footer{margin-top:36px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+footer{margin-top:36px;color:var(--muted);font-size:11px;border-top:1px solid var(--line);padding-top:14px;display:flex;gap:18px;
+align-items:flex-start}footer .wm{flex:none;color:var(--ink);font-size:13px;font-weight:500;letter-spacing:.42em}
 @media (max-width:820px){.summary,.metrics,.verdict{grid-template-columns:1fr}.scores,.road{grid-template-columns:1fr 1fr}
-.col:after{display:none}}
-@media print{body{background:#fff}.page{padding:0}.card,.col{break-inside:avoid}h2{break-after:avoid}}
+.col:after{display:none}header{flex-direction:column;align-items:flex-start}header .prep{text-align:left}footer{flex-direction:column}}
+@media print{body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:0}
+.card,.col{break-inside:avoid;border:1px solid var(--line)}h2{break-after:avoid}}
 """
+
+FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
+         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+         '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" '
+         'rel="stylesheet">')
+
+# Mavan "M" mark (approximation of the logo), white on the dark header.
+MARK = ('<svg class="mark" width="46" height="34" viewBox="0 0 46 34" aria-hidden="true"><path '
+        'd="M5 30V12C5 7 8.5 4 13 4C17 4 19 7 20.5 11L23 19L25.5 11C27 7 29 4 33 4C37.5 4 41 7 41 12V30" '
+        'fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
 
 
 def ring(score, size=150, stroke=14, font=34):
     cls = band(score)[1]
-    color = {'good': '#1f8a5b', 'warn': '#d38a0b', 'bad': '#d9541e', 'muted': '#c4c9d2'}[cls]
+    color = {'good': '#1e7a4c', 'warn': '#c98516', 'bad': '#b3261e', 'muted': '#c9c6bf'}[cls]
     r = (size - stroke) / 2
     circ = 2 * 3.14159265 * r
     frac = 0 if score is None else max(0, min(100, score)) / 100
     label_txt = '—' if score is None else str(score)
     return (f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" role="img" '
             f'aria-label="Score {label_txt} out of 100">'
-            f'<circle cx="{size/2}" cy="{size/2}" r="{r}" fill="none" stroke="#eef0f3" stroke-width="{stroke}"/>'
+            f'<circle cx="{size/2}" cy="{size/2}" r="{r}" fill="none" stroke="#ecebe7" stroke-width="{stroke}"/>'
             f'<circle cx="{size/2}" cy="{size/2}" r="{r}" fill="none" stroke="{color}" stroke-width="{stroke}" '
             f'stroke-linecap="round" stroke-dasharray="{circ*frac:.1f} {circ:.1f}" '
             f'transform="rotate(-90 {size/2} {size/2})"/>'
             f'<text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="{font}" '
-            f'font-weight="700" fill="#1d2433">{label_txt}</text></svg>')
+            f'font-weight="800" fill="#111111" font-family="Montserrat,sans-serif">{label_txt}</text></svg>')
 
 
 def esc(s):
@@ -457,10 +485,10 @@ def render(d, verdict, tier, months, recurring, maps, prepared_by, report_date):
                   'the site stands today, not a forecast of results.')
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc(d.get('client') or d['domain'])}: Site Health Report</title><style>{CSS}</style></head>
+<title>{esc(d.get('client') or d['domain'])}: Site Health Report</title>{FONTS}<style>{CSS}</style></head>
 <body><div class="page">
-<header><div><h1>Site Health Report</h1><div class="sub">{esc(d.get('client') or '')} · {esc(d['domain'])}</div></div>
-<div class="prep">Prepared by {esc(prepared_by)}<br>{esc(report_date)}</div></header>
+<header><div class="brand">{MARK}<div><h1>Site Health Report</h1><div class="sub">{esc(d.get('client') or '')} · {esc(d['domain'])}</div></div></div>
+<div class="prep"><span class="wm">MAVAN</span>Prepared by {esc(prepared_by)}<br>{esc(report_date)}</div></header>
 
 <h2>Site health score</h2>
 <div class="card summary"><div class="overall">{ring(overall)}<div class="lbl">Overall site health</div>
@@ -480,8 +508,41 @@ above, Needs work 50 to 74, Poor below 50.</p>
 {esc(LENS_NAME[verdict].lower())} first.</p>
 <div class="road"{road_style}>{cols}</div>{rec}
 
-<footer>{footer}</footer>
+<footer><span class="wm">MAVAN</span><span>{footer}</span></footer>
 </div></body></html>"""
+
+
+def gbp_from_diagnosis(d):
+    """Google Maps card from the diagnosis's GBP findings (prospect-diagnosis / client-diagnosis, read from the local search exports).
+    Returns None when the diagnosis has no assessed GBP data. A finding the exports could not score is left out.
+    Score = share of the scored checks with no issue."""
+    g = (d or {}).get('gbp') or {}
+    if not g.get('assessed'):
+        return None
+    f = {x['id']: x for x in g['findings'] if x.get('found') is not None}
+    pr = g['prospect']
+    items = []
+    if 'G1' in f:
+        rating = float(pr['rating'])
+        items.append((f['G1']['found'], f'Your Google rating ({rating:.1f}) is lower than the typical nearby competitor ({g["median_rating"]:.1f}).',
+                      f'Your Google rating ({rating:.1f}) is in line with nearby competitors ({g["median_rating"]:.1f}).'))
+    if 'G2' in f:
+        reviews = int(float(pr['reviews'] or 0))
+        items.append((f['G2']['found'], f'You have far fewer Google reviews ({reviews:,}) than the typical nearby competitor ({g["median_reviews"]:,.0f}).',
+                      f'Your number of Google reviews ({reviews:,}) is in line with nearby competitors ({g["median_reviews"]:,.0f}).'))
+    if 'G3' in f:
+        outside = sum(1 for v in pr['rankings'].values() if not (isinstance(v, (int, float)) or str(v).replace('.', '', 1).isdigit())
+                      or float(v) > 3)
+        items.append((f['G3']['found'], f'You are outside the top 3 local map results for {outside} of the {len(pr["rankings"])} priority searches we checked.',
+                      'You show in the top 3 local map results for most of the priority searches we checked.'))
+    if 'G4' in f:
+        items.append((f['G4']['found'], 'Competitors list Google Business Profile categories your profile is missing: '
+                      + ', '.join(n for n, _ in g['missing_categories']) + '.',
+                      'Your profile uses the categories your competitors use.'))
+    if not items:
+        return None
+    score = round(100 * sum(1 for hit, _, _ in items if not hit) / len(items))
+    return {'score': score, 'findings': [{'text': bad if hit else ok, 'issue': bool(hit)} for hit, bad, ok in items]}
 
 
 DIAG_TABS = {'Read Me', 'Verdict', 'Signals'}
@@ -563,8 +624,11 @@ def run_checks(a):
         except (OSError, ValueError, AttributeError) as e:
             add('FAIL', 'Google Business Profile data', f'{a.gbp}: {e}')
             maps = None
+    elif d is not None and gbp_from_diagnosis(d):
+        maps = gbp_from_diagnosis(d)
+        add('OK', 'Google Business Profile data', f'from the diagnosis: score {maps["score"]}, {len(maps["findings"])} findings')
     else:
-        add('WARN', 'Google Business Profile data', 'not provided: Google Maps shows as "Checked separately" and is '
+        add('WARN', 'Google Business Profile data', 'not in the diagnosis and no --gbp file: Google Maps shows as "Checked separately" and is '
             'left out of the overall score')
 
     if d is not None:

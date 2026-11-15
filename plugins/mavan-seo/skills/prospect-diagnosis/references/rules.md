@@ -12,15 +12,15 @@ Every threshold below is a constant at the top of `scripts/diagnose.py`. They ar
 ## Page groups (crawl)
 
 - **Live** = status 200. **Indexable** = the crawler's indexable status (every live page when the export has no indexability column).
-- **Archive and listing pages** = indexable pages whose path matches a generic CMS listing pattern: `/tag(s)/`, `/category/`, `/categories/`, `/author(s)/`, `/archive(s)/`, `/page/N`, `?page=N` (or `paged`, `p`), a date archive ending at the year or month (`/2024/` or `/2024/05/`), feeds. Add a site's own pattern in `config.json` `archive_patterns` only after checking examples in the crawl.
-- **Other indexable pages** = indexable pages that are not archives. Thin, repeated-title and no-keyword signals use only these, so archive pages are not counted twice.
+- **Hub pages** = indexable pages that only list other pages, whose path matches a generic CMS listing pattern: `/tag(s)/`, `/category/`, `/categories/`, `/author(s)/`, `/archive(s)/`, `/page/N`, `?page=N` (or `paged`, `p`), a date archive ending at the year or month (`/2024/` or `/2024/05/`), feeds. Add a site's own pattern in `config.json` `archive_patterns` only after checking examples in the crawl. A **service category page** (e.g. "Injectables" with its own content introducing a group of treatments) is not a hub page.
+- **Other indexable pages** = indexable pages that are not hub pages. Thin, repeated-title and no-keyword signals use only these, so hub pages are not counted twice.
 - When several crawl rows normalise to the same URL (trailing slash, case, `www`), the live 200 row wins.
 
 ## Signals
 
 | Lens | ID | Signal | Threshold | Points |
 | --- | --- | --- | --- | --- |
-| Architecture | A1 | Archive pages as a share of indexable pages | 25% / 50% | 1 / 2 |
+| Architecture | A1 | Hub pages as a share of indexable pages | 25% / 50% | 1 / 2 |
 | Architecture | A2 | Other indexable pages whose title or H1 is shared by 5+ pages | 20% | 1 |
 | Architecture | A3 | Other indexable pages with no tracked keywords (only when there are 200+ such pages) | 80% | 1 |
 | Architecture | A4 | Redirecting URLs (3xx) the crawler reached, as a share of crawled HTML URLs | 20% | 1 |
@@ -44,6 +44,19 @@ Notes:
 - **U4 is a trust risk**, not proof of spam. Spam waves often hit every site in a market; compare growth with the competitors before calling it out, and never recommend a disavow without a Search Console manual action.
 - **Authority overview figures** are typed by the person. They are used as given and labelled as typed from the tool.
 
+## Google Business Profile findings
+
+Read from Pleper Search Export files (`--gbp`, one per priority search) and the business name in `config.json` (`gbp_business`). Every other business in the exports is a competitor; a business missing from an export did not show for that search. Each finding is scored only when the exports have the data it needs; otherwise it is listed as Not scored with the reason, and the others still run. If nothing can be scored, the GBP section is not assessed. These findings have their own priority and add **no points** to any lens: they never change which lens leads or the playbook order (architecture, content and authority are scored exactly as before).
+
+| ID | Finding | Flagged when | Needs | Priority |
+| --- | --- | --- | --- | --- |
+| G1 | Low review rating | The prospect's rating is 0.3 stars or more below the median competitor | A rating for the prospect and 3+ competitors | High |
+| G2 | Low number of reviews | The prospect's reviews are under 50% of the median competitor | 3+ competitors | High |
+| G3 | Poor local ranking | The prospect is outside the top 3 (or not shown) on 2 or more of the 3 priority searches | Exactly 3 exports | High |
+| G4 | Missing GBP categories | A category used by at least 50% of competitors (never fewer than 2) that the prospect does not have (names listed) | Categories for the prospect and 3+ competitors | Medium |
+
+The export lists at most 5 categories per business (primary plus 4), so G4 can miss a category a business has beyond the fifth. Photo count, website and appointment URL are not scored (photo count is often empty). The tool's summary tables (attributes, category totals, rating and review stats) are not used. Competitors are every other business in the export, so a few from another specialty (a pediatric dentist, say) are included; the median and the 50% rule keep them from deciding the result. Competitors' positions are shown for comparison and are not part of G3.
+
 ## What this does not check
 
-Internal links between pages (no link export), the live site, Search Console, page speed or Core Web Vitals, and Google Business Profile.
+Internal links between pages (no link export), the live site, Search Console, page speed or Core Web Vitals, and anything about Google Business Profile beyond the export columns above (no live lookups, no review content, no citations).

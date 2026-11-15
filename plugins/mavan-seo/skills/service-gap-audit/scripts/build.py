@@ -36,6 +36,7 @@ THIN, LIGHT = 300, 600                      # content words
 HIGH, MEDIUM = 5000, 2000                   # volume tiers
 MODIFIER_SECTION_MIN = 1000                 # page-brief modifier sections
 PAGE_TYPES = ["Service", "Concern", "Gallery", "Blog", "Location", "Utility"]
+MAX_RELEVANT_KW = 20                        # most keywords shown in the Relevant Keywords cell (Keyword Map keeps them all)
 NEW_PREFIX = "NEW:"                         # node value for a brand/device missing from the taxonomy: "NEW: Name > Service"
 NO_KW_TEXT = "None in competitor keyword list (check GSC / keyword tool)"
 
@@ -614,12 +615,16 @@ def cmd_build(a):
             kmap.append([name, url, x.Keyword, int(x.Volume)])
         for x in k[k["Other Market"]].itertuples():
             excl.append([x.Keyword, int(x.Volume), name, f"Other market (Geo Modified: {x.Place})", ""])
-        kw_cell = ", ".join(own["Keyword"]) if len(own) else NO_KW_TEXT
+        named = []
+        for x in ("concern", "section", "gallery", "meta", "blog"):
+            named += [r["path"] for r in e[x] if r["path"] not in named and r["path"] != url]
+        pages_cell = "; ".join(dict.fromkeys(named))
+        kw_cell = ", ".join(own["Keyword"].head(MAX_RELEVANT_KW)) if len(own) else NO_KW_TEXT
         gsc_impr = None
         if gsc is not None:
             qs = set(own["kl"])
             gsc_impr = sum(v[0] for page in gsc.values() for q, v in page.items() if q in qs)
-        o["rec"] = dict(name=name, url=url, existing=existing, label=label, kw=kw_cell, vol=int(own["Volume"].sum()), gsc=gsc_impr)
+        o["rec"] = dict(name=name, url=url, existing=existing, label=label, pages=pages_cell, kw=kw_cell, vol=int(own["Volume"].sum()), gsc=gsc_impr)
         recs.append(o)
     recs.sort(key=lambda o: (LABELS.index(o["rec"]["label"]), -o["rec"]["vol"]))
 
@@ -767,7 +772,7 @@ def write_workbook(a, tax, cols, rows, live, out, recs, kmap, excl, has_gsc, has
         ("Limits", "The export has no body text: a service mentioned only in body copy shows as not found. Check the parent page before calling it missing."),
         ("Existing pages", "An existing page is recommended only when it is not indexable. A thin or light page that Google can index is not recommended (word counts are still in Page Inventory and Service Coverage). A service with no sign on the site is never recommended."),
         ("Thresholds", f"Thin < {THIN} content words, light < {LIGHT} (shown in Page Inventory only)."),
-        ("Search volume", "Relevant Keywords = keywords for that page, counted once on the most specific page. Keywords tied to another market (Geo Modified) are excluded unless they name a service-area city; see Excluded Keywords."),
+        ("Search volume", "Relevant Pages = existing pages the service is named on (concern pages, H2 sections, before & after galleries, meta descriptions, blog posts), as paths. Relevant Keywords = the top 20 keywords by volume for that page, counted once on the most specific page (the Keyword Map lists every keyword; volume and Search Console impressions use all of them). Keywords tied to another market (Geo Modified) are excluded unless they name a service-area city; see Excluded Keywords."),
         ("Not in taxonomy", "; ".join(f"{nm} ({svc}): {p}" for nm, svc, p in new_nodes) or "None"),
         ("Yellow columns", "Fill in: Next Steps on Recommendations (" + ", ".join(NEXT_STEPS) + "), Keep? on Excluded Keywords, Client Confirmed and Notes on Gap List."),
     ]
@@ -778,19 +783,19 @@ def write_workbook(a, tax, cols, rows, live, out, recs, kmap, excl, has_gsc, has
 
     # Recommendations
     h = ["Service Page Recommended", "Current URL", "Next Steps", "Existing Brand / Sub-Service Page(s)", "Why Recommended",
-         "Relevant Keywords", "Total National Search Volume"] + (["Client GSC Impressions"] if has_gsc else [])
-    rws = [[o["rec"]["name"], o["rec"]["url"], "", o["rec"]["existing"], o["rec"]["label"], o["rec"]["kw"], o["rec"]["vol"]]
+         "Relevant Pages", "Relevant Keywords", "Total National Search Volume"] + (["Client GSC Impressions"] if has_gsc else [])
+    rws = [[o["rec"]["name"], o["rec"]["url"], "", o["rec"]["existing"], o["rec"]["label"], o["rec"]["pages"], o["rec"]["kw"], o["rec"]["vol"]]
            + ([o["rec"]["gsc"]] if has_gsc else []) for o in recs]
-    ws = add_sheet(wb, "Recommendations", h, rws, [36, 46, 26, 46, 38, 90, 14] + ([14] if has_gsc else []),
+    ws = add_sheet(wb, "Recommendations", h, rws, [36, 46, 26, 46, 38, 60, 90, 14] + ([14] if has_gsc else []),
                    numeric=("Total National Search Volume", "Client GSC Impressions"), yellow=("Next Steps",), first_row=2, name="Recs")
     dv_next = DataValidation(type="list", formula1='"' + ",".join(NEXT_STEPS) + '"', allow_blank=True)
     ws.add_data_validation(dv_next)
     dv_next.add(f"C3:C{max(len(rws), 1) + 2}")
-    ws.merge_cells("A1:E1")
+    ws.merge_cells("A1:F1")
     ws["A1"] = "Page"
-    ws.merge_cells(f"F1:{get_column_letter(len(h))}1")
-    ws["F1"] = "Search Volume"
-    for c, fill in (("A1", "D9D9D9"), ("F1", "BDD7EE")):
+    ws.merge_cells(f"G1:{get_column_letter(len(h))}1")
+    ws["G1"] = "Search Volume"
+    for c, fill in (("A1", "D9D9D9"), ("G1", "BDD7EE")):
         ws[c].font, ws[c].fill = Font(name="Arial", bold=True), PatternFill("solid", fgColor=fill)
 
     add_sheet(wb, "Keyword Map", ["Service Page Recommended", "Current URL", "Keyword", "National Search Volume"], kmap,
