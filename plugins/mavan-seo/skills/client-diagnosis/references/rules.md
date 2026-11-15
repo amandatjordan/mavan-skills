@@ -62,7 +62,7 @@ Notes:
 
 ## Google Business Profile findings
 
-Read from GMB Everywhere Search Export files (`--gbp`, one per priority search) and the business name in `config.json` (`gbp_business`). Every other business in the exports is a competitor; a business missing from an export did not show for that search. Each finding is scored only when the exports have the data it needs; otherwise it is listed as Not scored with the reason, and the others still run. If nothing can be scored, the GBP section is not assessed. These findings have their own priority and add **no points** to any lens: they never change which lens leads or the playbook order (architecture, content and authority are scored exactly as before).
+Read from Pleper Search Export files (`--gbp`, one per priority search) and the business name in `config.json` (`gbp_business`). Every other business in the exports is a competitor; a business missing from an export did not show for that search. Each finding is scored only when the exports have the data it needs; otherwise it is listed as Not scored with the reason, and the others still run. If nothing can be scored, the GBP section is not assessed. These findings have their own priority and add **no points** to any lens: they never change which lens leads or the playbook order (architecture, content and authority are scored exactly as before).
 
 | ID | Finding | Flagged when | Needs | Priority |
 | --- | --- | --- | --- | --- |

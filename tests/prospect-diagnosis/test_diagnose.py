@@ -220,7 +220,7 @@ class Diagnosis(unittest.TestCase):
                     self.assertNotIn('total volume', str(v).lower())
 
     def gbp_exports(self, prospect_cats=('Medical spa',), n_comps=3, rating=4.0, who='Example Spa'):
-        """Three GMB Everywhere style Search Export files, one per priority search; the prospect is 6th, 2nd and absent."""
+        """Three Pleper style Search Export files, one per priority search; the prospect is 6th, 2nd and absent."""
         comps = [('Rival 0', 4.8, 210, ('Medical spa', 'Skin care clinic'), (1, 1, 2)),
                  ('Rival 1', 4.7, 150, ('Medical spa', 'Skin care clinic'), (2, 3, 1)),
                  ('Rival 2', 4.9, 300, ('Medical spa', 'Laser hair removal service'), (3, 4, 3))][:n_comps]
