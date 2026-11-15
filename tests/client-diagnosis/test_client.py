@@ -235,7 +235,7 @@ class EndToEnd(unittest.TestCase):
         write_csv(r / 'gap.csv', ['Keyword', 'Intents', 'Volume', 'Keyword Difficulty', 'CPC', 'Competition Density', P, C1, C2,
                                   f'{P} (pages)', f'{C1} (pages)', f'{C2} (pages)', 'Results'], gap)
         make_gsc(year_rows(zero_clicks_in_b=False)).to_csv(r / 'gsc.csv', index=False)
-        self.cfg = {'client': 'Example Spa', 'domain': P, 'brand_terms': ['balance'], 'manual_action': 'no',
+        self.cfg = {'client': 'Example Spa', 'domain': P, 'brand_terms': ['balance'], 'gbp_business': 'Example Spa', 'manual_action': 'no',
                     'service_terms': ['botox', 'filler'],
                     'overview': {P: {'authority_score': 10, 'referring_domains': 100, 'referring_domains_12m_ago': 90},
                                  C1: {'authority_score': 12, 'referring_domains': 120, 'referring_domains_12m_ago': 100},
@@ -282,27 +282,36 @@ class EndToEnd(unittest.TestCase):
         self.assertIn('Brand terms', p.stdout)
         self.assertIn('too short to split', p.stdout)
 
-    def gbp_sheet(self, n_comps=3):
-        tpl = Path(__file__).resolve().parents[2] / 'plugins/mavan-seo/skills/client-diagnosis/references/gbp-template.xlsx'
-        wb = load_workbook(tpl)
-        for i, kw in enumerate(['botox near me', 'filler', 'med spa'], 2):
-            wb['Keywords'].cell(i, 1, kw)
-        rows = [['Example Spa', 'Client', 4.0, 40, 'Medical spa', 6, 2, None],
-                ['R0', 'Competitor', 4.8, 210, 'Medical spa; Skin care clinic', 1, 1, 2],
-                ['R1', 'Competitor', 4.7, 150, 'Medical spa; Skin care clinic', 2, 3, 1],
-                ['R2', 'Competitor', 4.9, 300, 'Medical spa', 3, 4, 3]][:n_comps + 1]
-        for i, row in enumerate(rows, 2):
-            for j, v in enumerate(row, 1):
-                wb['GBP'].cell(i, j, v)
-        path = self.root / 'gbp.xlsx'
-        wb.save(path)
-        return path
+    def gbp_exports(self, prospect_cats=('Medical spa',), n_comps=3, rating=4.0, who='Example Spa'):
+        """Three Pleper style Search Export files, one per priority search; the client is 6th, 2nd and absent."""
+        comps = [('Rival 0', 4.8, 210, ('Medical spa', 'Skin care clinic'), (1, 1, 2)),
+                 ('Rival 1', 4.7, 150, ('Medical spa', 'Skin care clinic'), (2, 3, 1)),
+                 ('Rival 2', 4.9, 300, ('Medical spa', 'Laser hair removal service'), (3, 4, 3))][:n_comps]
+        specs = []
+        for i, kw in enumerate(['med spa near me', 'botox', 'lip filler']):
+            rows = []
+            for name, r, rev, cats, pos in comps:
+                rows.append((pos[i], name, r, rev, cats))
+            mine = (6, 2, None)[i]
+            if mine:
+                rows.append((mine, who, rating, 40, prospect_cats))
+            data = []
+            for pos, name, r, rev, cats in sorted(rows, key=lambda t: t[0]):
+                d = {'Position': pos, 'Business Name': name, 'Rating': r, 'Reviews': rev, 'Primary Category': cats[0]}
+                for j in range(2, 6):
+                    d[f'Category {j}'] = cats[j - 1] if len(cats) >= j else ''
+                d.update({'CID': 1, 'Website': '', 'Appointment URL': '', 'Photo Count': ''})
+                data.append(d)
+            path = self.root / f'search{i}.json'
+            path.write_text(json.dumps({'header': [list(data[0])], 'data': data}))
+            specs += ['--gbp', f'{kw}={path}']
+        return specs
 
     def test_gbp_findings_do_not_change_lenses_and_reach_the_report(self):
         out = self.root / 'diag.xlsx'
         self.run_script(DIAG, 'build', *self.args(), '--out', out)
         before = [r[:5] for r in list(load_workbook(out)['Verdict'].values)]
-        p = self.run_script(DIAG, 'build', *self.args(), '--gbp', self.gbp_sheet(), '--out', out)
+        p = self.run_script(DIAG, 'build', *self.args(), *self.gbp_exports(), '--out', out)
         self.assertIn('All checks passed', p.stdout)
         wb = load_workbook(out)
         rows = {r[0]: r for r in list(wb['Google Business Profile'].values)[1:5]}
@@ -316,7 +325,7 @@ class EndToEnd(unittest.TestCase):
         out = self.root / 'diag.xlsx'
         p = self.run_script(DIAG, 'build', *self.args(), '--out', out)
         self.assertIn('Google Business Profile: not assessed', p.stdout)
-        p = self.run_script(DIAG, 'build', *self.args(), '--gbp', self.gbp_sheet(2), '--out', out)
+        p = self.run_script(DIAG, 'build', *self.args(), *self.gbp_exports(n_comps=2), '--out', out)
         self.assertIn('need at least 3 competitors', p.stdout)
         self.assertIn('All checks passed', p.stdout)
 

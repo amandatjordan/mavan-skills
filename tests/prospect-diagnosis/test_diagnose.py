@@ -79,7 +79,7 @@ class Diagnosis(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.work = self.root / 'work'
         self.work.mkdir()
-        self.cfg = {'client': 'Example Spa', 'domain': P, 'competitors': [C1, C2], 'brand_terms': ['rival one'],
+        self.cfg = {'client': 'Example Spa', 'domain': P, 'competitors': [C1, C2], 'brand_terms': ['rival one'], 'gbp_business': 'Example Spa',
                     'overview': {P: {'authority_score': 10, 'referring_domains': 100, 'referring_domains_12m_ago': 90},
                                  C1: {'authority_score': 30, 'referring_domains': 900, 'referring_domains_12m_ago': 800},
                                  C2: {'authority_score': 28, 'referring_domains': 700, 'referring_domains_12m_ago': 650}}}
@@ -219,30 +219,35 @@ class Diagnosis(unittest.TestCase):
                 for v in row:
                     self.assertNotIn('total volume', str(v).lower())
 
-    def gbp_sheet(self, prospect_cats=('Medical spa',), n_comps=3, rating=4.0):
-        from openpyxl import load_workbook as lw
-        tpl = Path(__file__).resolve().parents[2] / 'plugins/mavan-seo/skills/prospect-diagnosis/references/gbp-template.xlsx'
-        wb = lw(tpl)
-        k = wb['Keywords']
-        for i, kw in enumerate(['med spa near me', 'botox', 'lip filler'], 2):
-            k.cell(i, 1, kw)
-        g = wb['GBP']
-        rows = [['Example Spa', 'Prospect', rating, 40, '; '.join(prospect_cats), 6, 2, None]]
-        for n, (r, rev, cats, pos) in enumerate([(4.8, 210, 'Medical spa; Skin care clinic', (1, 1, 2)),
-                                                  (4.7, 150, 'Medical spa; Skin care clinic', (2, 3, 1)),
-                                                  (4.9, 300, 'Medical spa; Laser hair removal service', (3, 4, 3))][:n_comps]):
-            rows.append([f'Rival {n}', 'Competitor', r, rev, cats, *pos])
-        for i, row in enumerate(rows, 2):
-            for j, v in enumerate(row, 1):
-                g.cell(i, j, v)
-        path = self.root / 'gbp.xlsx'
-        wb.save(path)
-        return path
+    def gbp_exports(self, prospect_cats=('Medical spa',), n_comps=3, rating=4.0, who='Example Spa'):
+        """Three Pleper style Search Export files, one per priority search; the prospect is 6th, 2nd and absent."""
+        comps = [('Rival 0', 4.8, 210, ('Medical spa', 'Skin care clinic'), (1, 1, 2)),
+                 ('Rival 1', 4.7, 150, ('Medical spa', 'Skin care clinic'), (2, 3, 1)),
+                 ('Rival 2', 4.9, 300, ('Medical spa', 'Laser hair removal service'), (3, 4, 3))][:n_comps]
+        specs = []
+        for i, kw in enumerate(['med spa near me', 'botox', 'lip filler']):
+            rows = []
+            for name, r, rev, cats, pos in comps:
+                rows.append((pos[i], name, r, rev, cats))
+            mine = (6, 2, None)[i]
+            if mine:
+                rows.append((mine, who, rating, 40, prospect_cats))
+            data = []
+            for pos, name, r, rev, cats in sorted(rows, key=lambda t: t[0]):
+                d = {'Position': pos, 'Business Name': name, 'Rating': r, 'Reviews': rev, 'Primary Category': cats[0]}
+                for j in range(2, 6):
+                    d[f'Category {j}'] = cats[j - 1] if len(cats) >= j else ''
+                d.update({'CID': 1, 'Website': '', 'Appointment URL': '', 'Photo Count': ''})
+                data.append(d)
+            path = self.root / f'search{i}.json'
+            path.write_text(json.dumps({'header': [list(data[0])], 'data': data}))
+            specs += ['--gbp', f'{kw}={path}']
+        return specs
 
     def test_gbp_findings_and_lens_unchanged(self):
         _, base = self.build(self.files())
         before = [r[:5] for r in list(load_workbook(base)['Verdict'].values)]
-        _, out = self.build(self.files() + ['--gbp', self.gbp_sheet()])
+        _, out = self.build(self.files() + self.gbp_exports())
         wb = load_workbook(out)
         self.assertIn('Google Business Profile', wb.sheetnames)
         rows = {r[0]: r for r in list(wb['Google Business Profile'].values)[1:5]}
@@ -253,7 +258,7 @@ class Diagnosis(unittest.TestCase):
         self.assertTrue(d['gbp']['assessed'])
 
     def test_gbp_ok_when_close_to_competitors(self):
-        _, out = self.build(self.files() + ['--gbp', self.gbp_sheet(('Medical spa', 'Skin care clinic', 'Laser hair removal service'), rating=4.7)])
+        _, out = self.build(self.files() + self.gbp_exports(('Medical spa', 'Skin care clinic', 'Laser hair removal service'), rating=4.7))
         rows = {r[0]: r for r in list(load_workbook(out)['Google Business Profile'].values)[1:5]}
         self.assertEqual(rows['G1'][3], 'No')
         self.assertEqual(rows['G4'][3], 'No')
@@ -262,10 +267,25 @@ class Diagnosis(unittest.TestCase):
         r, out = self.build(self.files())
         self.assertIn('Google Business Profile: not assessed', r.stdout)
         self.assertNotIn('Google Business Profile', load_workbook(out).sheetnames)
-        r, out = self.build(self.files() + ['--gbp', self.gbp_sheet(n_comps=2)])
+        r, out = self.build(self.files() + self.gbp_exports(n_comps=2))   # too few competitors: G1, G2, G4 not scored, G3 still is
+        self.assertIn('G1 Low review rating (High): not scored', r.stdout)
         self.assertIn('need at least 3 competitors', r.stdout)
-        p = run('preflight', *self.files(), '--gbp', self.gbp_sheet(n_comps=2), '--out', self.work)
-        self.assertIn('WARN | Google Business Profile (sheet)', p.stdout)
+        self.assertIn('G3 Poor local ranking on priority keywords (High): FOUND', r.stdout)
+        p = run('preflight', *self.files(), *self.gbp_exports(n_comps=2), '--out', self.work)
+        self.assertIn('WARN | Google Business Profile (local search exports)', p.stdout)
+
+    def test_gbp_scores_only_what_the_exports_have(self):
+        specs = self.gbp_exports()
+        r, out = self.build(self.files() + specs[:2])          # one export: G3 cannot be scored, the rest still are
+        rows = {x[0]: x for x in list(load_workbook(out)['Google Business Profile'].values)[1:5]}
+        self.assertEqual(rows['G3'][3], 'Not scored')
+        self.assertIn('needs exactly 3 exports', rows['G3'][4])
+        self.assertEqual([rows[i][3] for i in ('G1', 'G2', 'G4')], ['Yes'] * 3)
+        d = json.loads((self.root / 'diagnosis.json').read_text())
+        self.assertTrue(d['gbp']['assessed'])
+        cfg = dict(self.cfg, gbp_business='Not A Business')     # a name that is in no export blocks the findings
+        r, out = self.build(self.files(cfg) + specs)
+        self.assertIn('is not in any export', r.stdout)
 
 
 if __name__ == '__main__':

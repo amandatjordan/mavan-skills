@@ -10,6 +10,8 @@ Every number is a count, share, join or comparison done here. Search volume is t
 and is never added across keywords. Nothing is fetched from the live site.
 """
 import argparse
+import json
+import math
 import os
 import re
 import statistics
@@ -38,7 +40,8 @@ GBP_RATING_GAP = 0.3      # G1: prospect rating at least this many stars below t
 GBP_REVIEW_SHARE = 0.5    # G2: prospect review count under this share of the median competitor
 GBP_TOP = 3               # G3: local pack = positions 1-3
 GBP_POOR_KEYWORDS = 2     # G3: outside the top 3 on at least this many of the priority keywords
-GBP_CAT_MIN_COMPS = 2     # G4: a category counts as missing when this many competitors use it and the prospect does not
+GBP_CAT_MIN_COMPS = 2     # G4: never flag a category used by fewer competitors than this
+GBP_CAT_SHARE = 0.5       # G4: a category counts as missing when this share of competitors use it and the prospect does not
 GBP_KEYWORDS = 3          # priority keywords the SEO checks
 ROUND_ROWS = {1000, 5000, 10000, 20000, 25000, 30000, 50000, 100000}
 
@@ -153,7 +156,7 @@ def cmd_preflight(a):
 
     cfg = load_json(a.config, None)
     if cfg is not None and getattr(a, 'gbp', None):
-        cfg['gbp'] = read_gbp_sheet(a.gbp)
+        cfg['gbp'] = read_gbp_exports(a.gbp, cfg.get('gbp_business'))
     if cfg is None:
         add('FAIL', 'config.json', f'not found at {a.config}')
         cfg = {}
@@ -214,12 +217,16 @@ def cmd_preflight(a):
     else:
         add('WARN', 'Authority overview (config)',
             f'missing for {[d for d in need if d not in have]}: authority score and referring domain signals are not scored')
-    gp = gbp_problems(cfg)
-    if not gp:
-        add('OK', 'Google Business Profile (sheet)', f'prospect and {len(cfg["gbp"]["competitors"])} competitors')
+    gs = score_gbp(cfg)
+    if not gs['assessed']:
+        add('WARN', 'Google Business Profile (local search exports)',
+            '; '.join(gs['problems']) + ': the GBP findings are not assessed')
     else:
-        add('WARN', 'Google Business Profile (sheet)',
-            '; '.join(gp) + ': the GBP findings are not assessed')
+        done = [x['id'] for x in gs['findings'] if x['found'] is not None]
+        skipped = [f'{x["id"]} ({x["value"][len("Not scored: "):]})' for x in gs['findings'] if x['found'] is None]
+        add('WARN' if skipped else 'OK', 'Google Business Profile (local search exports)',
+            f'{len(cfg["gbp"]["keywords"])} search(es), {len(cfg["gbp"]["competitors"]) + 1} businesses; scored: {", ".join(done)}'
+            + (f'; not scored: {"; ".join(skipped)}' if skipped else ''))
     for path, item, spec in ((a.refdomains, 'Referring domains export (optional)', REFDOM_SPEC),
                              (a.backlink_gap, 'Backlink gap export (optional)', BLGAP_SPEC)):
         if path:
@@ -320,10 +327,11 @@ def load_scored_domains(path, spec, label, ov):
 
 
 # ------------------------------------------------------------------ Google Business Profile
-# Typed in config.json by the SEO. Findings are listed with a priority; they do not add points to any lens.
+# Read from local-search exports (one file per priority search; columns Position, Business Name, Rating, Reviews,
+# Primary Category, Category 2-5). Findings have their own priority and add no points to any lens. Anything an export does not
+# include (for example photo counts, which come back empty) is not scored.
 
-def _cat_key(x):
-    return re.sub(r'\s+', ' ', str(x).strip().lower())
+GBP_WHO = 'prospect'
 
 
 def _pos(v):
@@ -335,126 +343,159 @@ def _pos(v):
         return None
 
 
-def read_gbp_sheet(path):
-    """Reads the GBP template (tabs 'Keywords' and 'GBP') into the structure score_gbp uses."""
-    if not path or not os.path.exists(path):
-        return None
-    x = pd.read_excel(path, sheet_name=None, dtype=str, keep_default_na=False)
-    kw = []
-    if 'Keywords' in x:
-        kw = [k.strip() for k in x['Keywords'].iloc[:, 0].tolist() if k.strip()]
-    df = x.get('GBP')
-    if df is None:
-        return {'prospect': {}, 'competitors': [], 'sheet_error': 'no GBP tab'}
+def _gbp_table(path):
+    if path.lower().endswith('.json'):
+        with open(path, encoding='utf-8') as fh:
+            raw = json.load(fh)
+        df = pd.DataFrame((raw.get('data') if isinstance(raw, dict) else raw) or [])
+    else:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
     df.columns = [str(c).strip() for c in df.columns]
-    pos_cols = [c for c in df.columns if c.lower().startswith('position')]
+    return df
 
-    def cell(row, name):
-        return str(row.get(name, '')).strip()
 
-    def split(v):
-        return [t.strip() for t in re.split(r'[;\n]', v) if t.strip()]
+def _num_or_none(v):
+    try:
+        f = float(str(v).replace(',', ''))
+        return None if f != f else f
+    except (TypeError, ValueError):
+        return None
 
-    out = {'prospect': {}, 'competitors': []}
-    for _, row in df.iterrows():
-        if not cell(row, 'Business'):
-            continue
-        e = {'name': cell(row, 'Business'), 'rating': cell(row, 'Rating'), 'reviews': cell(row, 'Number of reviews').replace(',', ''),
-             'categories': split(cell(row, 'Categories')),
-             'rankings': {kw[i] if i < len(kw) else f'keyword {i + 1}': cell(row, c) for i, c in enumerate(pos_cols)},
-             'photos': cell(row, 'Photos (optional)'), 'linked_page': cell(row, 'Linked page (optional)'),
-             'attributes': split(cell(row, 'Attributes (optional)')), 'services': split(cell(row, 'Services listed (optional)'))}
-        role = cell(row, 'Role').lower()
-        if role == 'prospect':
-            out['prospect'] = e
-        elif role == 'competitor':
-            out['competitors'].append(e)
+
+def read_gbp_exports(specs, business):
+    """specs: ['search words=path', ...] (a bare path is labelled 'search 1', 'search 2', ...), one export per
+    priority search. business: the exact name of the business under diagnosis, as written in the exports.
+    Returns the structure score_gbp uses; 'errors' lists what blocks the GBP findings."""
+    out = {'keywords': [], 'prospect': {}, 'competitors': [], 'errors': [], 'business': (business or '').strip()}
+    if not specs:
+        out['errors'].append('no local search export provided')
+        return out
+    ents, order = {}, []
+    for i, spec in enumerate(specs, 1):
+        if '=' in spec and not os.path.exists(spec):
+            kw, path = [s.strip() for s in spec.split('=', 1)]
         else:
-            out.setdefault('role_errors', []).append(e['name'])
-    if len(kw) != GBP_KEYWORDS:
-        out['sheet_error'] = f'the Keywords tab needs exactly {GBP_KEYWORDS} priority keywords, found {len(kw)}'
+            kw, path = f'search {i}', spec
+        out['keywords'].append(kw)
+        if not os.path.exists(path):
+            out['errors'].append(f'{path}: file not found')
+            continue
+        try:
+            df = _gbp_table(path)
+        except Exception as e:  # unreadable or malformed file
+            out['errors'].append(f'{path}: could not be read ({e})')
+            continue
+        missing = [c for c in ('Business Name', 'Position') if c not in df.columns]
+        if missing:
+            out['errors'].append(f'{path}: columns not found: {", ".join(missing)}')
+            continue
+        for _, row in df.iterrows():
+            name = str(row.get('Business Name', '')).strip()
+            if not name:
+                continue
+            e = ents.get(name.lower())
+            if e is None:
+                e = ents[name.lower()] = {'name': name, 'rating': None, 'reviews': None, 'categories': [], 'rankings': {}}
+                order.append(name.lower())
+            if e['rating'] is None:
+                e['rating'] = _num_or_none(row.get('Rating'))
+            if e['reviews'] is None:
+                e['reviews'] = _num_or_none(row.get('Reviews'))
+            for c in ['Primary Category'] + [c for c in df.columns if re.fullmatch(r'Category \d+', c)]:
+                cat = str(row.get(c, '')).strip()
+                if cat and cat not in e['categories']:
+                    e['categories'].append(cat)
+            e['rankings'][kw] = _pos(row.get('Position'))
+    for e in ents.values():
+        for kw in out['keywords']:
+            e['rankings'].setdefault(kw, None)    # not in that export = did not show
+    key = out['business'].lower()
+    if not key:
+        out['errors'].append(f'no gbp_business in config.json: the exact name of the {GBP_WHO}\'s business as written in the export')
+    elif key not in ents:
+        out['errors'].append(f'"{out["business"]}" is not in any export: check the spelling against the export')
+    else:
+        out['prospect'] = ents[key]
+        out['competitors'] = [ents[k] for k in order if k != key]
     return out
 
 
 def gbp_problems(cfg):
-    """What is missing or wrong in config.json 'gbp'. Empty list = ready to assess."""
+    """What blocks every GBP finding. Empty list = findings can be scored (each one still needs its own data)."""
     g = cfg.get('gbp')
     if not g:
-        return ['no GBP sheet provided']
-    out = []
-    if g.get('sheet_error'):
-        out.append(g['sheet_error'])
-    for n in g.get('role_errors') or []:
-        out.append(f'"{n}": Role must be Prospect or Competitor')
-    if not g.get('prospect'):
-        out.append('no row with Role = Prospect')
-        return out
-    ents = [('the prospect', g.get('prospect') or {})] + \
-           [(f'competitor "{c.get("name", i + 1)}"', c) for i, c in enumerate(g.get('competitors') or [])]
-    if len(g.get('competitors') or []) < GBP_MIN_COMPS:
-        out.append(f'need at least {GBP_MIN_COMPS} competitors, found {len(g.get("competitors") or [])}')
-    kws = None
-    for label, e in ents:
-        try:
-            r = float(e.get('rating'))
-            if not 1 <= r <= 5:
-                raise ValueError
-        except (TypeError, ValueError):
-            out.append(f'{label}: rating missing or not between 1 and 5')
-        try:
-            if float(e.get('reviews')) < 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            out.append(f'{label}: review count missing')
-        if not [x for x in e.get('categories') or [] if str(x).strip()]:
-            out.append(f'{label}: no categories')
-        rk = e.get('rankings') or {}
-        if len(rk) != GBP_KEYWORDS:
-            out.append(f'{label}: rankings needed for exactly {GBP_KEYWORDS} priority keywords, found {len(rk)}')
-        elif kws is None:
-            kws = {_cat_key(k) for k in rk}
-        elif {_cat_key(k) for k in rk} != kws:
-            out.append(f'{label}: rankings must use the same {GBP_KEYWORDS} keywords as the prospect')
+        return ['no local search export provided']
+    out = list(g.get('errors') or [])
+    if not out and not g.get('prospect'):
+        out.append(f'the {GBP_WHO} was not found in the exports')
     return out
 
 
 def score_gbp(cfg):
-    """Returns None when the data is missing or invalid (reason in 'problems'), else the findings."""
+    """Scores each finding the exports have the data for; the rest are 'not scored' with the reason.
+    Returns assessed False (reasons in 'problems') when nothing could be scored."""
     problems = gbp_problems(cfg)
     if problems:
         return {'assessed': False, 'problems': problems}
     g = cfg['gbp']
-    pr, comps = g['prospect'], g['competitors']
+    pr, comps, kws = g['prospect'], g['competitors'], g['keywords']
     f = []
 
-    def finding(fid, name, priority, hit, value, detail):
+    def finding(fid, name, hit, value, detail, priority='High'):
         f.append({'id': fid, 'name': name, 'priority': priority, 'found': hit, 'value': value, 'detail': detail})
 
-    med_rating = float(statistics.median([float(c['rating']) for c in comps]))
-    gap = round(med_rating - float(pr['rating']), 2)
-    finding('G1', 'Low review rating', 'High', gap >= GBP_RATING_GAP - 1e-9,
-            f'prospect {float(pr["rating"]):.1f} vs median competitor {med_rating:.1f}',
-            f'Flagged when the prospect is {GBP_RATING_GAP} stars or more below the median competitor.')
-    med_rev = float(statistics.median([float(c['reviews']) for c in comps]))
-    finding('G2', 'Low number of reviews', 'High', float(pr['reviews']) < GBP_REVIEW_SHARE * med_rev,
-            f'prospect {int(float(pr["reviews"])):,} vs median competitor {med_rev:,.0f}',
-            f'Flagged when the prospect has under {pct(GBP_REVIEW_SHARE)} of the median competitor\'s reviews.')
-    kws = {_cat_key(k): k for k in pr['rankings']}
-    outside = [kws[_cat_key(k)] for k, v in pr['rankings'].items() if _pos(v) is None or _pos(v) > GBP_TOP]
-    finding('G3', 'Poor local ranking on priority keywords', 'High', len(outside) >= GBP_POOR_KEYWORDS,
-            f'outside the top {GBP_TOP} on {len(outside)} of {GBP_KEYWORDS}: ' + (', '.join(outside) or 'none'),
-            f'Flagged when the prospect is outside the top {GBP_TOP} (or not shown) on {GBP_POOR_KEYWORDS} or more of the '
-            f'{GBP_KEYWORDS} priority keywords.')
-    have = {_cat_key(x) for x in pr['categories']}
-    use = {}
-    for c in comps:
-        for x in {_cat_key(x): x for x in c['categories'] if str(x).strip()}.items():
-            use.setdefault(x[0], [x[1], 0])[1] += 1
-    missing = sorted([(v[0], v[1]) for k, v in use.items() if k not in have and v[1] >= GBP_CAT_MIN_COMPS],
-                     key=lambda t: (-t[1], t[0]))
-    finding('G4', 'Missing GBP categories competitors use', 'Medium', bool(missing),
-            ', '.join(f'{n} ({k} of {len(comps)})' for n, k in missing) or 'none',
-            f'A category counts as missing when {GBP_CAT_MIN_COMPS}+ competitors use it and the prospect does not.')
+    def not_scored(fid, name, why, detail, priority='High'):
+        finding(fid, name, None, 'Not scored: ' + why, detail, priority)
+
+    rates = [c['rating'] for c in comps if c['rating'] is not None]
+    revs = [c['reviews'] if c['reviews'] is not None else 0.0 for c in comps]
+    med_rating = float(statistics.median(rates)) if len(rates) >= GBP_MIN_COMPS else None
+    med_rev = float(statistics.median(revs)) if len(revs) >= GBP_MIN_COMPS else None
+
+    d1 = f'Flagged when the {GBP_WHO} is {GBP_RATING_GAP} stars or more below the median competitor.'
+    if pr['rating'] is None:
+        not_scored('G1', 'Low review rating', f'the {GBP_WHO} has no rating in the exports', d1)
+    elif med_rating is None:
+        not_scored('G1', 'Low review rating', f'need at least {GBP_MIN_COMPS} competitors with a rating, found {len(rates)}', d1)
+    else:
+        finding('G1', 'Low review rating', round(med_rating - pr['rating'], 2) >= GBP_RATING_GAP - 1e-9,
+                f'{GBP_WHO} {pr["rating"]:.1f} vs median competitor {med_rating:.1f}', d1)
+    d2 = f'Flagged when the {GBP_WHO} has under {pct(GBP_REVIEW_SHARE)} of the median competitor\'s reviews.'
+    if med_rev is None:
+        not_scored('G2', 'Low number of reviews', f'need at least {GBP_MIN_COMPS} competitors, found {len(revs)}', d2)
+    else:
+        n_rev = pr['reviews'] if pr['reviews'] is not None else 0.0
+        finding('G2', 'Low number of reviews', n_rev < GBP_REVIEW_SHARE * med_rev,
+                f'{GBP_WHO} {int(n_rev):,} vs median competitor {med_rev:,.0f}', d2)
+    d3 = (f'Flagged when the {GBP_WHO} is outside the top {GBP_TOP} (or not shown) on {GBP_POOR_KEYWORDS} or more of the '
+          f'{GBP_KEYWORDS} priority searches.')
+    if len(kws) != GBP_KEYWORDS:
+        not_scored('G3', 'Poor local ranking on priority keywords', f'needs exactly {GBP_KEYWORDS} exports (one per priority search), found {len(kws)}', d3)
+    else:
+        outside = [k for k, v in pr['rankings'].items() if _pos(v) is None or _pos(v) > GBP_TOP]
+        finding('G3', 'Poor local ranking on priority keywords', len(outside) >= GBP_POOR_KEYWORDS,
+                f'outside the top {GBP_TOP} on {len(outside)} of {GBP_KEYWORDS}: ' + (', '.join(outside) or 'none'), d3)
+    d4 = (f'A category counts as missing when at least {GBP_CAT_SHARE:.0%} of the competitors (and never fewer than {GBP_CAT_MIN_COMPS}) '
+          f'use it and the {GBP_WHO} does not. The export lists at most 5 categories per business.')
+    cat_comps = [c for c in comps if c['categories']]
+    missing = []
+    if not pr['categories']:
+        not_scored('G4', 'Missing GBP categories competitors use', f'the {GBP_WHO} has no categories in the exports', d4, 'Medium')
+    elif len(cat_comps) < GBP_MIN_COMPS:
+        not_scored('G4', 'Missing GBP categories competitors use',
+                   f'need at least {GBP_MIN_COMPS} competitors with categories, found {len(cat_comps)}', d4, 'Medium')
+    else:
+        need = max(GBP_CAT_MIN_COMPS, math.ceil(GBP_CAT_SHARE * len(cat_comps)))
+        have = {x.lower() for x in pr['categories']}
+        use = {}
+        for c in cat_comps:
+            for x in c['categories']:
+                use.setdefault(x.lower(), [x, 0])[1] += 1
+        missing = sorted([(v[0], v[1]) for k, v in use.items() if k not in have and v[1] >= need], key=lambda t: (-t[1], t[0]))
+        finding('G4', 'Missing GBP categories competitors use', bool(missing),
+                ', '.join(f'{n} ({k} of {len(cat_comps)})' for n, k in missing) or 'none', d4, 'Medium')
+    if not any(x['found'] is not None for x in f):
+        return {'assessed': False, 'problems': [x['value'] for x in f]}
     return {'assessed': True, 'findings': f, 'prospect': pr, 'competitors': comps,
             'median_rating': med_rating, 'median_reviews': med_rev, 'missing_categories': missing}
 
@@ -773,7 +814,7 @@ def cmd_build(a):
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     cfg = load_json(a.config, {})
     if a.gbp:
-        cfg['gbp'] = read_gbp_sheet(a.gbp)
+        cfg['gbp'] = read_gbp_exports(a.gbp, cfg.get('gbp_business'))
     prospect = bare_domain(cfg.get('domain', ''))
     ov = parse_map(a.map)
     comps = [bare_domain(x) for x in cfg.get('competitors', [])]
@@ -865,7 +906,7 @@ def cmd_build(a):
          (', authority overview figures typed in config.json' if auth['overview'] else '') + '.'],
         ['Keyword numbers', 'Search volumes are the keyword tool\'s estimates for each search, not visits, clicks or impressions, '
          'and are never added together. Rankings are a snapshot of tracked keywords (mostly the top 100).'],
-        ['Google Business Profile', 'Typed in by the SEO on the GBP template, from the profiles themselves. Findings are on the Google Business Profile '
+        ['Google Business Profile', 'Read from the local search exports (rating, reviews, primary category and local position for each priority search); anything an export does not include is not scored. Findings are on the Google Business Profile '
          'tab and carry their own priority (High / Medium). They do not add points to any lens and do not change which lens leads.'
          if gbp['assessed'] else 'Not assessed: ' + '; '.join(gbp['problems']) + '.'],
         ['Not checked', 'Nothing was fetched from the live site. Internal links between pages are not analysed (no link export '
@@ -888,29 +929,19 @@ def cmd_build(a):
           {'What it measures': 55, 'Value': 40, 'Threshold': 35, 'Note': 40})
 
     if gbp['assessed']:
-        fr = [[x['id'], x['name'], x['priority'], 'Yes' if x['found'] else 'No', x['value'], x['detail']] for x in gbp['findings']]
+        fr = [[x['id'], x['name'], x['priority'], 'Not scored' if x['found'] is None else 'Yes' if x['found'] else 'No',
+               x['value'], x['detail']] for x in gbp['findings']]
         ws = sheet(wb, 'Google Business Profile', ['ID', 'Finding', 'Priority', 'Found', 'Value', 'Rule'], fr,
                    {'Finding': 42, 'Value': 60, 'Rule': 70})
         ws.append([])
-        ws.append(['Business', 'Role', 'Rating (typed)', 'Reviews (typed)', 'Categories (typed)'] + [
+        ws.append(['Business', 'Role', 'Rating (export)', 'Reviews (export)', 'Primary category (export)'] + [
             f'Local position: {k}' for k in gbp['prospect']['rankings']])
         for cell in ws[ws.max_row]:
             cell.font, cell.fill, cell.alignment = HEAD, FILL, WRAP
         for role, e in [('Prospect', gbp['prospect'])] + [('Competitor', c) for c in gbp['competitors']]:
-            ws.append([e.get('name', cfg.get('client', '')), role, float(e['rating']), int(float(e['reviews'])),
-                       ', '.join(e['categories'])] + [(_pos(v) if _pos(v) is not None else 'Not shown')
-                                                       for v in e['rankings'].values()])
-        opt = [k for k in ('photos', 'linked_page', 'attributes', 'services') if any(
-            e.get(k) not in (None, '', []) for e in [gbp['prospect']] + gbp['competitors'])]
-        if opt:
-            ws.append([])
-            ws.append(['Optional details (typed; not scored)', 'Role'] + [k.replace('_', ' ').capitalize() for k in opt])
-            for cell in ws[ws.max_row]:
-                cell.font, cell.fill, cell.alignment = HEAD, FILL, WRAP
-            for role, e in [('Prospect', gbp['prospect'])] + [('Competitor', c) for c in gbp['competitors']]:
-                ws.append([e.get('name', cfg.get('client', '')), role] + [
-                    ', '.join(map(str, e.get(k))) if isinstance(e.get(k), list) else ('' if e.get(k) is None else e.get(k))
-                    for k in opt])
+            ws.append([e.get('name', ''), role, e['rating'] if e['rating'] is not None else '',
+                       int(e['reviews']) if e['reviews'] is not None else '', ', '.join(e['categories'])] +
+                      [(_pos(v) if _pos(v) is not None else 'Not shown') for v in e['rankings'].values()])
         ws.column_dimensions['E'].width = 45
 
     rep = arch['repeated']
@@ -1027,7 +1058,7 @@ def cmd_build(a):
     if gbp['assessed']:
         print('  Google Business Profile (separate from the lead issue):')
         for x in gbp['findings']:
-            print(f'    {x["id"]} {x["name"]} ({x["priority"]}): ' + ('FOUND' if x['found'] else 'not found') + f' - {x["value"]}')
+            print(f'    {x["id"]} {x["name"]} ({x["priority"]}): ' + ('not scored' if x['found'] is None else 'FOUND' if x['found'] else 'not found') + f' - {x["value"]}')
     else:
         print('  Google Business Profile: not assessed (' + '; '.join(gbp['problems']) + ')')
     if not all(checks):
@@ -1046,7 +1077,7 @@ def main():
         p.add_argument('--gap')
         p.add_argument('--refdomains')
         p.add_argument('--backlink-gap')
-        p.add_argument('--gbp', help='the filled Google Business Profile template (xlsx)')
+        p.add_argument('--gbp', action='append', help='a local search export, one per priority search: "search words=path.json" (repeat the option)')
         p.add_argument('--tool', choices=['semrush', 'ahrefs'])
         p.add_argument('--map', action='append', help='field override, e.g. crawl.words="Word Count" or gapcol.x.com="Col"')
         if name == 'preflight':
