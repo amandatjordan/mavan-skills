@@ -196,7 +196,7 @@ def read_gap(path, dom):
     fn = os.path.basename(path)
     h, rs = table(T[REC], 'Service Page Recommended')
     n, u, x, e = col(h, 'service page recommended'), col(h, 'current url'), col(h, 'next steps'), col(h, 'existing')
-    kw = col(h, 'relevant keywords')
+    kw, rel = col(h, 'relevant keywords'), col(h, 'relevant pages')
     out, bad = {'new_pages': []}, []
     for r in rs:
         if not cell(r, n).strip():
@@ -206,7 +206,7 @@ def read_gap(path, dom):
             bad.append({'file': fn, 'tab': REC, 'page': cell(r, n), 'problem': 'Next Steps is empty'})
         elif step.lower() == 'create new page':
             out['new_pages'].append({'name': cell(r, n), 'url': key(cell(r, u), dom) if cell(r, u).startswith(('http', '/')) else '',
-                                     'existing': cell(r, e), 'keywords': cell(r, kw)})
+                                     'existing': cell(r, e), 'relevant': cell(r, rel), 'keywords': cell(r, kw)})
     return out, bad, [{'file': fn, 'tab': REC, 'rows': len(rs)}]
 
 

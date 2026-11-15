@@ -126,11 +126,11 @@ def make_inputs(d, *, disagree='', gap_next='Create new page', drop=(), extra_pr
     ws.cell(1, 1, 'Page')
     ws.cell(1, 6, 'Search Volume')
     for i, h in enumerate(['Service Page Recommended', 'Current URL', 'Next Steps', 'Existing Brand / Sub-Service Page(s)', 'Why Recommended',
-                           'Relevant Keywords', 'Total National Search Volume'], 1):
+                           'Relevant Pages', 'Relevant Keywords', 'Total National Search Volume'], 1):
         ws.cell(2, i, h)
-    for i, v in enumerate(['Lip Filler', '', gap_next, '', 'gap', 'lip filler', 900], 1):
+    for i, v in enumerate(['Lip Filler', '', gap_next, '/fillers/', 'gap', '/botox-tips/; /blog/new-post/; /about/', 'lip filler', 900], 1):
         ws.cell(3, i, v)
-    for i, v in enumerate(['Chemical Peel', '', 'Ignore', '', 'gap', 'peel', 100], 1):
+    for i, v in enumerate(['Chemical Peel', '', 'Ignore', '', 'gap', '', 'peel', 100], 1):
         ws.cell(4, i, v)
     wb.save(d / 'gap.xlsx')
     p['gap'] = d / 'gap.xlsx'

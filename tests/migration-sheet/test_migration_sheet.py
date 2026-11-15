@@ -82,7 +82,7 @@ class Pass1(unittest.TestCase):
         r = {x[0]: x for x in self.tabs['Pages to redirect']}
         self.assertEqual(r['/thin-page/'][1], '/services/')
         self.assertIn('IA move dropped', [x['kind'] for x in self.sheet['discrepancies']])
-        self.assertNotIn('/services/thin/', [x[0] for x in self.tabs['Pages to keep']])
+        self.assertNotIn('/services/thin/', [x[0] for x in self.tabs['All pages']])
 
     def test_existing_redirect_is_repointed_and_listed(self):
         r = {x[0]: x for x in self.tabs['Pages to redirect']}
@@ -93,18 +93,24 @@ class Pass1(unittest.TestCase):
         olds = [x[0] for x in self.tabs['Pages to redirect']]
         self.assertEqual(sum('junk' in o for o in olds), 1)
         self.assertEqual(self.sheet['counts']['covered'], 2)
-        self.assertNotIn('/junk/a/', [x[0] for x in self.tabs['Pages to keep']])
+        self.assertNotIn('/junk/a/', [x[0] for x in self.tabs['All pages']])
 
-    def test_merge_carries_content_and_links(self):
+    def test_merge_row_is_content_only(self):
         m = self.tabs['Pages to merge'][0]
-        self.assertEqual(m[:3], ['/botox-tips/', '/services/botox/', 'Two tips about aftercare'])
-        self.assertEqual(m[4], '/fillers/')  # its link to /botox/ is a self link after the merge and is dropped
+        self.assertEqual(m, ['/botox-tips/', '/services/botox/', 'Two tips about aftercare'])  # its redirect is on the redirect tab and the dev list
 
-    def test_keep_page_uses_update_title_and_final_links(self):
-        k = {x[0]: x for x in self.tabs['Pages to keep']}
-        self.assertEqual(k['/fillers/'][3], 'Dermal Fillers Denver')
-        self.assertEqual(k['/about/'][6], '/services/botox/')  # /about/ linked /botox-tips/, which merged into the moved page
-        self.assertEqual(k['/services/botox/'][1], '/botox/')
+    def test_all_pages_lists_stays_moved_and_new(self):
+        k = {x[0]: x for x in self.tabs['All pages']}
+        self.assertEqual(k['/fillers/'][3:6], ['Service', 'Dermal Fillers Denver', 'Dermal Fillers'])  # Update pages' title and H1
+        self.assertEqual(k['/services/botox/'][1:3], ['/botox/', 'Moved'])
+        self.assertEqual(k['/about/'][1:3], ['', 'Stays'])
+        self.assertEqual(k['SEO fill in'][2], 'New page')
+        self.assertNotIn('/botox-tips/', k)  # merged pages are not on the new site
+        self.assertNotIn('/junk/a/', k)
+        self.assertTrue(all(len(x) == 7 for x in self.tabs['All pages']))  # no internal link or backlink columns
+
+    def test_pages_to_redirect_has_no_backlinks_column(self):
+        self.assertTrue(all(len(x) == 5 for x in self.tabs['Pages to redirect']))  # old URL, target, code, Gone reason, decided by
 
     def test_undecided_urls_are_left_for_the_seo(self):
         r = {x[0]: x for x in self.tabs['Pages to redirect']}
@@ -117,8 +123,11 @@ class Pass1(unittest.TestCase):
         everything = json.dumps(self.tabs)
         self.assertNotIn('logo.png', everything)
 
-    def test_new_page_from_service_gap(self):
-        self.assertEqual([x[0] for x in self.tabs['New pages']], ['Lip Filler'])
+    def test_new_page_suggests_up_to_three_links_at_final_urls(self):
+        n = self.tabs['New pages']
+        self.assertEqual([x[0] for x in n], ['Lip Filler'])
+        self.assertEqual([n[0][3], n[0][5], n[0][7]], ['/fillers/', '/services/botox/', '/blog/new-post/'])  # pages that link TO it; /botox-tips/ merged; capped at 3
+        self.assertEqual([n[0][4], n[0][6], n[0][8]], ['SEO fill in'] * 3)
 
     def test_pass1_has_no_dev_tab_and_open_items_are_listed(self):
         wb = openpyxl.Workbook()
@@ -146,7 +155,7 @@ class Pass2(unittest.TestCase):
             fill(wc, 'Pages to redirect', {'/gone-page/': {2: '/services/'}, '/gsc-only/': {2: 'Gone', 3: 410, 4: 'Never existed on the new site'}})
             fill(wc, 'Media with backlinks', {'/wp-content/uploads/brochure.pdf': {3: 'Redirect', 4: '/downloads/brochure.pdf'},
                                               '/wp-content/uploads/menu.pdf': {3: 'Keep at the same URL'}})
-            fill(wc, 'New pages', {'Lip Filler': {2: '/services/lip-filler/', 5: '/services/, /fillers/'}})
+            fill(wc, 'New pages', {'Lip Filler': {2: '/services/lip-filler/', 5: 'lip filler', 7: 'botox', 9: 'our blog'}})
             wb = openpyxl.load_workbook(wc)
             ws = wb['Final menu and nav']
             for i, row in enumerate([('Services', '/services/', 'Botox', '/services/botox/', 1), ('Services', '/services/', 'Lip Filler', '/services/lip-filler/', 2),
@@ -154,10 +163,23 @@ class Pass2(unittest.TestCase):
                 for c, v in enumerate(row, 1):
                     ws.cell(i, c, v)
             wb.save(wc)
+            wb = openpyxl.load_workbook(wc)
+            ws = wb['All pages']
+            for r in range(3, ws.max_row + 1):  # the SEO reviews and updates the title and H1 on All pages
+                if ws.cell(r, 1).value == '/fillers/':
+                    ws.cell(r, 5, 'Dermal Fillers in Denver | Example')
+                if str(ws.cell(r, 7).value).startswith('Service Gap: Lip Filler'):
+                    ws.cell(r, 5, 'Lip Filler Denver')
+                    ws.cell(r, 6, 'Lip Filler')
+            wb.save(wc)
             run('build.py', '--domain', DOM, '--work', w, '--working-copy', wc)
             run('make_xlsx.py', '--work', w, '--out', Path(d) / 'final.xlsx')
-            names = openpyxl.load_workbook(Path(d) / 'final.xlsx').sheetnames
-            self.assertIn('Redirects - Handoff to Dev', names)
+            final = openpyxl.load_workbook(Path(d) / 'final.xlsx')
+            rows = {x[0]: x for x in final['All pages'].iter_rows(min_row=3, values_only=True)}
+            self.assertEqual(rows['/fillers/'][4], 'Dermal Fillers in Denver | Example')  # the SEO's edit is kept in pass 2
+            self.assertEqual(rows['/services/lip-filler/'][4:6], ('Lip Filler Denver', 'Lip Filler'))
+            names = final.sheetnames
+            self.assertNotIn('Redirects - Handoff to Dev', names)  # the developer list is the separate CSV only
             rows = list(csv.reader(open(Path(d) / 'final-redirects.csv')))
             self.assertEqual(rows[0], ['Source URL', 'Target URL', 'Regex (0 = no, 1 = yes)', 'HTTP Code'])
             body = {r[0].replace(f'https://{DOM}', ''): r[1:] for r in rows[1:]}
@@ -176,7 +198,7 @@ class Pass2(unittest.TestCase):
         fill(wc, 'Pages to redirect', fills.get('redirect', {'/gone-page/': {2: '/services/'}, '/gsc-only/': {2: 'Gone', 4: 'reason'}}))
         fill(wc, 'Media with backlinks', fills.get('media', {'/wp-content/uploads/brochure.pdf': {3: 'Keep at the same URL'},
                                                              '/wp-content/uploads/menu.pdf': {3: 'Keep at the same URL'}}))
-        fill(wc, 'New pages', {'Lip Filler': {2: '/services/lip-filler/', 5: 'x'}})
+        fill(wc, 'New pages', fills.get('new', {'Lip Filler': {2: '/services/lip-filler/', 5: 'a', 7: 'b', 9: 'c'}}))
         wb = openpyxl.load_workbook(wc)
         for i, row in enumerate(menu, 3):
             for c, v in enumerate(row, 1):
@@ -190,6 +212,16 @@ class Pass2(unittest.TestCase):
             self.assertEqual(p.returncode, 1)
             self.assertIn('/botox-tips/ is in the menu', p.stdout)
             self.assertIn('has no parent', p.stdout)
+
+    def test_new_page_linking_to_a_merged_page_or_without_anchor_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._pass2(d, [('Services', '/services/', '', '', 1)], new={'Lip Filler': {2: '/services/lip-filler/', 4: '/botox-tips/', 5: 'tips'}})
+            self.assertEqual(p.returncode, 1)
+            self.assertIn('/botox-tips/ is set to link to it but is not a page on the new site', p.stdout)
+        with tempfile.TemporaryDirectory() as d:
+            p = self._pass2(d, [('Services', '/services/', '', '', 1)], new={'Lip Filler': {2: '/services/lip-filler/', 5: 'ok'}})
+            self.assertEqual(p.returncode, 1)
+            self.assertIn('has no anchor text', p.stdout)
 
     def test_gone_without_reason_fails(self):
         with tempfile.TemporaryDirectory() as d:
