@@ -121,7 +121,7 @@ def main():
     for name, path, fn in (('Content Prune & Merge workbook', a.prune, ia.read_prune), ('IA audit workbook', a.ia, ia.read_ia),
                            ('Service Gap workbook', a.gap, ia.read_gap)):
         if name.startswith('Service') and not path:
-            add('INFO', 'Service Gap workbook: not provided (only med spa and plastic surgery sites have one).')
+            add('INFO', 'Service Gap workbook: not provided (only practices that offer med spa or surgical services have one).')
             continue
         if not need(name, path):
             continue

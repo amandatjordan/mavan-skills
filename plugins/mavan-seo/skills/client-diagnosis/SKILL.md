@@ -131,7 +131,7 @@ Plain language, in this order:
 5. **Trust risk**, when U4 scored: unusual link growth is a reason to check Search Console > Manual actions on the client's account, never a reason to disavow.
 6. **Limits**, one line each: Search Console figures are real clicks and impressions but keyword tool volumes are estimates (never added together, never added to Search Console figures), small click counts make single keywords noisy, impressions are or are not comparable (and which signals that left unscored), rankings are a snapshot of tracked keywords, internal links between pages were not analysed, overview figures were typed in (or read from a chart and confirmed).
 7. **Report**: the Site Health Report link from Step 4 (the roadmap starts at month 1), the plan level it shows, and anything the report preflight warned about.
-8. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when hub pages lead). Content: service gap audit (med spa and plastic surgery) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
+8. **Next step**: the follow-up audit for the lead lens. Architecture: information architecture audit (and content prune & merge when hub pages lead). Content: service gap audit (when the practice offers med spa or surgical services, whatever its main practice type; for a practice that offers neither, say it doesn't apply) and the client audit's keyword gap groups. Authority: backlink audit. Offer it; do not run it.
 
 Never promise a result. Send the workbook.
 

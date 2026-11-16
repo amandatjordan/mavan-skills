@@ -763,7 +763,7 @@ def write_workbook(a, tax, cols, rows, live, out, recs, kmap, excl, has_gsc, has
         ("Inputs", f"Crawl export: {os.path.basename(a.crawl)} ({len(rows)} URLs, {len(live)} live). Taxonomy: {tax.version}. "
                    f"Search Console: {'used (' + os.path.basename(a.gsc) + ')' if has_gsc else 'not provided, so there is no Client GSC Impressions column. Provide the GSC Google Sheet and re-run to add it.'}"),
         ("Fields used", ", ".join(k for k, v in cols.items() if v) + (". No H2 columns in the export, so H2 section matching was skipped." if not has_h2 else ".")),
-        ("Practice type", f"{practice.title()}. Service-area cities kept: {', '.join(c.title() for c in cities) or 'none given'}."),
+        ("Practice type", f"{practice.title()}. " + (f"Main practice: {a.main_practice.strip()}. Its own services are not in the taxonomy and were not audited. " if getattr(a, "main_practice", "").strip() else "") + f"Service-area cities kept: {', '.join(c.title() for c in cities) or 'none given'}."),
         ("Level names", "Category > Service > Sub-Service > Brand / Device. A Concern is a searched problem, never a page gap on its own."),
         ("Page types", "Set per page by reviewing the crawl (pages.tsv), not from folder names: Service, Concern, Gallery, Blog, Location, Utility."),
         ("Offered Status", "Confirmed = own page, H2 section, gallery, concern page, or implied by a brand / Sub-Service. Likely = only a meta description or blog mention. Unknown (parent offered) = Sub-Service of a Confirmed Service. No evidence."),
@@ -929,6 +929,7 @@ def main():
         sp.add_argument("--taxonomy", default=DEFAULT_TAXONOMY)
         sp.add_argument("--cities", default="", help="Service-area cities, comma separated")
         sp.add_argument("--practice", default="both", choices=["medspa", "surgical", "both"])
+        sp.add_argument("--main-practice", default="", help="Main practice type when it is not med spa or surgical (e.g. Dental)")
         sp.add_argument("--out", required=True)
         for k in COLS:
             sp.add_argument(f"--{k}-col")
