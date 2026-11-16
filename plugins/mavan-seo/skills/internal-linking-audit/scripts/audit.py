@@ -6,14 +6,15 @@
       link-path patterns so you can pick the one that means "inside the main content".
   python audit.py candidates --base https://example.com --priority priority.csv --service-regex REGEX
       [--gallery-regex REGEX] [--low-value-regex REGEX] [--exclude-regex REGEX]
-      [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv]
+      [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv] [--generic-anchors 'click here|read more|...']
       Writes work/candidates.csv, work/service_links.csv, work/gallery.csv, work/wrong_target.csv,
-      work/baseline.csv for Claude to review. Every URL pattern comes from the site's own URLs
+      work/generic_anchors.csv, work/baseline.csv for Claude to review. Every URL pattern comes from the site's own URLs
       (see the folder table prep prints); nothing about the site's structure is assumed.
       --gallery-regex    gallery / portfolio / case study / review pages (skip = no gallery check)
       --low-value-regex  pages a service-named anchor should not point to, e.g. blog, gallery,
                          reviews, contact (skip = no wrong-target check)
       --exclude-regex    pages that are never worth editing, e.g. tag/category/pagination archives
+      --generic-anchors  '|'-separated generic anchor phrases, replaces GENERIC_ANCHORS below (optional)
   python audit.py build --base https://example.com --rows work/rows.csv --client NAME --out FILE.xlsx
       [--findings work/findings.txt]
       Checks every row (URLs exist, no existing body link, High/Low) and builds the sheet.
@@ -27,6 +28,9 @@ import pandas as pd
 
 W = 'work'
 ACTIONS = ['Add link', 'Add link (template)', 'Change link target']
+# Generic anchors: body links to a priority page whose whole anchor text is one of these (or a bare URL).
+# Edit per site, or override with --generic-anchors.
+GENERIC_ANCHORS = ['click here', 'read more', 'learn more', 'here', 'more', 'this page', 'this link', 'link', 'this']
 TYPES = ['Related content', 'Related service', 'Gallery & reviews', 'Wrong target']
 
 def norm(u, base):
@@ -159,6 +163,18 @@ def candidates(a):
                            'source_already_links_to_suggested': (r.src, s) in body_pairs, 'is_priority': s in targets}); break
     pd.DataFrame(WT).to_csv(f'{W}/wrong_target.csv', index=False)
 
+    ga = [x.strip().lower() for x in a.generic_anchors.split('|') if x.strip()] if a.generic_anchors else GENERIC_ANCHORS
+    def is_generic(x):
+        x = re.sub(r'[\s\W_]+$|^[\s\W_]+', '', x.strip().lower())
+        return x in ga or bool(re.match(r'(https?://|www\.)', x.strip().lower()))
+    live_urls = set(U[U.status == 200].url)
+    GA = body[body.dst.isin(targets) & (body.src != body.dst) & body.src.isin(live_urls) & body.anchor.map(is_generic)]
+    GA = GA.drop_duplicates(['src', 'dst', 'anchor'])
+    GA = pd.DataFrame({'source': GA.src, 'current_target': GA.dst, 'existing_anchor': GA.anchor,
+                       'source_clicks': GA.src.map(lambda x: clicks.get(x, 0)) if a.gsc_pages else '',
+                       'priority': GA.src.map(lambda x: 'High' if clicks.get(x, 0) > 0 else 'Low')})
+    GA.sort_values(['priority', 'current_target', 'source']).to_csv(f'{W}/generic_anchors.csv', index=False)
+
     B = [{'priority_page': t, 'body_links_in': int((body.dst == t).sum()), 'pages_linking_in_body': body[body.dst == t].src.nunique(),
           'body_links_out': int((body.src == t).sum()),
           'topic_clicks_3mo': int(gq[gq.page == t].clicks.sum()) if gq is not None else ''} for t in targets]
@@ -171,6 +187,7 @@ def candidates(a):
     if not a.low_value_regex: print('wrong-target check skipped (no --low-value-regex)')
     print('gallery/review link-up:', [(g['priority_page'].replace(base, ''), g['gallery_review_pages'], g['linking_up_outside_menu']) for g in G])
     print(f'wrong-target anchors: {len(WT)} (source already links to the service: {sum(w["source_already_links_to_suggested"] for w in WT)})')
+    print(f'generic anchors on body links to priority pages: {len(GA)} from {GA.source.nunique() if len(GA) else 0} pages')
     print('\nterms used:'); [print(' ', t.replace(base, ''), '->', terms[t]) for t in targets]
 
 def build(a):
@@ -197,6 +214,18 @@ def build(a):
     for e in errs: print('ERROR', e)
     print(f'{len(R)} rows checked, {len(errs)} errors')
     if errs: sys.exit(1)
+
+    GA = pd.read_csv(f'{W}/generic_anchors.csv').fillna('') if os.path.exists(f'{W}/generic_anchors.csv') else pd.DataFrame()
+    gerrs = []
+    for i, r in GA.iterrows():
+        tag = f'generic anchor row {i + 2} ({r.source.replace(base, "") or "/"} -> {r.current_target.replace(base, "")})'
+        if r.priority not in ('High', 'Low'): gerrs.append(f'{tag}: priority must be High or Low')
+        if r.source not in ok or r.current_target not in ok: gerrs.append(f'{tag}: URL is not a live 200 page in the crawl')
+    for _, r in GA[GA.duplicated(['source', 'current_target', 'existing_anchor'], keep=False)].iterrows() if len(GA) else []:
+        gerrs.append(f'duplicate generic anchor row: {r.source} -> {r.current_target} ("{r.existing_anchor}")')
+    for e in gerrs: print('ERROR', e)
+    if gerrs: sys.exit(1)
+    print(f'{len(GA)} generic anchor rows checked')
 
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -245,6 +274,22 @@ def build(a):
     im.conditional_formatting.add(f'A2:A{n}', CellIsRule(operator='equal', formula=['"Low"'], fill=PatternFill('solid', fgColor='E2E3E5')))
     im.conditional_formatting.add(f'K2:K{n}', CellIsRule(operator='equal', formula=['"Done"'], fill=PatternFill('solid', fgColor='D4EDDA')))
     im.freeze_panes = 'E2'; im.auto_filter.ref = f'A1:K{n}'
+    if len(GA):
+        ga = wb.create_sheet('Generic anchors')
+        head(ga, ['Priority', 'Page to edit', 'Link to', 'Existing anchor text', 'Proposed anchor text (SEO fills in)', 'Owner', 'Date done', 'Status'],
+             [9, 55, 55, 24, 34, 12, 11, 11])
+        GA = GA.assign(o=GA.priority.map({'High': 0, 'Low': 1})).sort_values(['o', 'current_target', 'source']).drop(columns='o')
+        for i, r in enumerate(GA.itertuples(), 2):
+            for j, v in enumerate([r.priority, r.source, r.current_target, r.existing_anchor, '', '', '', 'To do'], 1):
+                c = ga.cell(i, j, v); c.font = N; c.alignment = Wr; c.border = line
+        gn = len(GA) + 1
+        dv2 = DataValidation(type='list', formula1='"To do,In progress,Done,Rejected"', allow_blank=True); ga.add_data_validation(dv2); dv2.add(f'H2:H{gn}')
+        ga.conditional_formatting.add(f'A2:A{gn}', CellIsRule(operator='equal', formula=['"High"'], fill=PatternFill('solid', fgColor='F8D7DA')))
+        ga.conditional_formatting.add(f'A2:A{gn}', CellIsRule(operator='equal', formula=['"Low"'], fill=PatternFill('solid', fgColor='E2E3E5')))
+        ga.conditional_formatting.add(f'H2:H{gn}', CellIsRule(operator='equal', formula=['"Done"'], fill=PatternFill('solid', fgColor='D4EDDA')))
+        ga.freeze_panes = 'B2'; ga.auto_filter.ref = f'A1:H{gn}'
+        s.cell(hu + 2, 1, f'Generic anchors tab: {len(GA)} body links to priority pages use a generic anchor (e.g. "click here"). Replace each with descriptive text and record it in "Proposed anchor text".').font = Font(name=F, size=10, italic=True)
+        s.merge_cells(start_row=hu + 2, start_column=1, end_row=hu + 2, end_column=5); s.cell(hu + 2, 1).alignment = Wr; s.row_dimensions[hu + 2].height = 45
     b = wb.create_sheet('Baseline')
     bl = pd.read_csv(f'{W}/baseline.csv').fillna('')
     head(b, ['Priority page', 'Body links in', 'Pages linking in body copy', 'Body links out', 'Clicks from topic searches (last 3 months)'], [62, 14, 16, 14, 20])
@@ -260,7 +305,7 @@ if __name__ == '__main__':
     p.add_argument('--base', required=True); p.add_argument('--body-regex')
     c = sub.add_parser('candidates'); c.add_argument('--base', required=True); c.add_argument('--priority', required=True)
     c.add_argument('--service-regex', required=True); c.add_argument('--gsc-pages'); c.add_argument('--gsc-queries')
-    c.add_argument('--gallery-regex'); c.add_argument('--low-value-regex'); c.add_argument('--exclude-regex')
+    c.add_argument('--gallery-regex'); c.add_argument('--low-value-regex'); c.add_argument('--exclude-regex'); c.add_argument('--generic-anchors')
     b = sub.add_parser('build'); b.add_argument('--base', required=True); b.add_argument('--rows', required=True)
     b.add_argument('--client', default=''); b.add_argument('--out', default='internal-linking-audit.xlsx')
     b.add_argument('--findings'); b.add_argument('--note', default='')

@@ -5,7 +5,7 @@ description: "Run Mavan's internal linking audit for a client site from Sitebulb
 
 # Internal Linking Audit (Mavan SOP)
 
-Version 2.2 (Nov 2026). This skill carries the whole process and does not need the written SOP; the "Internal Linking Audit Process" page in Notion is documentation for people.
+Version 2.3 (Nov 2026). This skill carries the whole process and does not need the written SOP; the "Internal Linking Audit Process" page in Notion is documentation for people.
 
 Find which pages should link to the client's priority pages (any commercial page; usually service pages) and deliver a sheet that says **which page to edit and which page to link to**. The team finds the spot in the copy and writes the anchor themselves, so don't read pages, quote sentences or suggest anchors. The sheet has an empty "Anchor text (SEO fills in)" column for the SEO to record the anchor they used; never fill it. Everything comes from the crawl export and Search Console. Keep the run light.
 
@@ -43,7 +43,7 @@ Write `priority.csv` with columns `url,terms`. Leave `terms` blank to derive it 
 ```
 python $SKILL/scripts/audit.py candidates --base https://DOMAIN --priority priority.csv --service-regex '<pattern>' \
   [--gallery-regex '<pattern>'] [--low-value-regex '<pattern>'] [--exclude-regex '<pattern>'] \
-  [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv]
+  [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv] [--generic-anchors '<phrase|phrase>']
 ```
 
 Write each pattern from this site's own URLs (all match the path, e.g. `^/blog/`):
@@ -51,8 +51,9 @@ Write each pattern from this site's own URLs (all match the path, e.g. `^/blog/`
 - `--gallery-regex`: gallery, portfolio, case study, project or review pages. Leave it out if the site has none; the gallery check is skipped.
 - `--low-value-regex`: pages a link with a service name as anchor shouldn't point to instead of the service page (blog, gallery, reviews, contact). Leave it out to skip the wrong-target check.
 - `--exclude-regex`: pages never worth editing, e.g. tag, category and pagination archives or an HTML sitemap.
+- `--generic-anchors`: optional. Replaces the default generic phrases ("click here", "read more", "learn more", "here", "more", "this page", "this link", "link", "this"; a bare URL always counts). Only add it if the site uses other generic phrases you saw in the link table.
 
-It writes to `work/`: `candidates.csv` (pages whose title, H1, URL or Search Console queries match a priority topic and that don't link to it in body copy), `service_links.csv` (every priority page / service pair and whether each links to the other), `gallery.csv` (gallery and review pages about each priority topic and how many link up outside the menu), `wrong_target.csv` (body links whose anchor names a service but point to a blog, gallery, review or contact page), `baseline.csv`.
+It writes to `work/`: `candidates.csv` (pages whose title, H1, URL or Search Console queries match a priority topic and that don't link to it in body copy), `service_links.csv` (every priority page / service pair and whether each links to the other), `gallery.csv` (gallery and review pages about each priority topic and how many link up outside the menu), `generic_anchors.csv` (body links to a priority page whose whole anchor is generic, with the page it's on, the page it points to, the existing anchor and High/Low), `wrong_target.csv` (body links whose anchor names a service but point to a blog, gallery, review or contact page), `baseline.csv`.
 
 ## Step 5: Decide the rows
 
@@ -66,6 +67,8 @@ Write `work/rows.csv` with columns `priority,type,priority_page,action,source,ta
 - **Why**: one short line (e.g. "Blog about roof leaks; ranks for 'roof repair cost'").
 - `priority_page` is a short label (e.g. "Roof repair"), or "Other service pages" when the target isn't a priority page.
 
+- **Generic anchors**: no rows to write. `generic_anchors.csv` becomes the "Generic anchors" tab as it is (Priority High when the page to edit gets Search Console clicks, otherwise Low). Skim it and delete any row where the anchor is clearly fine; never fill the proposed anchor column.
+
 Also write `work/findings.txt`: 3–5 plain-language findings, one per line.
 
 ## Step 6: Build
@@ -78,4 +81,4 @@ It rejects rows where the page already links to the target in its body copy, URL
 
 ## Step 7: Deliver
 
-Send the .xlsx (import it into Google Sheets with File > Import > Replace spreadsheet). In the reply: 3–5 findings, row counts by priority, the terms used, and anything missing (e.g. no Search Console access). Mention that Sitebulb can hide a body link that uses the same anchor as a menu link, so a few rows may already be done; the team marks those Rejected.
+Send the .xlsx (import it into Google Sheets with File > Import > Replace spreadsheet). In the reply: 3–5 findings, row counts by priority, the terms used, and anything missing (e.g. no Search Console access). State the number of generic-anchor links and pages in the Generic anchors tab. Mention that Sitebulb can hide a body link that uses the same anchor as a menu link, so a few rows may already be done; the team marks those Rejected.
