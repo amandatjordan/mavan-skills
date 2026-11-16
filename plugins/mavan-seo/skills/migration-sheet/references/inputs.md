@@ -11,7 +11,7 @@ All inputs are uploaded files. Nothing is fetched.
 | Search Console sheet | Mavan's Search Console template, tab "Claude Use This" (Page, Query, Clicks, Impressions) | Page and Impressions: old URLs that get impressions but are not live |
 | Content Prune & Merge workbook | The SEO's working copy (has Kept pages and Check page type), .xlsx | See below |
 | IA audit workbook | The SEO's working copy (has README and Check page type), .xlsx | See below |
-| Service Gap workbook | Med spa and plastic surgery sites only, .xlsx | Recommendations: rows whose Next Steps is "Create new page" |
+| Service Gap workbook | Only when the practice offers med spa or surgical services (whatever its main practice type), .xlsx | Recommendations: rows whose Next Steps is "Create new page" |
 
 Not required: the crawl's images and documents lists. They are accepted but nothing is read from them; media comes from the backlink export.
 

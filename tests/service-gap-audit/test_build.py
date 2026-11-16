@@ -116,6 +116,18 @@ class ServiceGapAudit(unittest.TestCase):
         row = self.recs[self.recs["Service Page Recommended"] == "Cellulite Treatment"].iloc[0]
         self.assertTrue(str(row["Relevant Pages"]).strip())
 
+    def test_main_practice_noted_in_read_me(self):
+        out = Path(self.tmp.name) / "audit_dental.xlsx"
+        r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--cities", "Tampa",
+                "--practice", "medspa", "--main-practice", "Dental", "--domain", "example-medspa.com", "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rm = pd.read_excel(out, "Read Me", header=None).fillna("")
+        row = " ".join(rm[rm[0] == "Practice type"].iloc[0].astype(str))
+        self.assertIn("Main practice: Dental", row)
+        self.assertIn("not audited", row)
+        default = pd.read_excel(self.out, "Read Me", header=None).fillna("")
+        self.assertNotIn("Main practice", " ".join(default[default[0] == "Practice type"].iloc[0].astype(str)))
+
     def test_taxonomy_is_not_accepted_as_gsc(self):
         r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--practice", "medspa",
                 "--gsc", str(TAXONOMY), "--out", str(Path(self.tmp.name) / "x.xlsx"))
