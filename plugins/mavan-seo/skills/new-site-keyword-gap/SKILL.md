@@ -41,9 +41,10 @@ python $SKILL/scripts/gap.py preflight --config work/config.json --gap GAP.csv \
   --ranking "rival-one.com=RIVAL1.csv" --ranking "rival-two.com=RIVAL2.csv" ... --out work
 ```
 
-It writes `work/preflight.md` and `work/candidates.md` (common words and phrases in the non-branded keywords, locations after "in" or "near", and the first folder of the URLs competitors rank with). Use candidates only to **propose** two lists, then ask the person to confirm them in one message with any other missing input:
+It writes `work/preflight.md` and `work/candidates.md` (common words and phrases in the non-branded keywords, locations after "in" or "near", possible leftover brand words, and the first folder of the URLs competitors rank with). Use candidates only to **propose** two lists, then ask the person to confirm them in one message with any other missing input:
 
 - **Service terms:** one entry per service the new business could offer, with the names people search (`{"service": "Tummy tuck", "terms": ["abdominoplasty"]}`). Keep broad words ("laser", "facial") out unless that service is the broad one. Competitors may overlap on only some services; do not drop a service because only one competitor ranks for it.
+- **Leftover brand words:** candidates.md lists words from a competitor's name that still appear in non-branded keywords ("ageless" for "Ageless Remedies"). Ask the SEO which are part of the name people search and add those as extra names; leave service words alone ("medical", "medspa").
 - **Cities:** the cities or areas the business will serve. An empty list is allowed when there are none. Keywords with a city, and "near me" searches, go to the Local group instead of a service group.
 
 Read `work/preflight.md`. On NOT READY, send one message listing each FAIL and exactly what is needed, then stop. Read each WARN (an export that looks capped, a brand term that removes too many keywords) and mention it in the reply. If the tool cannot be detected, ask which tool made the file and pass `--tool`. Done when it says READY.
@@ -60,10 +61,10 @@ Read the printed column mappings (fix a wrong one with `--map gap.volume="Vol"`,
 ## Step 3: Check
 
 - Read the **Branded removed** tab: every row should contain a competitor name. If a service word was removed, take it out of that competitor's names and rebuild.
-- Read the **Unassigned** tab: if it holds a real service, add its term to `service_terms` and rebuild. A large Unassigned tab means the service list is incomplete.
+- Read the **Unassigned** tab (sorted by estimated volume) and the common words the build prints and the Summary lists. A product, device or treatment name belongs in `service_terms`; a competitor's short name belongs in its names. Rebuild after each change. A large Unassigned tab means the service list is incomplete.
 - Read the **Local** tab: each keyword should carry a confirmed city or "near me". Add a missing city and rebuild.
 - Open the Keywords tab and confirm 3 flagged keywords against the raw gap export: positions, the A and B flags, and the best-ranking competitor.
-- Look at the Service opportunities tab: a service with zero keywords means its term did not match anything, not that there is no demand.
+- Look at the Service opportunities tab: the first columns count non-local keywords and the Local columns count that service's local searches, so read both. A service with zero keywords means its term did not match anything, not that there is no demand.
 
 Say you did these checks.
 
