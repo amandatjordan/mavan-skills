@@ -126,8 +126,8 @@ class Taxonomy:
             elif lvl == "Service":
                 name = r["Service"].strip()
             rx = r["Match Terms (regex)"].strip()
-            if not rx:
-                continue
+            if not rx or r["Practice Type"].strip().lower() == "dental":
+                continue  # Dental rows are reference only: the audit covers med spa and surgical services
             subs = [s.strip() for s in r["Sub-Service"].split(";") if s.strip()] if lvl == "Brand / Device" else []
             implies = [s.strip() for s in r["Implies Offered"].split(";") if s.strip()]
             self.nodes.append(dict(idx=i, level=lvl, name=name, service=r["Service"].strip(), category=r["Category"].strip(),
