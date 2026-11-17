@@ -22,7 +22,7 @@ Step 1 checks all of this before work starts.
 - **Crawl export** (CSV or xlsx, internal HTML URLs, every status code). Sitebulb: URL, HTTP Status Code, Indexable Status, Title, Meta Description, H1, H2, H2 (second), No. Content Words, and the canonical URL column if exported. Screaming Frog: Address, Status Code, Indexability Status, Title 1, Meta Description 1, H1-1, H2-1, H2-2, Word Count, Canonical Link Element 1. URL, status, title, H1 and word count are required; the rest are used when present.
 - **Client facts**: domain, practice type (the med spa or surgical services the practice offers: medspa, surgical, or both), the main practice type when it is something else (dental, LASIK, weight loss and so on), and every city and suburb the practice targets.
 - **Search Console data** (optional): a Google Sheet with Page, Query, Clicks and Impressions columns, attached to the chat. The script uses the tab named "Claude Use This" when the file has one.
-- **Taxonomy**: bundled at `$SKILL/references/service-taxonomy.xlsx` (Taxonomy, Filters, All Keywords tabs). Do not ask for it, and do not read a sheet link to it: the bundled copy is the one to use. Use a different file only when the person explicitly says to, and pass it with `--taxonomy`.
+- **Taxonomy**: bundled at `$SKILL/references/service-taxonomy.xlsx` (Taxonomy, Filters, All Keywords tabs); the workbook also holds a reference-only Dental Taxonomy tab that the audit does not read). Do not ask for it, and do not read a sheet link to it: the bundled copy is the one to use. Use a different file only when the person explicitly says to, and pass it with `--taxonomy`.
 
 ## Vocabulary
 
