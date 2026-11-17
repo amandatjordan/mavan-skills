@@ -17,7 +17,9 @@ A keyword is an **opportunity** when it has flag A or flag B. Flags are counted 
 - **Branded removed:** a keyword containing a name the SEO gave for a competitor, or the competitor's domain name (`rival-one.com` adds "rival one", "rivalone" and "rival-one"), as a whole word or phrase with an optional plural. Removed before every flag and count.
 - **Local:** a keyword containing a confirmed city, or "near me", "nearby" or "close to me". It is in the Local group only, with the services it also matches shown in the Services column.
 - **Service:** a keyword containing a confirmed service term, as a whole word or phrase with an optional plural. A keyword that matches more than one service is counted under each, so service rows can overlap. Summary counts each keyword once.
-- **Unassigned:** everything else. Reviewed by the person, never dropped.
+- **Unassigned:** everything else. Reviewed by the person, never dropped. The most common words in it are listed in the Summary and printed by the build, to help find missing service terms.
+- **Leftover brand words** (preflight only): a word of 4 or more letters from a competitor's names that still appears in 3 or more non-branded keywords (`LEFTOVER_MIN = 3`). Listed for the SEO to judge; nothing is removed automatically.
+- **Service rows and Local:** a service's row counts its non-local keywords and flags. The Local columns beside them count that service's local keywords (same service terms) and how many are flagged A or B. Local keywords stay out of the service flag counts.
 
 ## Data limits
 

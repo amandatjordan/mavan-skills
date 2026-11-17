@@ -119,6 +119,12 @@ class GapTest(unittest.TestCase):
         self.assertEqual(svc['Tummy tuck'][1], 1)       # 'tummy tuck recovery' contains the service name
         self.assertEqual(svc['Tummy tuck'][3], 1)       # and one competitor is top 3 for it
         self.assertEqual(svc['laser hair removal'][4], 0)
+        # local keywords for a service are counted next to it: 'botox near me' and 'botox in miami'; only the second is flagged
+        self.assertEqual(svc['botox'][5], 2)
+        self.assertEqual(svc['botox'][6], 1)
+        # the Summary lists common words in Unassigned, and the Unassigned tab holds 'skin care routine'
+        self.assertIn('Most common words in Unassigned', ' '.join(str(r[0]) for r in wb['Summary'].iter_rows(min_row=2, values_only=True)))
+        self.assertIn('skin', [r[0] for r in wb['Summary'].iter_rows(min_row=2, values_only=True)])
         # branded keywords are not in any group tab
         kws = [r[0] for ws in ('Keywords', 'Local', 'Unassigned') for r in wb[ws].iter_rows(min_row=2, values_only=True)]
         self.assertNotIn('rival one botox', kws)
@@ -128,6 +134,16 @@ class GapTest(unittest.TestCase):
         self.assertEqual(top[8], C1)
         self.assertEqual(top[9], 2)
         self.assertEqual(top[10], f'https://{C1}/botox-cost/')
+
+    def test_leftover_brand_words(self):
+        extra = [('rival cost', 100, 12, '', ''), ('rival price', 90, 14, '', ''), ('rival reviews', 80, 18, '', '')]
+        write_csv(self.tmp / 'gap.csv', GAP_HEAD,
+                  [[k, 'Commercial', v, 30, 1, 0.5, a, b, c, '', '', '', 100] for k, v, a, b, c in ROWS + extra])
+        p = run(*self.args('preflight', self.tmp / 'work'))
+        self.assertIn('still appear in non-branded keywords', p.stdout)
+        text = (self.tmp / 'work' / 'candidates.md').read_text()
+        self.assertIn('Possible leftover brand words', text)
+        self.assertIn(f'{C1}: "rival" in 3 keywords', text)
 
     def test_ahrefs_headers(self):
         head = ['Keyword', 'Volume', 'KD', 'CPC'] + [f'{d}: Position' for d in (C1, C2, C3)]

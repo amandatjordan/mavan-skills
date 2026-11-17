@@ -23,6 +23,7 @@ from common import bare_domain, canon, num, pick, read_table, resolve  # noqa: E
 TOP_N = 10               # flag A: a competitor in the top 10 counts toward "several competitors rank"
 MULTI_MIN = 2            # flag A: at least this many competitors in the top TOP_N
 TOP_BEST = 3             # flag B: any one competitor at this position or better
+LEFTOVER_MIN = 3         # list a competitor-name word that still appears in at least this many non-branded keywords
 BRAND_BROAD_SHARE = 0.05  # warn when one brand term removes more than this share of the gap keywords
 MIN_COMPETITORS = 3
 MAX_COMPETITORS = 5
@@ -278,8 +279,17 @@ def write_candidates(ctx, out):
         words.update({t for t in toks if t not in STOP and len(t) > 2})
         pairs.update({' '.join(p) for p in zip(toks, toks[1:]) if not (p[0] in STOP and p[1] in STOP)})
         m = re.search(r'\b(?:in|near|around)\s+([a-z][a-z .\-]{2,30})$', kw)
-        if m and 'me' != m.group(1).strip():
+        if m and m.group(1).split()[0] not in STOP:
             locs[m.group(1).strip()] += 1
+    left = []
+    for d, pats in ctx['comp_brands'].items():
+        toks = {t for term in pats for t in re.findall(r'[a-z0-9]+', term) if len(t) >= 4 and t not in STOP}
+        for t in sorted(toks):
+            rx = term_re(t)
+            hit = [k for k in g['keyword'] if rx.search(k.lower())]
+            if len(hit) >= LEFTOVER_MIN:
+                left.append((d, t, len(hit), hit[:4]))
+    ctx['leftover'] = left
     segs = defaultdict(lambda: [0, set()])
     for d, r in ctx['ranks'].items():
         for u in set(r['url']):
@@ -296,6 +306,10 @@ def write_candidates(ctx, out):
     lines += [f'- {w}: {c}' for w, c in pairs.most_common(40)]
     lines += ['', '## Locations after "in" / "near" / "around" (number of keywords)', '']
     lines += [f'- {w}: {c}' for w, c in locs.most_common(30)] or ['- none found']
+    lines += ['', '## Possible leftover brand words', '',
+              'Words from a competitor name that still appear in non-branded keywords. If one is part of the name as people search it '
+              '(a short form such as "ageless" for "Ageless Remedies"), add it to that competitor\'s names. If it is a service word, leave it.', '']
+    lines += [f'- {d}: "{t}" in {n:,} keywords, e.g. {"; ".join(ex)}' for d, t, n, ex in sorted(left, key=lambda x: -x[2])] or ['- none found']
     lines += ['', '## First folder of competitor ranking URLs (number of URLs, competitors)', '']
     lines += [f'- {s}: {n} URLs, {", ".join(sorted(ds))}' for s, (n, ds) in sorted(segs.items(), key=lambda x: -x[1][0])[:40]]
     with open(os.path.join(out, 'candidates.md'), 'w', encoding='utf-8') as f:
@@ -313,6 +327,9 @@ def cmd_preflight(a):
              f'- Competitors (gap export domain columns): {", ".join(ctx["doms"]) or "none"}',
              f'- Gap keywords: {len(ctx["g"]):,}; removed as branded: {ctx["n_brand"]:,}', '']
     lines += [f'- FAIL: {m}' for m in fails] + [f'- WARN: {m}' for m in warns]
+    if ctx.get('leftover'):
+        lines.append(f'- WARN: {len(ctx["leftover"])} word(s) from competitor names still appear in non-branded keywords '
+                     f'(for example "{max(ctx["leftover"], key=lambda x: x[2])[1]}"). See "Possible leftover brand words" in candidates.md and ask the SEO.')
     lines += ['', 'Candidates for service terms and cities are in candidates.md.']
     with open(os.path.join(a.out, 'preflight.md'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
@@ -386,17 +403,19 @@ def cmd_build(a):
     srows = []
     for name, _ in services:
         s = kept[(kept['group'] == 'Service') & kept['services'].map(lambda x: name in x)]
+        lc = kept[(kept['group'] == 'Local') & kept['services'].map(lambda x: name in x)]
+        loc_cells = [len(lc), int(lc['opportunity'].sum())]
         if s.empty:
-            srows.append([name, 0, 0, 0, 0, '', *[0] * len(comps), 'No competitor keywords matched. Not the same as no demand: check the term.'])
+            srows.append([name, 0, 0, 0, 0, *loc_cells, '', *[0] * len(comps), 'No non-local competitor keywords matched. Not the same as no demand: check the term.'])
             continue
         best_counts = Counter(c for b in s['best_competitor'] for c in b.split(', ') if c)
         top = s.sort_values('est_volume', ascending=False).head(3)
-        srows.append([name, len(s), int(s['flag_a'].sum()), int(s['flag_b'].sum()), int(s['opportunity'].sum()),
+        srows.append([name, len(s), int(s['flag_a'].sum()), int(s['flag_b'].sum()), int(s['opportunity'].sum()), *loc_cells,
                       best_counts.most_common(1)[0][0], *[int((s[d] <= TOP_N).sum()) for d in comps],
                       '; '.join(f'{k} (est. {int(v):,})' if pd.notna(v) else k for k, v in zip(top['keyword'], top['est_volume']))])
-    srows.sort(key=lambda r: (-r[4], -r[1], r[0]))
+    srows.sort(key=lambda r: (-(r[4] + r[6]), -(r[1] + r[5]), r[0]))
     svc_head = ['Service', 'Non-branded keywords', 'A: several competitors top 10', 'B: a competitor top 3', 'A or B',
-                'Competitor best on most keywords'] + [f'Keywords where {d} is top 10' for d in comps] + ['Highest estimated-volume keywords (each volume is the tool\'s estimate)']
+                'Local keywords for this service', 'Local: A or B', 'Competitor best on most keywords'] + [f'Keywords where {d} is top 10' for d in comps] + ['Highest estimated-volume keywords (each volume is the tool\'s estimate)']
 
     # competitor pages
     long = []
@@ -426,6 +445,13 @@ def cmd_build(a):
         ['Per competitor', 'Keywords in top 10 / top 3 / total ranking']]
     for d in comps:
         sumrows.append([d, f'{int((kept[d] <= TOP_N).sum())} / {int((kept[d] <= TOP_BEST).sum())} / {int(kept[d].notna().sum())}'])
+    un = kept[kept['group'] == 'Unassigned']
+    uw = Counter()
+    for kw in un['kw_lower']:
+        uw.update({t for t in re.findall(r"[a-z0-9']+", kw) if t not in STOP and len(t) > 2})
+    top_un = uw.most_common(15)
+    sumrows += [[], ['Most common words in Unassigned (add a service term or a competitor name for any that belongs)', ''],
+                *[[w, c] for w, c in top_un]]
     readme = [
         ['What this is', 'Non-branded searches that competitors rank for, grouped by service, to choose what a new site should target. There is no site to crawl, so nothing here compares against an existing site.'],
         ['Flags', f'A = at least {MULTI_MIN} competitors rank in the top {TOP_N}. B = at least one competitor ranks in the top {TOP_BEST}. Best-ranking competitor, position and page are shown for every keyword.'],
@@ -446,7 +472,7 @@ def cmd_build(a):
     sheet(wb, 'Competitor pages', page_head, long, {'Page': 70, 'Service it matches most': 28})
     sheet(wb, 'Unassigned', ['Keyword', 'Estimated volume', 'Competitors in top 10', 'Best-ranking competitor', 'Best position'],
           [[r['keyword'], val(r['est_volume']), int(r['top10_count']), r['best_competitor'], val(r['best_position'])]
-           for _, r in kept[kept['group'] == 'Unassigned'].iterrows()], {'Keyword': 48})
+           for _, r in un.sort_values('est_volume', ascending=False).iterrows()], {'Keyword': 48})
     sheet(wb, 'Branded removed', ['Keyword', 'Term matched'], [[r['keyword'], r['brand_term']] for _, r in removed.iterrows()], {'Keyword': 48})
     wb.save(a.out)
 
@@ -471,6 +497,8 @@ def cmd_build(a):
           f'{int(kept["flag_a"].sum())} flagged A, {int(kept["flag_b"].sum())} flagged B.')
     if problems:
         raise SystemExit('CHECK FAILED: ' + '; '.join(problems))
+    if top_un:
+        print('  Most common words in Unassigned: ' + ', '.join(f'{w} ({c})' for w, c in top_un))
     print('All checks passed')
 
 
