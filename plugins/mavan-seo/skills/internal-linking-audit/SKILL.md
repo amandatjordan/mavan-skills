@@ -5,7 +5,7 @@ description: "Run Mavan's internal linking audit for a client site from Sitebulb
 
 # Internal Linking Audit (Mavan SOP)
 
-Version 2.3 (Nov 2026). This skill carries the whole process and does not need the written SOP; the "Internal Linking Audit Process" page in Notion is documentation for people.
+Version 2.4 (Nov 2026). This skill carries the whole process and does not need the written SOP; the "Internal Linking Audit Process" page in Notion is documentation for people.
 
 Find which pages should link to the client's priority pages (any commercial page; usually service pages) and deliver a sheet that says **which page to edit and which page to link to**. The team finds the spot in the copy and writes the anchor themselves, so don't read pages, quote sentences or suggest anchors. The sheet has an empty "Anchor text (SEO fills in)" column for the SEO to record the anchor they used; never fill it. Everything comes from the crawl export and Search Console. Keep the run light.
 
@@ -43,7 +43,7 @@ Write `priority.csv` with columns `url,terms`. Leave `terms` blank to derive it 
 ```
 python $SKILL/scripts/audit.py candidates --base https://DOMAIN --priority priority.csv --service-regex '<pattern>' \
   [--gallery-regex '<pattern>'] [--low-value-regex '<pattern>'] [--exclude-regex '<pattern>'] \
-  [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv] [--generic-anchors '<phrase|phrase>']
+  [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv] [--generic-anchors '<phrase|phrase>'] [--intent-phrases '<phrase|phrase>'] [--intent-ok-regex '<pattern>']
 ```
 
 Write each pattern from this site's own URLs (all match the path, e.g. `^/blog/`):
@@ -51,9 +51,11 @@ Write each pattern from this site's own URLs (all match the path, e.g. `^/blog/`
 - `--gallery-regex`: gallery, portfolio, case study, project or review pages. Leave it out if the site has none; the gallery check is skipped.
 - `--low-value-regex`: pages a link with a service name as anchor shouldn't point to instead of the service page (blog, gallery, reviews, contact). Leave it out to skip the wrong-target check.
 - `--exclude-regex`: pages never worth editing, e.g. tag, category and pagination archives or an HTML sitemap.
+- `--intent-phrases`: optional. Replaces the default commercial-intent phrases ("book now", "schedule", "appointment", "consultation", "free quote", "quote", "estimate", "pricing", "near me", "get started"). Add or remove phrases to suit the industry; keep to strong signals, not soft words like "best" or "cost".
+- `--intent-ok-regex`: optional. Pages a commercial-intent anchor may rightly point to, e.g. contact or booking pages. Without it, "Book now" linking to the contact page is flagged. Write it from the site's own URLs.
 - `--generic-anchors`: optional. Replaces the default generic phrases ("click here", "read more", "learn more", "here", "more", "this page", "this link", "link", "this"; a bare URL always counts). Only add it if the site uses other generic phrases you saw in the link table.
 
-It writes to `work/`: `candidates.csv` (pages whose title, H1, URL or Search Console queries match a priority topic and that don't link to it in body copy), `service_links.csv` (every priority page / service pair and whether each links to the other), `gallery.csv` (gallery and review pages about each priority topic and how many link up outside the menu), `generic_anchors.csv` (body links to a priority page whose whole anchor is generic, with the page it's on, the page it points to, the existing anchor and High/Low), `wrong_target.csv` (body links whose anchor names a service but point to a blog, gallery, review or contact page), `baseline.csv`.
+It writes to `work/`: `candidates.csv` (pages whose title, H1, URL or Search Console queries match a priority topic and that don't link to it in body copy), `service_links.csv` (every priority page / service pair and whether each links to the other), `gallery.csv` (gallery and review pages about each priority topic and how many link up outside the menu), `generic_anchors.csv` (body links to a priority page whose whole anchor is generic, with the page it's on, the page it points to, the existing anchor and High/Low), `wrong_target.csv` (body links to a non-service page whose anchor either names a service and points to a blog, gallery, review or contact page, or has commercial intent, with a `reason` column saying which), `baseline.csv`.
 
 ## Step 5: Decide the rows
 
@@ -62,7 +64,7 @@ Write `work/rows.csv` with columns `priority,type,priority_page,action,source,ta
 - **Related content** (`candidates.csv`, type Related content): keep pages genuinely about the service, including team, staff or bio pages that mention it. Drop pages that fit a different service better. Action `Add link`.
 - **Related service**: from `service_links.csv`, pick the services that genuinely relate to each priority page (e.g. roof repair and roof replacement) and add a row for each missing direction. Candidates typed Related service count too. Action `Add link`.
 - **Gallery & reviews**: for each priority page where `linking_up_outside_menu` is 0 and there are gallery/review pages, add one row with the gallery URL as source and action `Add link (template)`. In `why`, say how many pages it covers, and add "May need platform support to change the template" if the site runs on a hosted platform where the client can't edit templates.
-- **Wrong target**: from `wrong_target.csv`, rows where the anchor really describes the service and `source_already_links_to_suggested` is False. Action `Change link target`; put the current anchor and current target in `why`.
+- **Wrong target**: from `wrong_target.csv`, rows where `source_already_links_to_suggested` is False. For reason "anchor names a service", keep rows where the anchor really describes the service and use `suggested_target`. For reason "commercial intent" the suggested target is blank: pick the service page that fits the topic of the page to edit (from its title and URL), and skip the row if none clearly fits. Action `Change link target`; put the current anchor, current target and the reason in `why`.
 - **Priority**: High = the source page gets meaningful clicks, is a closely related service page, or is a template fix. Low = everything else.
 - **Why**: one short line (e.g. "Blog about roof leaks; ranks for 'roof repair cost'").
 - `priority_page` is a short label (e.g. "Roof repair"), or "Other service pages" when the target isn't a priority page.
