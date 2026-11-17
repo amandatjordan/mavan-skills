@@ -111,17 +111,26 @@ class GapTest(unittest.TestCase):
         self.assertEqual(summ['Non-branded keywords analysed'], 6)
         self.assertEqual(summ['In the Local group (city or near me)'], 2)
         self.assertEqual(summ['Unassigned (no service or city term matched)'], 1)
-        self.assertEqual(summ['Flagged A (2 or more competitors in the top 10)'], 3)   # botox cost, botox in miami, skin care
-        self.assertEqual(summ['Flagged B (a competitor in the top 3)'], 2)             # botox cost, tummy tuck recovery
+        self.assertEqual(summ['Keywords with 2+ competitors in the top 10'], 3)   # botox cost, botox in miami, skin care
+        self.assertEqual(summ['Keywords with 1+ competitor in the top 3'], 2)             # botox cost, tummy tuck recovery
         # service rows
         svc = {r[0]: r for r in wb['Service opportunities'].iter_rows(min_row=2, values_only=True)}
-        self.assertEqual(svc['botox'][1], 1)            # only 'botox cost' is a service keyword; the other two are Local
-        self.assertEqual(svc['Tummy tuck'][1], 1)       # 'tummy tuck recovery' contains the service name
-        self.assertEqual(svc['Tummy tuck'][3], 1)       # and one competitor is top 3 for it
-        self.assertEqual(svc['laser hair removal'][4], 0)
+        self.assertEqual(svc['botox'][2], 1)            # only 'botox cost' is a service keyword; the other two are Local
+        self.assertEqual(svc['Tummy tuck'][2], 1)       # 'tummy tuck recovery' contains the service name
+        self.assertEqual(svc['Tummy tuck'][4], 1)       # and one competitor is top 3 for it
+        self.assertEqual(svc['laser hair removal'][5], 0)
         # local keywords for a service are counted next to it: 'botox near me' and 'botox in miami'; only the second is flagged
-        self.assertEqual(svc['botox'][5], 2)
-        self.assertEqual(svc['botox'][6], 1)
+        self.assertEqual(svc['botox'][6], 2)
+        self.assertEqual(svc['botox'][7], 1)
+        # best-performing page: every botox page has 1 keyword in the top 10, so the best position (2) decides
+        self.assertEqual((svc['botox'][8], svc['botox'][9], svc['botox'][10], svc['botox'][11]), (f'https://{C1}/botox-cost/', 'Other page', C1, 1))
+        # the page for a service comes from the competitor that ranks top 10 for it
+        self.assertEqual(svc['laser hair removal'][8], f'https://{C3}/laser-hair-removal/')
+        # the SEO fill-in column is blank, has a Yes/No dropdown, and is not read by anything
+        ws = wb['Service opportunities']
+        self.assertEqual(ws['B1'].value, 'Offered by our client (SEO fills in: Yes or No)')
+        self.assertTrue(all(r[1] is None for r in ws.iter_rows(min_row=2, values_only=True)))
+        self.assertEqual(ws.data_validations.dataValidation[0].formula1, '"Yes,No"')
         # the Summary lists common words in Unassigned, and the Unassigned tab holds 'skin care routine'
         self.assertIn('Most common words in Unassigned', ' '.join(str(r[0]) for r in wb['Summary'].iter_rows(min_row=2, values_only=True)))
         self.assertIn('skin', [r[0] for r in wb['Summary'].iter_rows(min_row=2, values_only=True)])
@@ -134,6 +143,20 @@ class GapTest(unittest.TestCase):
         self.assertEqual(top[8], C1)
         self.assertEqual(top[9], 2)
         self.assertEqual(top[10], f'https://{C1}/botox-cost/')
+
+    def test_best_page_skips_home_page_and_strips_query(self):
+        rows = [[k, r[2], '', r[1], 30, 1, f'https://{C1}/' + k.replace(' ', '-') + '/', 10] for k in [x[0] for x in ROWS]
+                for r in [next(y for y in ROWS if y[0] == k)] if r[2] != '']
+        rows = [[*r[:6], f'https://{C1}/?utm_source=google&utm_medium=gbp', r[7]] if r[0] == 'botox cost' else r for r in rows]
+        write_csv(self.rank[C1], RANK_HEAD, rows)
+        out = self.tmp / 'out.xlsx'
+        run(*self.args('build', out))
+        wb = load_workbook(out)
+        svc = {r[0]: r for r in wb['Service opportunities'].iter_rows(min_row=2, values_only=True)}
+        # the home page is skipped; of the remaining botox pages the one with the best position wins
+        self.assertEqual(svc['botox'][8], f'https://{C1}/botox-in-miami/')
+        kw = next(r for r in wb['Keywords'].iter_rows(min_row=2, values_only=True) if r[0] == 'botox cost')
+        self.assertEqual(kw[10], f'https://{C1}/')   # the utm parameters are gone
 
     def test_leftover_brand_words(self):
         extra = [('rival cost', 100, 12, '', ''), ('rival price', 90, 14, '', ''), ('rival reviews', 80, 18, '', '')]

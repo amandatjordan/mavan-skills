@@ -1,6 +1,6 @@
 ---
 name: new-site-keyword-gap
-description: Find the service and search terms a brand-new site should target, for a business that has no website yet, from a competitor keyword gap export (Semrush Keyword Gap or Ahrefs Content Gap) plus each competitor's Organic Positions. Removes competitor-branded searches, groups the rest by service and a local group, flags terms several competitors rank for and terms a competitor ranks top 3 for, and builds a workbook. Use for new site keyword research, "business has no website", or a service gap for a site that does not exist yet.
+description: Find the service and search terms a brand-new site should target, for a business that has no website yet, from a competitor keyword gap export (Semrush Keyword Gap or Ahrefs Content Gap) plus each competitor's Organic Positions. Removes competitor-branded searches, groups the rest by service and a local group, counts terms several competitors rank for (2+ in the top 10) and terms a competitor ranks top 3 for (1+ in the top 3), shows the best-performing competitor page for each service, and builds a workbook. Use for new site keyword research, "business has no website", or a service gap for a site that does not exist yet.
 ---
 
 # New-site keyword gap (Mavan)
@@ -63,7 +63,7 @@ Read the printed column mappings (fix a wrong one with `--map gap.volume="Vol"`,
 - Read the **Branded removed** tab: every row should contain a competitor name. If a service word was removed, take it out of that competitor's names and rebuild.
 - Read the **Unassigned** tab (sorted by estimated volume) and the common words the build prints and the Summary lists. A product, device or treatment name belongs in `service_terms`; a competitor's short name belongs in its names. Rebuild after each change. A large Unassigned tab means the service list is incomplete.
 - Read the **Local** tab: each keyword should carry a confirmed city or "near me". Add a missing city and rebuild.
-- Open the Keywords tab and confirm 3 flagged keywords against the raw gap export: positions, the A and B flags, and the best-ranking competitor.
+- Open the Keywords tab and confirm 3 keywords against the raw gap export: positions, the 2+ in top 10 and 1+ in top 3 columns, and the best-ranking competitor.
 - Look at the Service opportunities tab: the first columns count non-local keywords and the Local columns count that service's local searches, so read both. A service with zero keywords means its term did not match anything, not that there is no demand.
 
 Say you did these checks.
@@ -72,12 +72,12 @@ Say you did these checks.
 
 Plain language, in this order:
 
-1. **The headline**: the 3-5 services with the most keywords flagged A or B, and the competitor that ranks best most often for each.
+1. **The headline**: the 3-5 services with the most keywords that have 2+ competitors in the top 10 or 1+ in the top 3, the competitor that ranks best most often for each, and its best-performing page.
 2. **Evidence**: for each of those services, 2-3 example keywords with the best competitor, its position and its page. Volumes are the tool's estimates and are never added together.
 3. **Local**: how many local keywords there are and which cities or "near me" terms carry them.
 4. **Pages competitors win with**: what the Competitor pages tab shows (service pages, blog articles, the home page), and that "looks like" is a guess from the URL.
 5. **Gaps in the data**: services with no matching keywords, the size of Unassigned, and any warning from preflight.
 6. **Limits**, one line each: volumes are the tool's estimates, rankings are a snapshot of tracked keywords, every competitor's own branded searches were removed, and competitors that overlap on only some services appear in those services only.
-7. **Next step**: the services to plan pages for first. Offer it; do not build it.
+7. **Next step**: tell the SEO to fill in the "Offered by our client" column (Yes or No) on the Service opportunities tab, then the services to plan pages for first. Offer it; do not build it.
 
 Never promise a result. Send the workbook.

@@ -16,13 +16,14 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import bare_domain, canon, num, pick, read_table, resolve  # noqa: E402
+from common import bare_domain, canon, norm_url, num, pick, read_table, resolve  # noqa: E402
 
-TOP_N = 10               # flag A: a competitor in the top 10 counts toward "several competitors rank"
-MULTI_MIN = 2            # flag A: at least this many competitors in the top TOP_N
-TOP_BEST = 3             # flag B: any one competitor at this position or better
+TOP_N = 10               # a competitor at this position or better counts toward the 2+ rule
+MULTI_MIN = 2            # 2+ rule: at least this many competitors in the top TOP_N
+TOP_BEST = 3             # 1+ rule: any one competitor at this position or better
 LEFTOVER_MIN = 3         # list a competitor-name word that still appears in at least this many non-branded keywords
 BRAND_BROAD_SHARE = 0.05  # warn when one brand term removes more than this share of the gap keywords
 MIN_COMPETITORS = 3
@@ -155,7 +156,7 @@ def load_ranking(path, ov, domain):
     df = read_any(path)
     m = resolve(df, RANKING_SPEC, f'ranking.{domain}', ov)
     r = pd.DataFrame({'keyword': df[m['keyword']].str.strip().str.lower(), 'position': df[m['position']].map(num),
-                      'url': df[m['url']].str.strip()})
+                      'url': df[m['url']].str.strip().str.split('#').str[0].str.split('?').str[0]})
     r = r[(r['keyword'] != '') & (r['url'] != '')]
     return r.sort_values('position').drop_duplicates('keyword'), len(df)
 
@@ -196,13 +197,13 @@ def add_flags(g, comps):
     pos = g[comps]
     g = g.copy()
     g['top10_count'] = (pos <= TOP_N).sum(axis=1)
-    g['flag_a'] = g['top10_count'] >= MULTI_MIN
-    g['flag_b'] = (pos <= TOP_BEST).any(axis=1)
+    g['top10_multi'] = g['top10_count'] >= MULTI_MIN
+    g['top3_any'] = (pos <= TOP_BEST).any(axis=1)
     best = pos.min(axis=1)
     g['best_position'] = best
     g['best_competitor'] = [', '.join(c for c in comps if pos.at[i, c] == b) if pd.notna(b) else ''
                             for i, b in best.items()]
-    g['opportunity'] = g['flag_a'] | g['flag_b']
+    g['opportunity'] = g['top10_multi'] | g['top3_any']
     return g
 
 
@@ -343,6 +344,7 @@ def cmd_preflight(a):
 HEAD = Font(bold=True, color='FFFFFF')
 FILL = PatternFill('solid', fgColor='111111')
 WRAP = Alignment(wrap_text=True, vertical='top')
+INPUT_FILL = PatternFill('solid', fgColor='FFF2CC')
 
 
 def sheet(wb, name, header, rows, widths=None):
@@ -364,6 +366,29 @@ def sheet(wb, name, header, rows, widths=None):
 
 def val(x):
     return None if pd.isna(x) else (int(x) if float(x).is_integer() else float(x))
+
+
+def page_type(url):
+    p = path_of(url)
+    return 'Home page' if p.strip('/') == '' else ('Blog or article' if BLOG_PATTERN.search(p.lower()) else 'Other page')
+
+
+def best_page(rows, comps):
+    """The competitor page with the most keywords in the top 10 among these keywords. Home pages are skipped (not a page to model).
+    Ties: more keywords at any position, then the better best position. Same page with or without www counts once."""
+    stats = {}
+    for d in comps:
+        for u, pos in zip(rows[f'url_{d}'], rows[d]):
+            if isinstance(u, str) and pd.notna(pos) and path_of(u).strip('/') != '':
+                t = stats.setdefault((norm_url(u), d), [0, 0, 1e9, u])
+                t[0] += int(pos <= TOP_N)
+                t[1] += 1
+                t[2] = min(t[2], pos)
+    ranked = [(k, v) for k, v in stats.items() if v[0] > 0]
+    if not ranked:
+        return 'No competitor page (other than a home page) in the top 10', '', '', ''
+    (key, d), v = sorted(ranked, key=lambda kv: (-kv[1][0], -kv[1][1], kv[1][2], kv[0][0]))[0]
+    return v[3], page_type(v[3]), d, v[0]
 
 
 def cmd_build(a):
@@ -391,31 +416,39 @@ def cmd_build(a):
         out = [r['keyword'], val(r['est_volume']), r['group']]
         if with_services:
             out.append(', '.join(r['services']))
-        out += [r['location'], 'Yes' if r['flag_a'] else '', 'Yes' if r['flag_b'] else '', int(r['top10_count']),
+        out += [r['location'], 'Yes' if r['top10_multi'] else '', 'Yes' if r['top3_any'] else '', int(r['top10_count']),
                 r['best_competitor'], val(r['best_position']), r['best_url']]
         out += [val(r[d]) for d in comps]
         return out
-    kw_head = ['Keyword', 'Estimated volume', 'Group', 'Services', 'Location', 'A: several competitors top 10',
-               'B: a competitor top 3', 'Competitors in top 10', 'Best-ranking competitor', 'Best position', 'Best competitor page'] + [f'{d} position' for d in comps]
+    kw_head = ['Keyword', 'Estimated volume', 'Group', 'Services', 'Location', '2+ competitors in top 10',
+               '1+ competitor in top 3', 'Competitors in top 10', 'Best-ranking competitor', 'Best position', 'Best competitor page'] + [f'{d} position' for d in comps]
     widths = {'Keyword': 38, 'Services': 28, 'Best competitor page': 50, 'Best-ranking competitor': 28}
 
     # service rows: a keyword counts under every service it matches
+    comp_cols = [f'Keywords where {d} is top 10' for d in comps]
+    svc_head = ['Service', 'Offered by our client (SEO fills in: Yes or No)', 'Non-branded keywords', 'Keywords with 2+ competitors in top 10',
+                'Keywords with 1+ competitor in top 3', 'Keywords with 2+ in top 10 or 1+ in top 3', 'Local keywords for this service',
+                'Local keywords with 2+ in top 10 or 1+ in top 3', 'Best-performing competitor page', 'Looks like', 'Competitor with that page',
+                'Keywords that page has in top 10 (for this service)', 'Competitor best on most keywords'] + comp_cols + \
+               ['Highest estimated-volume keywords (each volume is the tool\'s estimate)']
     srows = []
     for name, _ in services:
         s = kept[(kept['group'] == 'Service') & kept['services'].map(lambda x: name in x)]
         lc = kept[(kept['group'] == 'Local') & kept['services'].map(lambda x: name in x)]
+        both = pd.concat([s, lc])
+        page, page_kind, page_comp, page_n = best_page(both, comps)
         loc_cells = [len(lc), int(lc['opportunity'].sum())]
         if s.empty:
-            srows.append([name, 0, 0, 0, 0, *loc_cells, '', *[0] * len(comps), 'No non-local competitor keywords matched. Not the same as no demand: check the term.'])
+            srows.append([name, '', 0, 0, 0, 0, *loc_cells, page, page_kind, page_comp, page_n, '', *[0] * len(comps),
+                          'No non-local competitor keywords matched. Not the same as no demand: check the term.'])
             continue
         best_counts = Counter(c for b in s['best_competitor'] for c in b.split(', ') if c)
         top = s.sort_values('est_volume', ascending=False).head(3)
-        srows.append([name, len(s), int(s['flag_a'].sum()), int(s['flag_b'].sum()), int(s['opportunity'].sum()), *loc_cells,
-                      best_counts.most_common(1)[0][0], *[int((s[d] <= TOP_N).sum()) for d in comps],
+        srows.append([name, '', len(s), int(s['top10_multi'].sum()), int(s['top3_any'].sum()), int(s['opportunity'].sum()), *loc_cells,
+                      page, page_kind, page_comp, page_n, best_counts.most_common(1)[0][0], *[int((s[d] <= TOP_N).sum()) for d in comps],
                       '; '.join(f'{k} (est. {int(v):,})' if pd.notna(v) else k for k, v in zip(top['keyword'], top['est_volume']))])
-    srows.sort(key=lambda r: (-(r[4] + r[6]), -(r[1] + r[5]), r[0]))
-    svc_head = ['Service', 'Non-branded keywords', 'A: several competitors top 10', 'B: a competitor top 3', 'A or B',
-                'Local keywords for this service', 'Local: A or B', 'Competitor best on most keywords'] + [f'Keywords where {d} is top 10' for d in comps] + ['Highest estimated-volume keywords (each volume is the tool\'s estimate)']
+    # most keywords with the 2+ or 1+ rule met (non-local plus local), then most keywords
+    srows.sort(key=lambda r: (-(r[5] + r[7]), -(r[2] + r[6]), r[0]))
 
     # competitor pages
     long = []
@@ -423,12 +456,12 @@ def cmd_build(a):
         sub = kept[kept[d].notna() & kept[f'url_{d}'].notna()]
         for u, grp in sub.groupby(f'url_{d}'):
             p = path_of(u)
-            ptype = 'Home page' if p.strip('/') == '' else ('Blog or article' if BLOG_PATTERN.search(p.lower()) else 'Other page')
+            ptype = page_type(u)
             svc = Counter(s for l in grp['services'] for s in l).most_common(1)
             long.append([d, u, ptype, len(grp), int((grp[d] <= TOP_N).sum()), int(grp['opportunity'].sum()),
                          svc[0][0] if svc else '', val(grp[d].min())])
     long.sort(key=lambda r: (-r[5], -r[3]))
-    page_head = ['Competitor', 'Page', 'Looks like', 'Non-branded keywords it ranks for', 'Of those, top 10', 'Of those, flagged A or B',
+    page_head = ['Competitor', 'Page', 'Looks like', 'Non-branded keywords it ranks for', 'Of those, top 10', 'Of those, with 2+ in top 10 or 1+ in top 3',
                  'Service it matches most', 'Best position']
 
     # summary
@@ -439,9 +472,9 @@ def cmd_build(a):
         ['No competitor ranks (empty position columns)', no_rank], ['Non-branded keywords analysed', len(kept)],
         ['In a service group', int(grp_counts.get('Service', 0))], ['In the Local group (city or near me)', int(grp_counts.get('Local', 0))],
         ['Unassigned (no service or city term matched)', int(grp_counts.get('Unassigned', 0))],
-        ['Flagged A (2 or more competitors in the top 10)', int(kept['flag_a'].sum())],
-        ['Flagged B (a competitor in the top 3)', int(kept['flag_b'].sum())],
-        ['Flagged A or B', int(kept['opportunity'].sum())], [],
+        ['Keywords with 2+ competitors in the top 10', int(kept['top10_multi'].sum())],
+        ['Keywords with 1+ competitor in the top 3', int(kept['top3_any'].sum())],
+        ['Keywords with 2+ in the top 10 or 1+ in the top 3', int(kept['opportunity'].sum())], [],
         ['Per competitor', 'Keywords in top 10 / top 3 / total ranking']]
     for d in comps:
         sumrows.append([d, f'{int((kept[d] <= TOP_N).sum())} / {int((kept[d] <= TOP_BEST).sum())} / {int(kept[d].notna().sum())}'])
@@ -454,7 +487,9 @@ def cmd_build(a):
                 *[[w, c] for w, c in top_un]]
     readme = [
         ['What this is', 'Non-branded searches that competitors rank for, grouped by service, to choose what a new site should target. There is no site to crawl, so nothing here compares against an existing site.'],
-        ['Flags', f'A = at least {MULTI_MIN} competitors rank in the top {TOP_N}. B = at least one competitor ranks in the top {TOP_BEST}. Best-ranking competitor, position and page are shown for every keyword.'],
+        ['Opportunity rules', f'A keyword has 2+ competitors in the top {TOP_N} when at least {MULTI_MIN} competitors rank {TOP_N} or better, and 1+ competitor in the top {TOP_BEST} when at least one ranks {TOP_BEST} or better. Best-ranking competitor, position and page are shown for every keyword.'],
+        ['Best-performing page', 'For each service: the competitor page with the most keywords in the top 10 among that service\'s keywords (non-local and local). Home pages are skipped. Ties go to the page with more keywords at any position. It is a count of keywords, not traffic.'],
+        ['Offered by our client', 'Blank for the SEO to fill in (Yes or No) once the client confirms which services it offers.'],
         ['Estimated volume', 'The tool\'s estimate for the keyword. It is not a traffic forecast or a promise. Volumes are never added together here.'],
         ['Snapshot', 'Positions are a snapshot of keywords the tool tracks (mostly the top 100). A service with few keywords may be untracked, not undemanded.'],
         ['Groups', 'A keyword that matches a city or "near me" is in the Local group only. Other keywords are in every service group whose term they contain, so service rows can overlap. Keywords that match nothing are in Unassigned for review.'],
@@ -466,7 +501,13 @@ def cmd_build(a):
     wb.remove(wb.active)
     sheet(wb, 'Read Me', ['Topic', 'Detail'], readme, {'Topic': 24, 'Detail': 120})
     sheet(wb, 'Summary', ['Measure', 'Value'], sumrows, {'Measure': 52, 'Value': 60})
-    sheet(wb, 'Service opportunities', svc_head, srows, {'Service': 28, svc_head[-1]: 70})
+    ws = sheet(wb, 'Service opportunities', svc_head, srows, {'Service': 28, svc_head[1]: 22, 'Best-performing competitor page': 60, svc_head[-1]: 70})
+    if srows:
+        dv = DataValidation(type='list', formula1='"Yes,No"', allow_blank=True)
+        ws.add_data_validation(dv)
+        dv.add(f'B2:B{len(srows) + 1}')
+        for r in range(2, len(srows) + 2):
+            ws.cell(r, 2).fill = INPUT_FILL
     sheet(wb, 'Keywords', kw_head, [row(r) for _, r in kept[kept['group'] != 'Local'].iterrows()], widths)
     sheet(wb, 'Local', kw_head, [row(r) for _, r in kept[kept['group'] == 'Local'].iterrows()], widths)
     sheet(wb, 'Competitor pages', page_head, long, {'Page': 70, 'Service it matches most': 28})
@@ -482,7 +523,7 @@ def cmd_build(a):
         problems.append('group counts do not add up to the keywords analysed')
     raw_a = int(((kept[comps] <= TOP_N).sum(axis=1) >= MULTI_MIN).sum())
     raw_b = int((kept[comps].min(axis=1) <= TOP_BEST).sum())
-    if raw_a != int(kept['flag_a'].sum()) or raw_b != int(kept['flag_b'].sum()):
+    if raw_a != int(kept['top10_multi'].sum()) or raw_b != int(kept['top3_any'].sum()):
         problems.append('flag counts differ from a recount')
     if len(g) != len(removed) + no_rank + len(kept):
         problems.append('removed + empty + analysed does not equal the gap rows')
@@ -494,7 +535,7 @@ def cmd_build(a):
         print(f'  WARN: {m}')
     print(f'Wrote {a.out}')
     print(f'{len(kept):,} non-branded keywords: {grp_counts.get("Service", 0)} service, {grp_counts.get("Local", 0)} local, {grp_counts.get("Unassigned", 0)} unassigned; '
-          f'{int(kept["flag_a"].sum())} flagged A, {int(kept["flag_b"].sum())} flagged B.')
+          f'{int(kept["top10_multi"].sum())} with 2+ in top 10, {int(kept["top3_any"].sum())} with 1+ in top 3.')
     if problems:
         raise SystemExit('CHECK FAILED: ' + '; '.join(problems))
     if top_un:
