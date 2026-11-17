@@ -7,6 +7,7 @@
   python audit.py candidates --base https://example.com --priority priority.csv --service-regex REGEX
       [--gallery-regex REGEX] [--low-value-regex REGEX] [--exclude-regex REGEX]
       [--gsc-pages gsc_pages.csv] [--gsc-queries gsc_queries.csv] [--generic-anchors 'click here|read more|...']
+      [--intent-phrases 'book now|free quote|...'] [--intent-ok-regex REGEX]
       Writes work/candidates.csv, work/service_links.csv, work/gallery.csv, work/wrong_target.csv,
       work/generic_anchors.csv, work/baseline.csv for Claude to review. Every URL pattern comes from the site's own URLs
       (see the folder table prep prints); nothing about the site's structure is assumed.
@@ -14,6 +15,8 @@
       --low-value-regex  pages a service-named anchor should not point to, e.g. blog, gallery,
                          reviews, contact (skip = no wrong-target check)
       --exclude-regex    pages that are never worth editing, e.g. tag/category/pagination archives
+      --intent-phrases   '|'-separated commercial/transactional anchor phrases, replaces COMMERCIAL_INTENT below (optional)
+      --intent-ok-regex  pages a commercial-intent anchor may legitimately point to, e.g. contact, booking (optional)
       --generic-anchors  '|'-separated generic anchor phrases, replaces GENERIC_ANCHORS below (optional)
   python audit.py build --base https://example.com --rows work/rows.csv --client NAME --out FILE.xlsx
       [--findings work/findings.txt]
@@ -31,6 +34,10 @@ ACTIONS = ['Add link', 'Add link (template)', 'Change link target']
 # Generic anchors: body links to a priority page whose whole anchor text is one of these (or a bare URL).
 # Edit per site, or override with --generic-anchors.
 GENERIC_ANCHORS = ['click here', 'read more', 'learn more', 'here', 'more', 'this page', 'this link', 'link', 'this']
+# Commercial intent: an anchor containing one of these that points to a non-service page goes in wrong_target.csv.
+# Keep to strong signals; edit per site, or override with --intent-phrases.
+COMMERCIAL_INTENT = ['book now', 'book online', 'book a', 'book your', 'schedule', 'appointment', 'consultation',
+                     'free quote', 'get a quote', 'request a quote', 'quote', 'estimate', 'pricing', 'near me', 'get started']
 TYPES = ['Related content', 'Related service', 'Gallery & reviews', 'Wrong target']
 
 def norm(u, base):
@@ -154,14 +161,24 @@ def candidates(a):
                   'examples': ' | '.join(rel.url.head(3).str.replace(base, ''))})
     pd.DataFrame(G).to_csv(f'{W}/gallery.csv', index=False)
 
+    ip = [x.strip().lower() for x in a.intent_phrases.split('|') if x.strip()] if a.intent_phrases else COMMERCIAL_INTENT
+    intent_rx = re.compile(r'\b(?:' + '|'.join(re.escape(p).replace(r'\ ', r'\s+') for p in ip) + r')s?\b', re.I) if ip else None
     WT = []
-    for _, r in (body.iterrows() if a.low_value_regex else []):
-        if r.dst in services or not re.search(a.low_value_regex, r.dst.replace(base, '')): continue
-        for s in services:
-            if terms_rx(terms[s]).search(r.anchor):
-                WT.append({'source': r.src, 'anchor': r.anchor, 'current_target': r.dst, 'suggested_target': s,
-                           'source_already_links_to_suggested': (r.src, s) in body_pairs, 'is_priority': s in targets}); break
-    pd.DataFrame(WT).to_csv(f'{W}/wrong_target.csv', index=False)
+    for _, r in body.iterrows():
+        if r.dst in services: continue
+        path = r.dst.replace(base, '')
+        hit = False
+        if a.low_value_regex and re.search(a.low_value_regex, path):
+            for s in services:
+                if terms_rx(terms[s]).search(r.anchor):
+                    WT.append({'source': r.src, 'anchor': r.anchor, 'current_target': r.dst, 'suggested_target': s,
+                               'source_already_links_to_suggested': (r.src, s) in body_pairs, 'is_priority': s in targets,
+                               'reason': 'anchor names a service'}); hit = True; break
+        if not hit and intent_rx and intent_rx.search(r.anchor) and not (a.intent_ok_regex and re.search(a.intent_ok_regex, path)):
+            WT.append({'source': r.src, 'anchor': r.anchor, 'current_target': r.dst, 'suggested_target': '',
+                       'source_already_links_to_suggested': False, 'is_priority': '', 'reason': 'commercial intent'})
+    WT = pd.DataFrame(WT, columns=['source', 'anchor', 'current_target', 'suggested_target', 'source_already_links_to_suggested', 'is_priority', 'reason']).drop_duplicates(['source', 'anchor', 'current_target'])
+    WT.to_csv(f'{W}/wrong_target.csv', index=False)
 
     ga = [x.strip().lower() for x in a.generic_anchors.split('|') if x.strip()] if a.generic_anchors else GENERIC_ANCHORS
     def is_generic(x):
@@ -186,7 +203,7 @@ def candidates(a):
     if not a.gallery_regex: print('gallery check skipped (no --gallery-regex)')
     if not a.low_value_regex: print('wrong-target check skipped (no --low-value-regex)')
     print('gallery/review link-up:', [(g['priority_page'].replace(base, ''), g['gallery_review_pages'], g['linking_up_outside_menu']) for g in G])
-    print(f'wrong-target anchors: {len(WT)} (source already links to the service: {sum(w["source_already_links_to_suggested"] for w in WT)})')
+    print(f'wrong-target anchors: {len(WT)} by reason: {WT.reason.value_counts().to_dict()} (source already links to the service: {int(WT.source_already_links_to_suggested.sum())})')
     print(f'generic anchors on body links to priority pages: {len(GA)} from {GA.source.nunique() if len(GA) else 0} pages')
     print('\nterms used:'); [print(' ', t.replace(base, ''), '->', terms[t]) for t in targets]
 
@@ -305,7 +322,7 @@ if __name__ == '__main__':
     p.add_argument('--base', required=True); p.add_argument('--body-regex')
     c = sub.add_parser('candidates'); c.add_argument('--base', required=True); c.add_argument('--priority', required=True)
     c.add_argument('--service-regex', required=True); c.add_argument('--gsc-pages'); c.add_argument('--gsc-queries')
-    c.add_argument('--gallery-regex'); c.add_argument('--low-value-regex'); c.add_argument('--exclude-regex'); c.add_argument('--generic-anchors')
+    c.add_argument('--gallery-regex'); c.add_argument('--low-value-regex'); c.add_argument('--exclude-regex'); c.add_argument('--generic-anchors'); c.add_argument('--intent-phrases'); c.add_argument('--intent-ok-regex')
     b = sub.add_parser('build'); b.add_argument('--base', required=True); b.add_argument('--rows', required=True)
     b.add_argument('--client', default=''); b.add_argument('--out', default='internal-linking-audit.xlsx')
     b.add_argument('--findings'); b.add_argument('--note', default='')
