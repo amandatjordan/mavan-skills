@@ -128,6 +128,17 @@ class ServiceGapAudit(unittest.TestCase):
         default = pd.read_excel(self.out, "Read Me", header=None).fillna("")
         self.assertNotIn("Main practice", " ".join(default[default[0] == "Practice type"].iloc[0].astype(str)))
 
+    def test_dental_taxonomy_rows_are_not_audited(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        raw = pd.read_excel(TAXONOMY, "Taxonomy", dtype=str).fillna("")
+        self.assertTrue((raw["Practice Type"] == "Dental").any())
+        tax = mod.Taxonomy(TAXONOMY)
+        self.assertFalse(any(n["practice"].lower() == "dental" for n in tax.nodes))
+        self.assertEqual(tax.classify_keyword("porcelain veneers cost")[0], "Unmapped")
+
     def test_taxonomy_is_not_accepted_as_gsc(self):
         r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--practice", "medspa",
                 "--gsc", str(TAXONOMY), "--out", str(Path(self.tmp.name) / "x.xlsx"))
