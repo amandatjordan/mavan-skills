@@ -25,6 +25,7 @@ TAX = [
     ['Brand / Device', 'Injectables', 'Filler', 'Lip Filler; Chin Filler', 'Brandz', '', 'Both', 'Filler', '', 'brandz'],
     ['Brand / Device', 'Injectables', 'Filler', '', 'Oldy', '', 'Both', 'Filler', 'Discontinued. Do not flag as a gap.', 'oldy'],
     ['Service', 'Dental - Implants', 'Implants', '', '', '', 'Dental', '', '', 'implant'],
+    ['Sub-Service', 'Dental - Implants', 'Implants', 'Full-Arch', '', '', 'Dental', 'Implants', '', 'full.?arch'],
     ['Concern', 'Concerns', '', '', '', 'Lines', 'Both', 'Filler; Facials', 'Not a page gap on its own.', 'wrinkle|lines'],
     ['Concern', 'Concerns', '', '', '', 'Marks', 'Both', 'Facials', 'Not a page gap on its own.', 'marks'],
     ['Service', 'Skin', 'Facials', '', '', '', 'Both', '', '', 'facial'],
@@ -44,6 +45,7 @@ KW = [  # keyword, volume, level, service, sub, brand, concern, near me, geo
     ('facial', 3000, 'Service', 'Facials', '', '', '', '', ''),
     ('wrinkles', 800, 'Concern', '', '', '', 'Lines', '', ''),
 ]
+BLANK_KD = {'wrinkles'}  # concern keywords added from a Google Ads check have no difficulty or CPC
 
 
 def make_taxonomy(path):
@@ -58,7 +60,8 @@ def make_taxonomy(path):
     k = wb.create_sheet('All Keywords')
     k.append(KW_HEAD)
     for kw, vol, lvl, svc, sub, brand, con, near, geo in KW:
-        k.append([kw, 'Medspa', vol, 20, 1.5, 'Concern' if lvl == 'Concern' else 'Service', lvl, '', svc, sub, brand, con, near, geo])
+        blank = kw in BLANK_KD
+        k.append([kw, 'Medspa', vol, None if blank else 20, None if blank else 1.5, 'Concern' if lvl == 'Concern' else 'Service', lvl, '', svc, sub, brand, con, near, geo])
     wb.save(path)
 
 
@@ -137,6 +140,24 @@ class ResearchTest(unittest.TestCase):
         self.assertEqual(pages.loc['Implants', 'Keywords in taxonomy'], 0)
         self.assertIn('research its volume separately', pages.loc['Implants', 'Notes'])
 
+    def test_dental_has_no_minimum_volume(self):
+        p, out = self.match_and_build(services='full arch')
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        self.assertEqual(pages.loc['Implants > Full-Arch', 'Recommendation'], 'Own page')   # no keywords, still a page
+        self.assertIn('no minimum volume', pages.loc['Implants > Full-Arch', 'Why'])
+        p, out = self.match_and_build(services='implant')
+        conf = pd.read_excel(out, sheet_name='Confirm with client')
+        self.assertIn('Full-Arch', set(conf['Sub-Service / Brand / Device']))   # unlisted dental item listed with no cutoff
+
+    def test_blank_difficulty_and_cpc_are_allowed(self):
+        p, out = self.match_and_build(services='filler', concerns='wrinkles')
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        pages = pd.read_excel(out, sheet_name='Pages')
+        row = pages[pages['Service / sub-service'] == 'Lines'].iloc[0]
+        self.assertEqual(row['Primary keyword'], 'wrinkles')
+        self.assertTrue(pd.isna(row['Primary keyword difficulty']))
+
     def test_internal_links_follow_hierarchy_and_concerns(self):
         p, out = self.match_and_build(services='lip filler; chin filler; facial', products='brandy', concerns='wrinkles; marks')
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
@@ -182,6 +203,13 @@ class RealTaxonomySmoke(unittest.TestCase):
         other = SKILL.parent / 'service-gap-audit/references/service-taxonomy.xlsx'
         self.assertEqual(other.read_bytes(), REAL_TAXONOMY.read_bytes(),
                          'service-taxonomy.xlsx differs between service-gap-audit and new-site-keyword-research: copy the updated file to both')
+
+    def test_every_concern_has_keywords(self):
+        tax = pd.read_excel(REAL_TAXONOMY, sheet_name='Taxonomy')
+        kw = pd.read_excel(REAL_TAXONOMY, sheet_name='All Keywords')
+        have = set(kw[kw.Class == 'Concern'].Concern.dropna())
+        missing = [c for c in tax[tax.Level == 'Concern'].Concern if c not in have]
+        self.assertEqual(missing, [], 'concerns with no keywords in the taxonomy')
 
     def test_every_concern_points_to_real_services(self):
         tax = pd.read_excel(REAL_TAXONOMY, sheet_name='Taxonomy')

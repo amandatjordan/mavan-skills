@@ -26,7 +26,7 @@ Ask for all of this in **one** message, before doing anything else. Say the volu
 | **Top concerns** to address | Optional, up to 5 | Problems patients search for ("double chin", "acne scars"). A new site gets very few concern pages, so suggest up to 5 and accept none |
 | Client name | Optional | Names the workbook |
 
-Dental services and concerns are in the taxonomy and are handled like any other, but the taxonomy has no keyword data for them yet. Their rows come out with no keywords and a note to research volume separately; tell the person this when they list dental services.
+Dental is handled with **no minimum volume**: every dental service, sub-service, brand and concern the client lists gets its own page. The taxonomy has keyword data for dental concerns only, so other dental rows come out with no keywords and a note to research volume separately; tell the person this when they list dental services.
 
 Done when the person has given services and products (or said there are none) and said whether they want concerns.
 
