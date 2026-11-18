@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Service Gap Audit.
 
-  python build.py inspect --crawl export.csv --cities "City, City" --practice medspa|surgical|both --out work
+  python build.py inspect --crawl export.csv --cities "City, City" --practice medspa|surgical|dental|both (combine with commas: medspa,dental) --out work
   python build.py build   --crawl export.csv --pages work/pages.tsv --cities "City, City" --practice ... \
                           --out DOMAIN_service_gap_audit.xlsx [--gsc GSC_SHEET [--gsc-tab TAB]] [--taxonomy FILE]
 
@@ -110,7 +110,7 @@ def cities_list(s):
 
 # ------------------------------------------------------------------ taxonomy
 class Taxonomy:
-    def __init__(self, path):
+    def __init__(self, path, include_dental=False):
         x = pd.read_excel(path, sheet_name=None, dtype=str)
         for need in ("Taxonomy", "Filters", "All Keywords"):
             if need not in x:
@@ -126,8 +126,8 @@ class Taxonomy:
             elif lvl == "Service":
                 name = r["Service"].strip()
             rx = r["Match Terms (regex)"].strip()
-            if not rx or r["Practice Type"].strip().lower() == "dental":
-                continue  # Dental rows are reference only: the audit covers med spa and surgical services
+            if not rx or (r["Practice Type"].strip().lower() == "dental" and not include_dental):
+                continue  # Dental rows are used only when the practice type includes dental
             subs = [s.strip() for s in r["Sub-Service"].split(";") if s.strip()] if lvl == "Brand / Device" else []
             implies = [s.strip() for s in r["Implies Offered"].split(";") if s.strip()]
             self.nodes.append(dict(idx=i, level=lvl, name=name, service=r["Service"].strip(), category=r["Category"].strip(),
@@ -201,10 +201,33 @@ class Taxonomy:
         return self.names.get(name.strip().lower())
 
 
+PRACTICES = ("medspa", "surgical", "dental")
+
+
+def parse_practice(text):
+    """'both' means medspa + surgical (dental is never added unless named). Returns the practice types in a fixed order."""
+    got = set()
+    for w in re.split(r"[,+/ ]+", str(text).lower().strip()):
+        if not w:
+            continue
+        if w == "both":
+            got |= {"medspa", "surgical"}
+        elif w in PRACTICES:
+            got.add(w)
+        else:
+            sys.exit(f"--practice {text!r}: {w!r} is not medspa, surgical, dental or both. Combine with commas, e.g. medspa,dental.")
+    if not got:
+        sys.exit("--practice is empty. Use medspa, surgical, dental or both, combined with commas.")
+    return [p for p in PRACTICES if p in got]
+
+
 def fits_practice(node_practice, practice):
-    if practice == "both" or node_practice in ("Both", ""):
+    """A Both node (med spa and surgical) fits when the practice offers either; Dental nodes only when dental is listed."""
+    if node_practice == "":
         return True
-    return (practice == "medspa" and node_practice == "Medspa") or (practice == "surgical" and node_practice == "Surgical")
+    if node_practice == "Both":
+        return "medspa" in practice or "surgical" in practice
+    return node_practice.lower() in practice
 
 
 def flagged_do_not(note):
@@ -296,8 +319,15 @@ def suggest(r, tax, cities):
     return t, (node["name"] if node else ""), (node["service"] if node else ""), city
 
 
+def check_main_practice(a):
+    if getattr(a, "main_practice", "").strip().lower() == "dental":
+        sys.exit("Dental is audited now: pass --practice dental (or medspa,dental), not --main-practice Dental. "
+                 "--main-practice is for a main business the taxonomy does not cover (LASIK, weight loss and so on).")
+
+
 def cmd_inspect(a):
-    tax = Taxonomy(a.taxonomy)
+    check_main_practice(a)
+    tax = Taxonomy(a.taxonomy, include_dental="dental" in parse_practice(a.practice))
     rows, cols = load_crawl(a.crawl, overrides_from(a))
     indexability(rows)
     cities = cities_list(a.cities)
@@ -387,12 +417,13 @@ def prio(gap, vol):
 
 
 def cmd_build(a):
-    tax = Taxonomy(a.taxonomy)
+    check_main_practice(a)
+    practice = parse_practice(a.practice)
+    tax = Taxonomy(a.taxonomy, include_dental="dental" in practice)
     rows, cols = load_crawl(a.crawl, overrides_from(a))
     indexability(rows)
     pages_cfg, new_nodes = read_pages(a.pages, tax)
     cities = cities_list(a.cities)
-    practice = a.practice.lower()
     has_h2 = bool(cols["h2"])
     live = [r for r in rows if r["status"] == 200]
     for r in live:
@@ -559,6 +590,8 @@ def cmd_build(a):
         else:
             cov = "None"
         vol = node_vol(n) if not n.get("new") else 0
+        # Dental has no keyword volume in the taxonomy: rank it at the High tier instead of letting "no data" push every dental gap to P3
+        tvol = HIGH if (n["practice"].lower() == "dental" and vol == 0) else vol
         st = status[k]
         gap = ""
         if not flagged_do_not(n["note"]):
@@ -572,9 +605,9 @@ def cmd_build(a):
                 gap = "Missing page (blog only)"
             elif cov in ("Gallery only", "Concern page only", "Meta description mention only") or (cov == "None" and st in ("Confirmed", "Likely")):
                 gap = "Missing page (offered)"
-            elif st == "Unknown (parent offered)" and vol >= HIGH:
+            elif st == "Unknown (parent offered)" and tvol >= HIGH:
                 gap = "Confirm Sub-Service, then page"
-        p = prio(gap, vol) if gap else ""
+        p = prio(gap, tvol) if gap else ""
         if gap and p is None:
             gap, p = "", ""
         out.append(dict(node=n, key=k, e=e, best=best, cov=cov, vol=vol, status=st, reasons=reasons.get(k, []),
@@ -763,7 +796,7 @@ def write_workbook(a, tax, cols, rows, live, out, recs, kmap, excl, has_gsc, has
         ("Inputs", f"Crawl export: {os.path.basename(a.crawl)} ({len(rows)} URLs, {len(live)} live). Taxonomy: {tax.version}. "
                    f"Search Console: {'used (' + os.path.basename(a.gsc) + ')' if has_gsc else 'not provided, so there is no Client GSC Impressions column. Provide the GSC Google Sheet and re-run to add it.'}"),
         ("Fields used", ", ".join(k for k, v in cols.items() if v) + (". No H2 columns in the export, so H2 section matching was skipped." if not has_h2 else ".")),
-        ("Practice type", f"{practice.title()}. " + (f"Main practice: {a.main_practice.strip()}. Its own services are not in the taxonomy and were not audited. " if getattr(a, "main_practice", "").strip() else "") + f"Service-area cities kept: {', '.join(c.title() for c in cities) or 'none given'}."),
+        ("Practice type", f"{' + '.join(p.title() for p in practice)}. " + ("Dental has no keyword volume in the taxonomy except for dental concerns, so dental services show no volume and are ranked at the High priority tier. " if "dental" in practice else "") + (f"Main practice: {a.main_practice.strip()}. Its own services are not in the taxonomy and were not audited. " if getattr(a, "main_practice", "").strip() else "") + f"Service-area cities kept: {', '.join(c.title() for c in cities) or 'none given'}."),
         ("Level names", "Category > Service > Sub-Service > Brand / Device. A Concern is a searched problem, never a page gap on its own."),
         ("Page types", "Set per page by reviewing the crawl (pages.tsv), not from folder names: Service, Concern, Gallery, Blog, Location, Utility."),
         ("Offered Status", "Confirmed = own page, H2 section, gallery, concern page, or implied by a brand / Sub-Service. Likely = only a meta description or blog mention. Unknown (parent offered) = Sub-Service of a Confirmed Service. No evidence."),
@@ -928,8 +961,8 @@ def main():
         sp.add_argument("--crawl", required=True)
         sp.add_argument("--taxonomy", default=DEFAULT_TAXONOMY)
         sp.add_argument("--cities", default="", help="Service-area cities, comma separated")
-        sp.add_argument("--practice", default="both", choices=["medspa", "surgical", "both"])
-        sp.add_argument("--main-practice", default="", help="Main practice type when it is not med spa or surgical (e.g. Dental)")
+        sp.add_argument("--practice", default="both", help="medspa, surgical, dental or both (= medspa + surgical); combine with commas, e.g. medspa,dental")
+        sp.add_argument("--main-practice", default="", help="Main practice type the taxonomy does not cover (e.g. LASIK). Dental is a --practice value, not a main practice")
         sp.add_argument("--out", required=True)
         for k in COLS:
             sp.add_argument(f"--{k}-col")

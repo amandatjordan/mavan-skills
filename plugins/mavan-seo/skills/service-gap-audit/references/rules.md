@@ -15,7 +15,7 @@ Decide each page's type from what the page is, using its H1, title and path toge
 | Location | A city or "serving X" landing page | Nothing (not a service page) |
 | Utility | Home, about, team, contact, policies, specials, financing, forms, hub pages that only list links, with no content of their own | Nothing |
 
-A page about a service the taxonomy does not cover because it belongs to the main practice (a dental, LASIK or weight loss service when the practice is also a med spa: implants, Invisalign, LASIK) is **Utility** with no node. It is outside the audit, so never write it as `NEW:`.
+A page about a service the taxonomy does not cover because it belongs to the main practice (a LASIK or weight loss service when the practice is also a med spa) is **Utility** with no node. It is outside the audit, so never write it as `NEW:`. Dental services are in the taxonomy: when the practice type includes dental (`--practice medspa,dental`), a page about implants or Invisalign gets its dental node like any other service.
 
 A **service category page** (e.g. "Injectables", "Body": a page with its own content that introduces a group of treatments) whose H1 names a taxonomy Service is a Service page for that Service. A **hub page** (a page that only lists links to other pages, such as a blog tag, blog category or date archive page, or a bare list of services) that names no taxonomy node is Utility.
 

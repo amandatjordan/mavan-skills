@@ -119,25 +119,81 @@ class ServiceGapAudit(unittest.TestCase):
     def test_main_practice_noted_in_read_me(self):
         out = Path(self.tmp.name) / "audit_dental.xlsx"
         r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--cities", "Tampa",
-                "--practice", "medspa", "--main-practice", "Dental", "--domain", "example-medspa.com", "--out", str(out))
+                "--practice", "medspa", "--main-practice", "LASIK", "--domain", "example-medspa.com", "--out", str(out))
         self.assertEqual(r.returncode, 0, r.stderr)
         rm = pd.read_excel(out, "Read Me", header=None).fillna("")
         row = " ".join(rm[rm[0] == "Practice type"].iloc[0].astype(str))
-        self.assertIn("Main practice: Dental", row)
+        self.assertIn("Main practice: LASIK", row)
         self.assertIn("not audited", row)
         default = pd.read_excel(self.out, "Read Me", header=None).fillna("")
         self.assertNotIn("Main practice", " ".join(default[default[0] == "Practice type"].iloc[0].astype(str)))
 
-    def test_dental_taxonomy_rows_are_not_audited(self):
+    def _module(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location("build", SCRIPT)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        return mod
+
+    def test_dental_rows_load_only_when_dental_is_a_practice_type(self):
+        mod = self._module()
         raw = pd.read_excel(TAXONOMY, "Taxonomy", dtype=str).fillna("")
         self.assertTrue((raw["Practice Type"] == "Dental").any())
-        tax = mod.Taxonomy(TAXONOMY)
-        self.assertFalse(any(n["practice"].lower() == "dental" for n in tax.nodes))
-        self.assertEqual(tax.classify_keyword("porcelain veneers cost")[0], "Unmapped")
+        self.assertFalse(any(n["practice"].lower() == "dental" for n in mod.Taxonomy(TAXONOMY).nodes))
+        tax = mod.Taxonomy(TAXONOMY, include_dental=True)
+        self.assertTrue(any(n["practice"].lower() == "dental" for n in tax.nodes))
+        self.assertEqual(mod.Taxonomy(TAXONOMY).classify_keyword("porcelain veneers cost")[0], "Unmapped")
+
+    def test_practice_types_combine(self):
+        mod = self._module()
+        self.assertEqual(mod.parse_practice("both"), ["medspa", "surgical"])
+        self.assertEqual(mod.parse_practice("dental,medspa"), ["medspa", "dental"])
+        self.assertEqual(mod.parse_practice("medspa, surgical, dental"), ["medspa", "surgical", "dental"])
+        with self.assertRaises(SystemExit):
+            mod.parse_practice("lasik")
+        self.assertTrue(mod.fits_practice("Both", ["dental", "surgical"]))
+        self.assertFalse(mod.fits_practice("Both", ["dental"]))
+        self.assertFalse(mod.fits_practice("Dental", ["medspa", "surgical"]))
+        self.assertTrue(mod.fits_practice("Dental", ["medspa", "dental"]))
+        self.assertFalse(mod.fits_practice("Medspa", ["surgical"]))
+
+    def test_main_practice_dental_is_rejected(self):
+        r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--practice", "medspa",
+                "--main-practice", "Dental", "--out", str(Path(self.tmp.name) / "x.xlsx"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--practice dental", r.stdout + r.stderr)
+
+    def test_dental_audit(self):
+        root = Path(self.tmp.name) / "dental"
+        root.mkdir()
+        crawl = root / "crawl.csv"
+        site = "https://smile-dental.com"
+        rows = [("/", 200, "Indexable", "Smile Dental | Tampa", "", "Dentist in Tampa", 400),
+                ("/dental-implants", 200, "Indexable", "Dental Implants | Smile", "", "Dental Implants", 900),
+                ("/before-after/veneers", 200, "Indexable", "Veneers results", "", "Veneers", 6),
+                ("/clear-aligners", 200, "Not indexable", "Invisalign | Smile", "", "Clear Aligners", 800)]
+        with open(crawl, "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(HEADER)
+            for p in rows:
+                w.writerow([site + p[0], *p[1:]])
+        r = run("inspect", "--crawl", str(crawl), "--cities", "Tampa", "--practice", "dental", "--out", str(root / "work"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = root / "audit.xlsx"
+        r = run("build", "--crawl", str(crawl), "--pages", str(root / "work/pages.tsv"), "--cities", "Tampa",
+                "--practice", "dental", "--domain", "smile-dental.com", "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertNotIn("FAIL", r.stdout)
+        recs = pd.read_excel(out, "Recommendations", header=1).fillna("")
+        why = dict(zip(recs["Service Page Recommended"], recs["Why Recommended"]))
+        self.assertIn("Dental Veneers", why)                         # a gallery names it: offered, no page
+        self.assertIn("before & after", why["Dental Veneers"])
+        self.assertTrue(any("Confirm with client" in w for w in why.values()))   # no volume does not hide dental sub-services
+        self.assertNotIn("Botox", " ".join(why))                      # med spa services are not audited for a dental practice
+        rm = pd.read_excel(out, "Read Me", header=None).fillna("")
+        row = " ".join(rm[rm[0] == "Practice type"].iloc[0].astype(str))
+        self.assertIn("Dental", row)
+        self.assertIn("High priority tier", row)
 
     def test_taxonomy_is_not_accepted_as_gsc(self):
         r = run("build", "--crawl", str(self.crawl), "--pages", str(self.pages), "--practice", "medspa",
