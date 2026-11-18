@@ -262,6 +262,10 @@ class Small(Base):
         # the anchor is the linked page's own anchor text, not the section anchor text added to it for "Must appear on page"
         self.assertEqual(l[(l['From page'] == 'Filler > Lip Filler') & (l['To page'] == 'Filler')].iloc[0]['Anchor text'], 'facial fillers')
         self.assertEqual(self.road[self.road['Page'] == 'Filler'].iloc[0]['Must appear on page (anchor text other pages use to link here)'], 'facial fillers; cheek filler')
+        # the section's phrase has a link of its own (its own row), and the existing links keep the first phrase
+        own = l[(l['To page'] == 'Filler') & (l['Anchor text'] == 'cheek filler')]
+        self.assertEqual(list(zip(own['From page'], own['Where this link came from'])), [('Home', 'Added so every phrase has a link')])
+        self.assertEqual(set(l[(l['To page'] == 'Filler') & (l['Anchor text'] != 'cheek filler')]['Anchor text']), {'facial fillers'})
 
     def test_every_service_sub_service_and_brand_gets_a_link(self):
         make_research(self.r, [
@@ -281,6 +285,23 @@ class Small(Base):
         for pg in self.road[self.road['Page type'].isin(['Service', 'Sub-Service', 'Brand / Device'])]['Page']:
             self.assertIn(pg, inbound)
         self.assertIn('links were added', pd.read_excel(self.out, 'Read Me').fillna('').iloc[-1, 1])
+
+    def test_every_must_appear_phrase_gets_its_own_link_row(self):
+        make_research(self.r, [
+            page('Service', 'Filler', anchor='fillers', links='Lonely (Low)'),
+            page('Service', 'Lonely', anchor='lonely; second phrase; third phrase'),
+            page('Concern', 'Lines', anchor='lines'),                        # nothing links to it
+        ])
+        make_gap(self.g, [])
+        self.build()
+        l = self.links()
+        rows = {(f, to, a) for f, to, a in zip(l['From page'], l['To page'], l['Anchor text'])}
+        self.assertIn(('Filler', 'Lonely', 'lonely'), rows)                    # from the research sheet, first phrase
+        self.assertIn(('Home', 'Lonely', 'second phrase'), rows)               # Home does not link to Lonely yet
+        third = l[(l['To page'] == 'Lonely') & (l['Anchor text'] == 'third phrase')].iloc[0]
+        self.assertNotIn(third['From page'], ('Filler', 'Home', 'Lonely'))     # a page that does not already link to it
+        self.assertIn(('Home', 'Lines', 'lines'), rows)                        # a Concern nothing links to still gets its phrase linked
+        self.assertEqual(len(l[(l['To page'] == 'Lonely')]), len({(f, a) for f, a in zip(l[l['To page'] == 'Lonely']['From page'], l[l['To page'] == 'Lonely']['Anchor text'])}))
 
     def test_a_brand_whose_parent_is_only_a_section_is_linked_from_its_service(self):
         make_research(self.r, [

@@ -71,7 +71,7 @@ If it stops on a gap service or a page name, fix that row and run again. Done wh
 - Pick 3 page rows and compare the primary keyword and volume to the research Pages tab.
 - Pick 3 gap numbers and compare them to the Service opportunities tab (non-local plus local, of the matched service).
 - Pick 2 blog rows and compare the angle to the blog taxonomy's Lookup tab.
-- Internal links tab: pick 3 rows and compare them to the research Pages tab's "Internal links out" column. Every Service, Sub-Service and Brand / Device page on the Roadmap is in the To page column (the script checks this). Say how many links were added and why.
+- Internal links tab: pick 3 rows and compare them to the research Pages tab's "Internal links out" column. Every Service, Sub-Service and Brand / Device page on the Roadmap is in the To page column (the script checks this). Every phrase in "Must appear on page" is the anchor of at least one row (the script checks this). Say how many links were added and why.
 - Cut tab (only present when something is over 50): starts with the instruction row, has the same columns as the Roadmap with the reason last, and each cut page is there. Sections are not pages: each one is in "Sections to cover" on its parent page.
 
 Done when all five hold.
