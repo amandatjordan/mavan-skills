@@ -25,7 +25,7 @@ Ask for all of this in **one** message, before doing anything else.
 
 | Input | Required? | Notes |
 | --- | --- | --- |
-| **New site keyword research** workbook | Required | The .xlsx from `new-site-keyword-research`. |
+| **New site keyword research** workbook | Required | The .xlsx from `new-site-keyword-research`. Its Pages tab needs **Client offers it? (Yes / No)** filled in (only Yes rows are used; blank and No are left out) and, ideally, the yellow **Anchor text for links to this page** column filled in: it becomes "Must appear on page" |
 | **New-site keyword gap** workbook | Required | The .xlsx from `new-site-keyword-gap`. Its **Offered by our client** column on Service opportunities should be filled in: only Yes services count |
 | **Other pages that need content** | Ask, can be none | Pages we would write that are not in either sheet: packages, provider pages, location pages, events, financing, treatments by area or age, and anything else the person names. Give each a name and, if they can, a type (Package, Provider, Location, Event, Financing, Treatment by area, Treatment by age) |
 | Client name | Optional | Names the workbook |
@@ -77,8 +77,8 @@ Done when all five hold.
 
 ## Step 6: Report
 
-Send the workbook. Reply in a few sentences: how many rows by type, what was cut for the 50 cap (the number by group, and which Service pages if any), the extra pages, any warning, that the SEO must check the yellow primary keyword column (a primary keyword is only the highest-volume search for the page and may not be a buying search, for example a photo search) and replace it or add keywords, that the SEO fills in the yellow priority column and makes the final call, and the volume caveat (national, taxonomy-level, relative not absolute). Do not recap the steps.
+Send the workbook. Reply in a few sentences: how many rows by type, what was cut for the 50 cap (the number by group, and which Service pages if any), the extra pages, any warning, that the SEO must check the yellow primary keyword column (a primary keyword is only the highest-volume search for the page and may be a search from someone looking at pictures or reading about a topic, for example "face with wrinkles") and replace it or add keywords, that content must use the "Must appear on page" words (the anchor text other pages link with), that the SEO fills in the yellow priority column and makes the final call, and the volume caveat (national, taxonomy-level, relative not absolute). Do not recap the steps.
 
 ## Workbook
 
-Tabs: Read Me; Roadmap (number, page, page type, content to write, why, parent page or link target, primary keyword and national volume, competitor gap keywords, sections to cover, and three yellow columns for the SEO: the primary keyword to check, keywords the SEO adds or swaps in, and a High / Medium / Low priority dropdown); Cut for the 50-page cap (only when something is over 50). The Read Me's last row lists blogs that could not be added because a page is not in the blog taxonomy.
+Tabs: Read Me; Roadmap (number, page, page type, content to write, why, parent page or link target, primary keyword and national volume, competitor gap keywords, sections to cover, and must appear on page (the research sheet's anchor text), and three yellow columns for the SEO: the primary keyword to check, keywords the SEO adds or swaps in, and a High / Medium / Low priority dropdown); Cut for the 50-page cap (only when something is over 50). The Read Me's last row lists blogs that could not be added because a page is not in the blog taxonomy.

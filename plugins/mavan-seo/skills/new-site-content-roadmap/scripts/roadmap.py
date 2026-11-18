@@ -32,21 +32,24 @@ FIXED_PAGES = [                                  # never in the keyword sheets; 
 ]
 # Pages are added in this order until the cap is reached. Home, About Us and the SEO's extra pages come first and are never cut.
 TIER_ORDER = ['Service', 'Sub-Service', 'Brand / Device', 'Blog', 'Concern']
-SOURCE_RANK = {'Yes': 0, 'Implied': 1, 'Gap only': 2}   # within a tier: client-listed first
+SOURCE_RANK = {'Yes': 0, 'Implied': 1, 'Suggested': 2, 'Gap only': 3}   # within a tier: client-listed first
 SOURCE_TEXT = {
     'Yes': 'The client listed it.',
     'Implied': 'Added because it is the parent of a listed item. Confirm the client offers it.',
+    'Suggested': 'The taxonomy suggested it (the client did not list it) and the SEO confirmed the client offers it.',
     'Gap only': 'A service the client offers that competitors rank for. It was not in the keyword research.',
 }
 PRIORITIES = 'High,Medium,Low'
 CUT_TAB = 'Cut for the 50-page cap'
-KW_COL = 'Primary keyword (SEO: check it is a buying search, then update it or add keywords)'
+KW_COL = 'Primary keyword (SEO: check it fits the page, then update it or add keywords)'
+ANCHOR_COL = 'Must appear on page (anchor text other pages use to link here)'
+ANCHOR_SRC = 'Anchor text for links to this page (SEO fills in)'
 KW_ADD_COL = 'Keywords the SEO adds or swaps in'
 PRIORITY_COL = 'SEO priority (High / Medium / Low)'
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
-                 'Parent page', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from', 'Why']
+                 'Parent page', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from', ANCHOR_SRC, 'Why']
 MATCH_COLS = ['gap_service', 'offered', 'gap_keywords', 'local_gap_keywords', 'page', 'level', 'status', 'candidates']
 GAP_LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
 
@@ -147,6 +150,9 @@ def cmd_preflight(a):
             warns.append(f"{pages.attrs['blank']} research rows have a blank \"Client offers it?\". They are left out until the SEO fills in Yes. A No is never used.")
         if len(own) == 0:
             fails.append('The research Pages tab has no "Own page" rows.')
+        noanchor = int((own[ANCHOR_SRC].astype(str).str.strip() == '').sum())
+        if noanchor:
+            warns.append(f'{noanchor} pages have no anchor text on the research Pages tab, so "Must appear on page" is blank for them.')
     if gap is not None:
         blank = int((gap['offered'].astype(str).str.strip() == '').sum())
         info.append(f'Gap: {len(gap)} services.')
@@ -201,10 +207,18 @@ def build_candidates(pages, match, warnings):
     cands, sections = [], []
     for _, r in pages.iterrows():
         label, level = s(r['Service / sub-service']), s(r['Level'])
-        base = {'label': label, 'level': level, 'source': 'Implied' if s(r['Where it came from']) == 'Parent of a listed item' else 'Yes',
+        came = s(r['Where it came from']).lower()
+        base = {'label': label, 'level': level, 'source': 'Implied' if came.startswith('parent') else 'Yes' if came.startswith('listed') else 'Suggested',
                 'parent': s(r['Parent page']), 'keyword': s(r['Primary keyword']), 'volume': num(r['Primary keyword volume (national)']),
-                'sections': s(r['Mention on this page as a section']), 'why': s(r['Why']), 'service': label.split(' > ')[0]}
+                'sections': s(r['Mention on this page as a section']), 'why': s(r['Why']), 'service': label.split(' > ')[0],
+                'anchor': s(r[ANCHOR_SRC])}
         (cands if s(r['Recommendation']) == 'Own page' else sections).append(base)
+    # a section's anchor text is for links to its topic, which live on the parent page: the parent must contain it
+    by_label = {c['label']: c for c in cands}
+    for sec in sections:
+        par = by_label.get(sec['parent'])
+        if par and sec['anchor'] and norm(sec['anchor']) not in {norm(x) for x in re.split(r'[;\n]+', par['anchor'])}:
+            par['anchor'] = (par['anchor'] + '; ' if par['anchor'] else '') + sec['anchor']
     names = {norm(c['label']) for c in cands + sections}
     for m in match:
         if m['page']:
@@ -216,7 +230,7 @@ def build_candidates(pages, match, warnings):
         if norm(m['gap_service']) in names:
             sys.exit(f'Gap service "{m["gap_service"]}" has no page set but matches a research page name. Set its page in the match file.')
         cands.append({'label': m['gap_service'], 'level': m['level'], 'source': 'Gap only', 'parent': '', 'keyword': '', 'volume': None,
-                      'sections': '', 'why': '', 'service': m['gap_service']})
+                      'sections': '', 'why': '', 'service': m['gap_service'], 'anchor': ''})
     return cands, sections
 
 
@@ -332,9 +346,9 @@ def cmd_build(a):
     # --- assemble roadmap rows
     rows = []
 
-    def add(page, ptype, content, why, parent='', kw='', vol=None, gapn='', sect=''):
+    def add(page, ptype, content, why, parent='', kw='', vol=None, gapn='', sect='', anchor=''):
         rows.append({'Page': page, 'Page type': ptype, 'Content to write': content, 'Why it is on the roadmap': why, 'Parent page / links to': parent,
-                     KW_COL: kw, 'Primary keyword volume (national)': vol, KW_ADD_COL: '',
+                     KW_COL: kw, 'Primary keyword volume (national)': vol, KW_ADD_COL: '', ANCHOR_COL: anchor,
                      'Competitor gap keywords (2+ in top 10 or 1+ in top 3)': gapn, 'Sections to cover on this page': sect,
                      PRIORITY_COL: ''})
 
@@ -346,7 +360,7 @@ def cmd_build(a):
         extra = '' if re.search(r'client lists', c['why']) else c['why']
         why = SOURCE_TEXT[c['source']] + (' ' + extra + ('' if extra.endswith('.') else '.') if extra else '')
         add(c['label'], c['level'], 'Page', why, c['parent'], c['keyword'], c['volume'],
-            f"{c['gap']} ({c['gap_note']})" if c['gap_note'] else '', c['sections'])
+            f"{c['gap']} ({c['gap_note']})" if c['gap_note'] else '', c['sections'], c['anchor'])
 
     for c in kept:
         page_rows(c)
@@ -394,7 +408,8 @@ def cmd_build(a):
         ('What this is', f'The pages and blog posts we recommend writing content for, {MAX_PAGES} at most. Home, About Us and every extra page the SEO listed always count toward the {MAX_PAGES} and are never cut.'),
         ('Order', 'Home, About Us, the SEO\'s extra pages, then Service, Sub-Service, Brand / Device, Blog and Concern pages, until the cap is reached. Inside a group: pages the client listed first, then Implied parents, then gap-only services; ties go to more competitor gap keywords, then higher volume.'),
         ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page. A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
-        ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are not buying searches (for example a photo search). Check each one, then replace it or add keywords in the next yellow column. Home, About Us and extra pages have none: add them.'),
+        ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it or add keywords in the next yellow column. Home, About Us and extra pages have none: add them.'),
+        ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none.'),
         ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
         ('Sections', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are not pages. They appear in "Sections to cover on this page" on their parent page.'),
