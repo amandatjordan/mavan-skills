@@ -71,7 +71,7 @@ If it stops on a gap service or a page name, fix that row and run again. Done wh
 - Pick 3 page rows and compare the primary keyword and volume to the research Pages tab.
 - Pick 3 gap numbers and compare them to the Service opportunities tab (non-local plus local, of the matched service).
 - Pick 2 blog rows and compare the angle to the blog taxonomy's Lookup tab.
-- Cut tab (only present when something is over 50): each cut page is there with the group it ranked in. Sections are not pages: each one is in "Sections to cover" on its parent page.
+- Cut tab (only present when something is over 50): starts with the instruction row, has the same columns as the Roadmap with the reason last, and each cut page is there. Sections are not pages: each one is in "Sections to cover" on its parent page.
 
 Done when all five hold.
 
@@ -81,4 +81,4 @@ Send the workbook. Reply in a few sentences: how many rows by type, what was cut
 
 ## Workbook
 
-Tabs: Read Me; Roadmap (number, page, page type, content to write, why, parent page or link target, primary keyword and national volume, competitor gap keywords, sections to cover, and must appear on page (the research sheet's anchor text), and three yellow columns for the SEO: the primary keyword to check, keywords the SEO adds or swaps in, and a High / Medium / Low priority dropdown); Cut for the 50-page cap (only when something is over 50). The Read Me's last row lists blogs that could not be added because a page is not in the blog taxonomy.
+Tabs: Read Me; Roadmap (number, page, page type, content to write, why, parent page or link target, primary keyword and national volume, competitor gap keywords, sections to cover, and must appear on page (the research sheet's anchor text), and three yellow columns for the SEO: the primary keyword to check, keywords the SEO adds or swaps in, and a High / Medium / Low priority dropdown); Cut for the 50-page cap (only when something is over 50: an instruction row, then the same columns as the Roadmap plus the reason, so the SEO can move rows between the two tabs to make the final list). The Read Me's last row lists blogs that could not be added because a page is not in the blog taxonomy.

@@ -46,6 +46,9 @@ ANCHOR_COL = 'Must appear on page (anchor text other pages use to link here)'
 ANCHOR_SRC = 'Anchor text for links to this page (SEO fills in)'
 KW_ADD_COL = 'Keywords the SEO adds or swaps in'
 PRIORITY_COL = 'SEO priority (High / Medium / Low)'
+CUT_INSTRUCTIONS = (f'These pages and blogs did not fit under the {MAX_PAGES}-page cap. The SEO makes the final list: move a row to the Roadmap tab to write it, '
+                    f'or move a Roadmap row here to drop it. The columns match the Roadmap (the reason it was cut is the last column), so a row can be cut and pasted as it is. '
+                    f'Keep the Roadmap at {MAX_PAGES} rows or fewer, and move a page\'s blogs with it.')
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
@@ -346,8 +349,10 @@ def cmd_build(a):
     # --- assemble roadmap rows
     rows = []
 
-    def add(page, ptype, content, why, parent='', kw='', vol=None, gapn='', sect='', anchor=''):
-        rows.append({'Page': page, 'Page type': ptype, 'Content to write': content, 'Why it is on the roadmap': why, 'Parent page / links to': parent,
+    cut_rows = []
+
+    def add(page, ptype, content, why, parent='', kw='', vol=None, gapn='', sect='', anchor='', into=None):
+        (rows if into is None else into).append({'Page': page, 'Page type': ptype, 'Content to write': content, 'Why it is on the roadmap': why, 'Parent page / links to': parent,
                      KW_COL: kw, 'Primary keyword volume (national)': vol, KW_ADD_COL: '', ANCHOR_COL: anchor,
                      'Competitor gap keywords (2+ in top 10 or 1+ in top 3)': gapn, 'Sections to cover on this page': sect,
                      PRIORITY_COL: ''})
@@ -356,33 +361,43 @@ def cmd_build(a):
         add(name, name, 'Page', why)
     for name, kind in extras:
         add(name, f'Extra: {kind}', 'Page', 'Added by the SEO in the preflight. Set its priority.')
-    def page_rows(c):
+    def page_rows(c, into=None):
         extra = '' if re.search(r'client lists', c['why']) else c['why']
         why = SOURCE_TEXT[c['source']] + (' ' + extra + ('' if extra.endswith('.') else '.') if extra else '')
         add(c['label'], c['level'], 'Page', why, c['parent'], c['keyword'], c['volume'],
-            f"{c['gap']} ({c['gap_note']})" if c['gap_note'] else '', c['sections'], c['anchor'])
+            f"{c['gap']} ({c['gap_note']})" if c['gap_note'] else '', c['sections'], c['anchor'], into)
 
     for c in kept:
         page_rows(c)
-    for b in kept_blogs:
+    def blog_row(b, into=None):
         add(b['label'], 'Blog', 'Blog post', f"Companion to {b['node']}. Informational only; the writer sets the title and target query.",
-            f"{b['page']} page" + ('' if b['is_own'] else f" ({b['node']} is covered as a section there)"))
+            f"{b['page']} page" + ('' if b['is_own'] else f" ({b['node']} is covered as a section there)"), into=into)
+
+    for b in kept_blogs:
+        blog_row(b)
     for c in kept_concerns:
         page_rows(c)
     roadmap = pd.DataFrame(rows)
     roadmap.insert(0, '#', range(1, len(roadmap) + 1))
 
-    # --- over the cap (the only list of things left off: sections are on their parent page, and what the client does not offer is not listed)
-    not_in = []
+    # --- over the cap: same columns as the Roadmap, so the SEO can move a row between the two tabs. The reason is the last column.
+    # (Sections are on their parent page, and what the client does not offer is not listed anywhere.)
+    reasons = []
     for c in cut:
-        not_in.append((c['label'], c['level'], f"Ranked below the pages that were kept in the {c['level']} group."))
+        page_rows(c, cut_rows)
+        reasons.append(f"Ranked below the pages that were kept in the {c['level']} group.")
     for b in cut_blogs:
-        not_in.append((b['label'], 'Blog', 'Blogs come after Service, Sub-Service and Brand / Device pages.'))
-    if skipped_blog_nodes:
-        not_in.append((f"Blogs for {len(skipped_blog_nodes)} cut pages", 'Blog', 'Not considered because their page was cut: ' + '; '.join(skipped_blog_nodes)))
+        blog_row(b, cut_rows)
+        reasons.append('Blogs come after Service, Sub-Service and Brand / Device pages.')
     for c in cut_concerns:
-        not_in.append((c['label'], 'Concern', 'Concerns come last.'))
-    not_df = pd.DataFrame(not_in, columns=['Page or topic', 'Page type', f'Why it is over the {MAX_PAGES}-page cap'])
+        page_rows(c, cut_rows)
+        reasons.append('Concerns come last.')
+    not_df = pd.DataFrame(cut_rows)
+    if len(not_df):
+        not_df.insert(0, '#', '')
+        not_df[f'Why it is over the {MAX_PAGES}-page cap'] = reasons
+    if skipped_blog_nodes:
+        warnings.append('Blogs were not considered for pages that were cut: ' + '; '.join(skipped_blog_nodes) + '. Their 2 blogs each come with them if the SEO moves the page onto the Roadmap.')
 
     # --- checks
     checks = []
@@ -413,7 +428,7 @@ def cmd_build(a):
         ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
         ('Sections', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are not pages. They appear in "Sections to cover on this page" on their parent page.'),
-        ('Cut tab', f'Only exists when something is over the {MAX_PAGES}-page cap: the pages and blogs that did not fit, and the group they ranked in.'),
+        ('Cut tab', f'Only exists when something is over the {MAX_PAGES}-page cap: the pages and blogs that did not fit, with the same columns as the Roadmap and the reason in the last column. The SEO moves rows between the two tabs to make the final list, keeping the Roadmap at {MAX_PAGES} or fewer.'),
         ('Warnings', note),
     ]
     out = Path(a.out)
@@ -421,7 +436,7 @@ def cmd_build(a):
         pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
         roadmap.to_excel(xw, sheet_name='Roadmap', index=False)
         if len(not_df):
-            not_df.to_excel(xw, sheet_name=CUT_TAB, index=False)
+            not_df.to_excel(xw, sheet_name=CUT_TAB, index=False, startrow=1)
     style(out, len(roadmap))
     counts = roadmap['Page type'].value_counts().to_dict()
     print(f'Wrote {out}')
@@ -441,16 +456,24 @@ def style(path, n):
     wb = load_workbook(path)
     head, yellow = PatternFill('solid', fgColor='1F3864'), PatternFill('solid', fgColor='FFF2CC')
     for ws in wb:
-        for c in ws[1]:
+        top = 2 if ws.title == CUT_TAB else 1          # the cut tab has an instruction row above its headers
+        for c in ws[top]:
             c.font, c.fill, c.alignment = Font(bold=True, color='FFFFFF'), head, Alignment(wrap_text=True, vertical='center')
-        ws.freeze_panes = 'A2'
+        ws.freeze_panes = f'A{top + 1}'
         for col in ws.columns:
-            longest = max((len(str(c.value)) for c in col[:200] if c.value is not None), default=10)
+            longest = max((len(str(c.value)) for c in col[top - 1:200] if c.value is not None), default=10)
             ws.column_dimensions[get_column_letter(col[0].column)].width = min(max(12, longest + 2), 60)
-            for c in col[1:]:
+            for c in col[top:]:
                 c.alignment = Alignment(wrap_text=True, vertical='top')
         if ws.title != 'Read Me':
-            ws.auto_filter.ref = ws.dimensions
+            ws.auto_filter.ref = f'A{top}:{get_column_letter(ws.max_column)}{ws.max_row}'
+    if CUT_TAB in wb.sheetnames:
+        cw = wb[CUT_TAB]
+        cw['A1'] = CUT_INSTRUCTIONS
+        cw.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(cw.max_column, 8))
+        cw['A1'].font, cw['A1'].fill = Font(bold=True), yellow
+        cw['A1'].alignment = Alignment(wrap_text=True, vertical='center')
+        cw.row_dimensions[1].height = 62
     rm = wb['Read Me']
     rm.column_dimensions['A'].width, rm.column_dimensions['B'].width = 28, 120
     for row in rm.iter_rows(min_row=2):

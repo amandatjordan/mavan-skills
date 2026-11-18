@@ -14,7 +14,7 @@ All thresholds are constants at the top of `scripts/roadmap.py`. Change them the
 4. **Blog** posts, for each Service and Sub-Service page that made the roadmap.
 5. **Concern** pages.
 
-Pages are added in that order until 50 is reached. A group is only reached once every row in the groups above it fits. Over the cap, the rest go to the "Cut for the 50-page cap" tab with their group. Sections are not listed there: they are in "Sections to cover" on the parent page. Things the client does not offer are not listed anywhere. Blogs for a page that was cut are not listed one by one; one row names those pages.
+Pages are added in that order until 50 is reached. A group is only reached once every row in the groups above it fits. Over the cap, the rest go to the "Cut for the 50-page cap" tab. It starts with an instruction row (the SEO moves rows between it and the Roadmap to make the final list) and has the Roadmap's columns, with the reason last, so a row can be moved as it is. Sections are not listed there: they are in "Sections to cover" on the parent page. Things the client does not offer are not listed anywhere. Blogs for a page that was cut are not listed one by one; one row names those pages.
 
 ## Order inside a group
 

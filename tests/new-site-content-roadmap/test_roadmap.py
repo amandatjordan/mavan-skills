@@ -99,8 +99,8 @@ class Base(unittest.TestCase):
             self.road = pd.read_excel(out, 'Roadmap').fillna('')
             names = pd.ExcelFile(out).sheet_names
             self.sheets = names
-            self.notin = pd.read_excel(out, 'Cut for the 50-page cap').fillna('') if 'Cut for the 50-page cap' in names else pd.DataFrame(
-                columns=['Page or topic', 'Page type', 'Why it is over the 50-page cap'])
+            self.notin = pd.read_excel(out, 'Cut for the 50-page cap', header=1).fillna('') if 'Cut for the 50-page cap' in names else pd.DataFrame(
+                columns=['Page', 'Page type', 'Why it is over the 50-page cap'])
         self.out = out
         return p
 
@@ -191,7 +191,7 @@ class Small(Base):
     def test_section_listed_not_a_page(self):
         self.build()
         self.assertNotIn('Filler > Cheek Filler', set(self.road['Page']))
-        self.assertNotIn('Filler > Cheek Filler', set(self.notin['Page or topic']))
+        self.assertNotIn('Filler > Cheek Filler', set(self.notin['Page']))
 
     def test_keyword_columns_are_highlighted_for_the_seo(self):
         self.build()
@@ -334,8 +334,16 @@ class Cap(Base):
         self.assertEqual(len(self.road), 50)
         self.assertEqual(int((self.road['Page type'] == 'Blog').sum()), 18)   # 48 slots - 30 services
         self.assertNotIn('Concern', set(self.road['Page type']))
-        self.assertIn('Late', set(self.notin['Page or topic']))
+        self.assertIn('Late', set(self.notin['Page']))
         self.assertIn('Cut for the 50-page cap', self.sheets)
+        # the cut tab has an instruction row, then the Roadmap's columns plus the reason, so rows can be moved as they are
+        ws = load_workbook(self.out)['Cut for the 50-page cap']
+        self.assertIn('makes the final list', ws['A1'].value)
+        self.assertIn('move a row to the Roadmap tab', ws['A1'].value)
+        road_cols = list(pd.read_excel(self.out, 'Roadmap').columns)
+        cut_cols = list(pd.read_excel(self.out, 'Cut for the 50-page cap', header=1).columns)
+        self.assertEqual(cut_cols, road_cols + ['Why it is over the 50-page cap'])
+        self.assertIn('Late', set(self.notin['Page']))
 
     def test_too_many_extras_fail(self):
         p = run('preflight', '--research', self.r, '--gap', self.g, '--extras', '; '.join(f'X{i}' for i in range(49)), '--out', self.work, check=False)
