@@ -197,7 +197,7 @@ class Small(Base):
         self.build()
         ws = load_workbook(self.out)['Roadmap']
         heads = {c.value: c.column for c in ws[1]}
-        for name in ('Primary keyword (SEO: check it fits the page, then update it or add keywords)', 'Keywords the SEO adds or swaps in'):
+        for name in ('Primary keyword (SEO: check it fits the page, then replace it or add keywords)',):
             self.assertEqual(ws.cell(2, heads[name]).fill.fgColor.rgb[-6:], 'FFF2CC')
             self.assertEqual(ws.cell(ws.max_row, heads[name]).fill.fgColor.rgb[-6:], 'FFF2CC')
         self.assertIn('Keywords: SEO to check', ' '.join(pd.read_excel(self.out, 'Read Me')['Item']))
