@@ -45,7 +45,7 @@ The research workbook's "Anchor text for links to this page" for each page is co
 
 Every Service, Sub-Service and Brand / Device page on the Roadmap must receive at least one internal link from another page. The Internal links tab is built in this order:
 
-1. The links on the research Pages tab ("Internal links out (priority)"), kept only when both pages are on the Roadmap. Links to sections, pages the client does not offer and pages that were cut are dropped.
+1. The links on the research Pages tab ("Internal links out (priority)"; the priority is not carried over), kept only when both pages are on the Roadmap. Links to sections, pages the client does not offer and pages that were cut are dropped.
 2. Any Service, Sub-Service or Brand / Device page still without a link pointing at it gets one, marked "Added so every page gets a link", from its parent page. If the parent is not on the Roadmap (it is a section, was cut or is not offered), from its Service. If that is not on the Roadmap either, from Home. Services and gap-only pages (no parent) get a link from Home.
 3. Each blog links to its page (listed, but a blog link does not count as the link a page must receive).
 
