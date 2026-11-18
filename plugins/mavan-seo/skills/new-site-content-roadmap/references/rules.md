@@ -41,6 +41,16 @@ The primary keyword is the research workbook's highest-volume search for the pag
 
 The research workbook's "Anchor text for links to this page" for each page is copied to the "Must appear on page" column, so content knows which words other pages will use to link to it and must include them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page's cell (links to that topic land on the parent). Blank where the research sheet has none. Home, About Us, extra pages, gap-only pages and blogs have none. Preflight warns when own pages have no anchor text.
 
+## Internal links
+
+Every Service, Sub-Service and Brand / Device page on the Roadmap must receive at least one internal link from another page. The Internal links tab is built in this order:
+
+1. The links on the research Pages tab ("Internal links out (priority)"), kept only when both pages are on the Roadmap. Links to sections, pages the client does not offer and pages that were cut are dropped.
+2. Any Service, Sub-Service or Brand / Device page still without a link pointing at it gets one, marked "Added so every page gets a link", from its parent page. If the parent is not on the Roadmap (it is a section, was cut or is not offered), from its Service. If that is not on the Roadmap either, from Home. Services and gap-only pages (no parent) get a link from Home.
+3. Each blog links to its page (listed, but a blog link does not count as the link a page must receive).
+
+The anchor text is the linked page's own anchor text from the research sheet (not the extra words a section adds to "Must appear on page"). Blank where the research sheet has none. Concern pages are linked where the research sheet links to them, but are not required to receive a link. If the SEO moves pages between the Roadmap and Cut tabs, the links to and from them have to be updated by hand.
+
 ## Blogs
 
 From the bundled `references/blog-taxonomy.xlsx` (Lookup tab, which already applies the Overrides tab). Two posts per Service and Sub-Service: prep / maintenance and choosing a provider. Brand / Device posts exist only where the Overrides tab adds them. A node the taxonomy excludes, or does not contain, gets no blogs and is named in the Read Me warnings. A Sub-Service that is only a section on its parent page still gets its two posts, linked to the parent page. A blog is only listed when its page (or its parent page, for a section) is on the roadmap.
