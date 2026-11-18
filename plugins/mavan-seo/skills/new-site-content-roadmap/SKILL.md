@@ -25,7 +25,7 @@ Ask for all of this in **one** message, before doing anything else.
 
 | Input | Required? | Notes |
 | --- | --- | --- |
-| **New site keyword research** workbook | Required | The .xlsx from `new-site-keyword-research`. Its **Confirm with client** tab should have Yes / No filled in: only Yes rows are added to the roadmap |
+| **New site keyword research** workbook | Required | The .xlsx from `new-site-keyword-research`. |
 | **New-site keyword gap** workbook | Required | The .xlsx from `new-site-keyword-gap`. Its **Offered by our client** column on Service opportunities should be filled in: only Yes services count |
 | **Other pages that need content** | Ask, can be none | Pages we would write that are not in either sheet: packages, provider pages, location pages, events, financing, treatments by area or age, and anything else the person names. Give each a name and, if they can, a type (Package, Provider, Location, Event, Financing, Treatment by area, Treatment by age) |
 | Client name | Optional | Names the workbook |
@@ -40,7 +40,7 @@ Done when both workbooks are attached and the person has given the extra pages o
 python $SKILL/scripts/roadmap.py preflight --research RESEARCH.xlsx --gap GAP.xlsx --extras "Bridal packages|Package; Dr Smith|Provider" --out work
 ```
 
-Pass `--extras` only when there are extras (`Name|Type` separated by semicolons). It checks that each workbook is the right kind, counts blank answers and checks that Home, About Us and the extras fit under 50. Read `work/preflight.md`. On NOT READY, send **one** message listing each FAIL and exactly what is needed, then stop. Mention each WARN in the final reply: blank Confirm with client rows are left out of the roadmap, and so are gap services whose Offered column is blank. If the person wants those in, they fill in the workbook and send it again. Done when it says READY.
+Pass `--extras` only when there are extras (`Name|Type` separated by semicolons). It checks that each workbook is the right kind, counts blank Offered answers and checks that Home, About Us and the extras fit under 50. Read `work/preflight.md`. On NOT READY, send **one** message listing each FAIL and exactly what is needed, then stop. Mention each WARN in the final reply: gap services whose Offered column is blank are left out of the roadmap. If the person wants those in, they fill in the gap workbook and send it again. Done when it says READY.
 
 ## Step 3: Match gap services to research pages
 
@@ -53,7 +53,7 @@ It writes `work/gap_match.tsv`, one row per gap service, and prints every row th
 - Two gap services may point to the same page; their numbers are added.
 - A service with no page and `offered` = Yes becomes a page of its own: set `level` to Service, Sub-Service, Brand / Device or Concern and fix the name's capitalization. Never invent a research label.
 - `offered` can be edited in this file when the person tells you the answer for a blank row. Say you did.
-- A service with no page and Offered No or blank stays off the roadmap and is listed with the reason.
+- A service with no page and Offered No or blank is left off the roadmap and is not listed anywhere.
 
 Done when every row is either an exact research page or deliberately blank.
 
@@ -71,14 +71,14 @@ If it stops on a gap service or a page name, fix that row and run again. Done wh
 - Pick 3 page rows and compare the primary keyword and volume to the research Pages tab.
 - Pick 3 gap numbers and compare them to the Service opportunities tab (non-local plus local, of the matched service).
 - Pick 2 blog rows and compare the angle to the blog taxonomy's Lookup tab.
-- Not on the roadmap tab: every research Section row, every cut page and every gap service the client does not offer is there with a reason.
+- Cut tab (only present when something is over 50): each cut page is there with the group it ranked in. Sections are not pages: each one is in "Sections to cover" on its parent page.
 
 Done when all five hold.
 
 ## Step 6: Report
 
-Send the workbook. Reply in a few sentences: how many rows by type, what was cut for the 50 cap (the number by group, and which Service pages if any), the extra pages, any warning, that the SEO fills in the yellow priority column and makes the final call, and the volume caveat (national, taxonomy-level, relative not absolute). Do not recap the steps.
+Send the workbook. Reply in a few sentences: how many rows by type, what was cut for the 50 cap (the number by group, and which Service pages if any), the extra pages, any warning, that the SEO must check the yellow primary keyword column (a primary keyword is only the highest-volume search for the page and may not be a buying search, for example a photo search) and replace it or add keywords, that the SEO fills in the yellow priority column and makes the final call, and the volume caveat (national, taxonomy-level, relative not absolute). Do not recap the steps.
 
 ## Workbook
 
-Tabs: Read Me; Roadmap (number, page, page type, content to write, why, parent page or link target, primary keyword and national volume, competitor gap keywords, sections to cover, and a yellow SEO priority column with a High / Medium / Low dropdown); Not on the roadmap (pages over the cap, sections, items the client does not offer or has not confirmed, and items with no blog angles).
+Tabs: Read Me; Roadmap (number, page, page type, content to write, why, parent page or link target, primary keyword and national volume, competitor gap keywords, sections to cover, and three yellow columns for the SEO: the primary keyword to check, keywords the SEO adds or swaps in, and a High / Medium / Low priority dropdown); Cut for the 50-page cap (only when something is over 50). The Read Me's last row lists blogs that could not be added because a page is not in the blog taxonomy.

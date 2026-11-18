@@ -14,11 +14,11 @@ All thresholds are constants at the top of `scripts/roadmap.py`. Change them the
 4. **Blog** posts, for each Service and Sub-Service page that made the roadmap.
 5. **Concern** pages.
 
-Pages are added in that order until 50 is reached. A group is only reached once every row in the groups above it fits. Over the cap, the rest go to the Not on the roadmap tab with their group. Blogs for a page that was cut are not listed one by one; one row names those pages.
+Pages are added in that order until 50 is reached. A group is only reached once every row in the groups above it fits. Over the cap, the rest go to the "Cut for the 50-page cap" tab with their group. Sections are not listed there: they are in "Sections to cover" on the parent page. Things the client does not offer are not listed anywhere. Blogs for a page that was cut are not listed one by one; one row names those pages.
 
 ## Order inside a group
 
-1. Where the page came from: **client-listed** ("Yes" on the research Pages tab), then **Implied** parents (a Service added because a listed Brand / Device sits under it), then rows the client **confirmed** Yes on the Confirm with client tab, then **gap-only** services (offered by the client, found only in the gap workbook).
+1. Where the page came from: **client-listed** ("Yes" on the research Pages tab), then **Implied** parents (a Service added because a listed Brand / Device sits under it), then **gap-only** services (offered by the client, found only in the gap workbook).
 2. **Competitor gap keywords**, highest first (below).
 3. **Primary keyword volume**, highest first (national, from the research workbook; never summed).
 4. Name, so the order is stable.
@@ -31,15 +31,15 @@ The gap workbook's counts are at the service level, so they say which services c
 
 ## Gap workbook: who counts
 
-Only gap services the SEO marked **Yes** in "Offered by our client" count. Yes with no research page becomes a gap-only page. No or blank is left off the roadmap and listed with the reason. A "No" gap service matched to a research page the client listed raises a warning (the two workbooks disagree).
+Only gap services the SEO marked **Yes** in "Offered by our client" count. Yes with no research page becomes a gap-only page. No or blank is left off the roadmap and not listed anywhere. A "No" gap service matched to a research page the client listed raises a warning (the two workbooks disagree).
 
-## Confirm with client rows
+## Primary keywords are for the SEO to check
 
-On the research workbook's Confirm with client tab, only rows marked **Yes** with "Would be" = Own page are added. No and blank rows are listed on Not on the roadmap with the reason.
+The primary keyword is the research workbook's highest-volume search for the page. It can be a poor target (for example a photo search such as "face with wrinkles" for Wrinkles / Fine Lines). The Roadmap highlights the column and has a second yellow column for the SEO to replace it or add keywords. The script never judges a keyword.
 
 ## Blogs
 
-From the bundled `references/blog-taxonomy.xlsx` (Lookup tab, which already applies the Overrides tab). Two posts per Service and Sub-Service: prep / maintenance and choosing a provider. Brand / Device posts exist only where the Overrides tab adds them. A node the taxonomy excludes, or does not contain, gets no blogs and is listed. A Sub-Service that is only a section on its parent page still gets its two posts, linked to the parent page. A blog is only listed when its page (or its parent page, for a section) is on the roadmap.
+From the bundled `references/blog-taxonomy.xlsx` (Lookup tab, which already applies the Overrides tab). Two posts per Service and Sub-Service: prep / maintenance and choosing a provider. Brand / Device posts exist only where the Overrides tab adds them. A node the taxonomy excludes, or does not contain, gets no blogs and is named in the Read Me warnings. A Sub-Service that is only a section on its parent page still gets its two posts, linked to the parent page. A blog is only listed when its page (or its parent page, for a section) is on the roadmap.
 
 Titles are never set. The writer chooses each post's title and query. Blogs must not promise results.
 

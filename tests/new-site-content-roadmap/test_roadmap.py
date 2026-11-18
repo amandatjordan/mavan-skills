@@ -18,8 +18,6 @@ REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
               'Primary keyword volume (national)', 'Mention on this page as a section', 'Client listed it']
-CONFIRM_HEAD = ['Service', 'Level', 'Sub-Service / Brand / Device', 'Primary keyword', 'Primary keyword volume (national)', 'Would be',
-                'Client offers it? (Yes / No)']
 GAP_HEAD = ['Service', 'Offered by our client (SEO fills in: Yes or No)', 'Keywords with 2+ in top 10 or 1+ in top 3',
             'Local keywords with 2+ in top 10 or 1+ in top 3']
 BLOG_HEAD = ['Key', 'Level', 'Category', 'Service', 'Sub-Service', 'Brand / Device', 'Practice Type', 'Action', 'Blog 1 angle', 'Blog 2 angle',
@@ -30,17 +28,13 @@ def page(level, label, rec='Own page', vol=1000, parent='', listed='Yes', sectio
     return [level, label, 'Cat', rec, 'Why text', parent, label.split(' > ')[-1].lower(), vol, sections, listed]
 
 
-def make_research(path, pages, confirm=()):
+def make_research(path, pages):
     wb = Workbook()
     wb.active.title = 'Read Me'
     ws = wb.create_sheet('Pages')
     ws.append(PAGES_HEAD)
     for r in pages:
         ws.append(r)
-    c = wb.create_sheet('Confirm with client')
-    c.append(CONFIRM_HEAD)
-    for r in confirm:
-        c.append(r)
     wb.save(path)
 
 
@@ -100,7 +94,10 @@ class Base(unittest.TestCase):
                 '--extras', extras, '--client', client, '--out', out, check=check)
         if p.returncode == 0:
             self.road = pd.read_excel(out, 'Roadmap').fillna('')
-            self.notin = pd.read_excel(out, 'Not on the roadmap').fillna('')
+            names = pd.ExcelFile(out).sheet_names
+            self.sheets = names
+            self.notin = pd.read_excel(out, 'Cut for the 50-page cap').fillna('') if 'Cut for the 50-page cap' in names else pd.DataFrame(
+                columns=['Page or topic', 'Page type', 'Why it is over the 50-page cap'])
         self.out = out
         return p
 
@@ -124,9 +121,7 @@ class Small(Base):
             page('Sub-Service', 'Filler > Cheek Filler', rec='Section on Filler page', vol=170, parent='Filler', sections=''),
             page('Brand / Device', 'Filler > Brandy', vol=8000, parent='Filler'),
             page('Concern', 'Lines', vol=480),
-        ], confirm=[['Facials', 'Sub-Service', 'Dermaplaning', 'dermaplaning', 60500, 'Own page', 'Yes'],
-                    ['Facials', 'Brand / Device', 'Glow', 'glow', 2000, 'Own page', 'No'],
-                    ['Facials', 'Sub-Service', 'Acne Facial', 'acne facial', 1300, 'Own page', '']])
+        ])
         make_gap(self.g, [['Fillers', 'Yes', 13, 0], ['Facials', 'Yes', 2, 0], ['NAD+', 'No', 4, 0], ['Skin tightening', 'Yes', 1, 0],
                           ['Peels', '', 5, 0]])
         make_blog(self.b, [('Service', 'Filler', ''), ('Service', 'Facials', ''), ('Sub-Service', 'Filler', 'Lip Filler'),
@@ -157,22 +152,14 @@ class Small(Base):
         row = self.road[self.road['Page'] == 'Filler > Lip Filler'].iloc[0]
         self.assertIn('inherited from the Filler service', row['Competitor gap keywords (2+ in top 10 or 1+ in top 3)'])
 
-    def test_confirm_with_client(self):
-        self.build()
-        pages = set(self.road['Page'])
-        self.assertIn('Facials > Dermaplaning', pages)
-        self.assertNotIn('Facials > Glow', pages)
-        self.assertNotIn('Facials > Acne Facial', pages)
-        reasons = dict(zip(self.notin['Page or topic'], self.notin['Why it is not on the roadmap']))
-        self.assertIn('said no', reasons['Facials > Glow'])
-        self.assertIn('not answered', reasons['Facials > Acne Facial'])
-
     def test_gap_not_offered_and_blank_are_left_out(self):
         self.build()
-        reasons = dict(zip(self.notin['Page or topic'], self.notin['Why it is not on the roadmap']))
-        self.assertIn('does not offer', reasons['NAD+'])
-        self.assertIn('blank', reasons['Peels'])
+        # not offered (No or blank): not on the roadmap and not listed anywhere else either
         self.assertNotIn('NAD+', set(self.road['Page']))
+        self.assertNotIn('Peels', set(self.road['Page']))
+        self.assertEqual(self.sheets, ['Read Me', 'Roadmap'])
+        everything = ' '.join(str(v) for v in pd.read_excel(self.out, 'Read Me').fillna('').values.ravel())
+        self.assertNotIn('NAD+', everything)
 
     def test_blogs_follow_their_page_and_sections(self):
         self.build()
@@ -185,12 +172,21 @@ class Small(Base):
         self.assertEqual(len(sec), 1)   # the section's two blogs link to the Filler page
         self.assertTrue(sec[0].startswith('Filler page'))
         self.assertNotIn('Skin tightening', ' '.join(blogs['Page']))
-        self.assertIn('not in the blog taxonomy', ' '.join(self.notin['Why it is not on the roadmap']))
+        self.assertIn('No blogs for Skin tightening', pd.read_excel(self.out, 'Read Me').fillna('').iloc[-1, 1])
 
     def test_section_listed_not_a_page(self):
         self.build()
         self.assertNotIn('Filler > Cheek Filler', set(self.road['Page']))
-        self.assertIn('Filler > Cheek Filler', set(self.notin['Page or topic']))
+        self.assertNotIn('Filler > Cheek Filler', set(self.notin['Page or topic']))
+
+    def test_keyword_columns_are_highlighted_for_the_seo(self):
+        self.build()
+        ws = load_workbook(self.out)['Roadmap']
+        heads = {c.value: c.column for c in ws[1]}
+        for name in ('Primary keyword (SEO: check it is a buying search, then update it or add keywords)', 'Keywords the SEO adds or swaps in'):
+            self.assertEqual(ws.cell(2, heads[name]).fill.fgColor.rgb[-6:], 'FFF2CC')
+            self.assertEqual(ws.cell(ws.max_row, heads[name]).fill.fgColor.rgb[-6:], 'FFF2CC')
+        self.assertIn('Keywords: SEO to check', ' '.join(pd.read_excel(self.out, 'Read Me')['Item']))
 
     def test_priority_dropdown_and_blank(self):
         self.build(extras='Bridal packages|Package')
@@ -216,7 +212,7 @@ class Small(Base):
                   excluded=['Service|Facials||'])
         self.build()
         self.assertNotIn('Facials page', set(self.road['Parent page / links to']))
-        self.assertIn('excluded in the blog taxonomy', ' '.join(self.notin['Why it is not on the roadmap']))
+        self.assertIn('No blogs for Facials: excluded in the blog taxonomy', pd.read_excel(self.out, 'Read Me').fillna('').iloc[-1, 1])
 
     def test_gap_only_offered_gets_a_level(self):
         self.build()
@@ -266,8 +262,6 @@ class Cap(Base):
         self.assertEqual(types.get('Sub-Service'), 15)
         self.assertNotIn('Blog', types)
         self.assertNotIn('Concern', types)
-        reasons = ' '.join(self.notin['Why it is not on the roadmap'])
-        self.assertIn('Over the 50-page cap', reasons)
         self.assertEqual(int((self.notin['Page type'] == 'Sub-Service').sum()), 5)
         self.assertEqual(int((self.notin['Page type'] == 'Concern').sum()), 3)
 
@@ -291,6 +285,7 @@ class Cap(Base):
         self.assertEqual(int((self.road['Page type'] == 'Blog').sum()), 18)   # 48 slots - 30 services
         self.assertNotIn('Concern', set(self.road['Page type']))
         self.assertIn('Late', set(self.notin['Page or topic']))
+        self.assertIn('Cut for the 50-page cap', self.sheets)
 
     def test_too_many_extras_fail(self):
         p = run('preflight', '--research', self.r, '--gap', self.g, '--extras', '; '.join(f'X{i}' for i in range(49)), '--out', self.work, check=False)
@@ -308,11 +303,10 @@ class Preflight(Base):
         self.assertIn('NOT READY', p.stdout)
 
     def test_ready_and_warns_on_blanks(self):
-        make_research(self.r, [page('Service', 'Filler')], confirm=[['Filler', 'Sub-Service', 'Lip', 'lip', 2000, 'Own page', '']])
+        make_research(self.r, [page('Service', 'Filler')])
         make_gap(self.g, [['Fillers', '', 1, 0]])
         p = run('preflight', '--research', self.r, '--gap', self.g, '--out', self.work)
         self.assertIn('READY', p.stdout)
-        self.assertIn('no Yes / No', p.stdout)
         self.assertIn('blank "Offered by our client"', p.stdout)
 
 

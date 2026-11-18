@@ -32,14 +32,17 @@ FIXED_PAGES = [                                  # never in the keyword sheets; 
 ]
 # Pages are added in this order until the cap is reached. Home, About Us and the SEO's extra pages come first and are never cut.
 TIER_ORDER = ['Service', 'Sub-Service', 'Brand / Device', 'Blog', 'Concern']
-SOURCE_RANK = {'Yes': 0, 'Implied': 1, 'Confirmed': 2, 'Gap only': 3}   # within a tier: client-listed first
+SOURCE_RANK = {'Yes': 0, 'Implied': 1, 'Gap only': 2}   # within a tier: client-listed first
 SOURCE_TEXT = {
     'Yes': 'The client listed it.',
     'Implied': 'Added because it is the parent of a listed item. Confirm the client offers it.',
-    'Confirmed': 'The client confirmed it on the Confirm with client tab.',
     'Gap only': 'A service the client offers that competitors rank for. It was not in the keyword research.',
 }
 PRIORITIES = 'High,Medium,Low'
+CUT_TAB = 'Cut for the 50-page cap'
+KW_COL = 'Primary keyword (SEO: check it is a buying search, then update it or add keywords)'
+KW_ADD_COL = 'Keywords the SEO adds or swaps in'
+PRIORITY_COL = 'SEO priority (High / Medium / Low)'
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
@@ -89,18 +92,13 @@ def parse_extras(text):
 # --- Inputs ------------------------------------------------------------------------------------
 def read_research(path):
     xl = pd.ExcelFile(path)
-    problems = []
-    for t in ('Pages', 'Confirm with client'):
-        if t not in xl.sheet_names:
-            problems.append(f'Research workbook has no "{t}" tab. It must be the output of new-site-keyword-research.')
-    if problems:
-        return None, None, problems
+    if 'Pages' not in xl.sheet_names:
+        return None, ['Research workbook has no "Pages" tab. It must be the output of new-site-keyword-research.']
     pages = xl.parse('Pages').fillna('')
     missing = [c for c in RESEARCH_COLS if c not in pages.columns]
     if missing:
-        problems.append('Research Pages tab is missing columns: ' + ', '.join(missing))
-        return None, None, problems
-    return pages, xl.parse('Confirm with client').fillna(''), problems
+        return None, ['Research Pages tab is missing columns: ' + ', '.join(missing)]
+    return pages, []
 
 
 def read_gap(path):
@@ -130,7 +128,7 @@ def read_blog(path):
 # --- preflight ---------------------------------------------------------------------------------
 def cmd_preflight(a):
     fails, warns, info = [], [], []
-    pages, confirm, prob = read_research(a.research) if a.research else (None, None, ['Research workbook not provided (output of new-site-keyword-research).'])
+    pages, prob = read_research(a.research) if a.research else (None, ['Research workbook not provided (output of new-site-keyword-research).'])
     fails += prob
     gap, prob = read_gap(a.gap) if a.gap else (None, ['Gap workbook not provided (output of new-site-keyword-gap).'])
     fails += prob
@@ -142,14 +140,11 @@ def cmd_preflight(a):
         info.append(f'Research: {len(pages)} rows, {len(own)} own pages, {len(pages) - len(own)} sections.')
         if len(own) == 0:
             fails.append('The research Pages tab has no "Own page" rows.')
-        blank = int((confirm.iloc[:, -1].astype(str).str.strip() == '').sum()) if len(confirm) and len(confirm.columns) else 0
-        if blank:
-            warns.append(f'{blank} Confirm with client rows have no Yes / No. They are left out of the roadmap until the client answers.')
     if gap is not None:
         blank = int((gap['offered'].astype(str).str.strip() == '').sum())
         info.append(f'Gap: {len(gap)} services.')
         if blank:
-            warns.append(f'{blank} gap services have a blank "Offered by our client". Only Yes counts as offered.')
+            warns.append(f'{blank} gap services have a blank "Offered by our client". Only Yes counts as offered; the rest are left out.')
     if len(extras) > MAX_PAGES - len(FIXED_PAGES):
         fails.append(f'{len(extras)} extra pages plus Home and About Us is more than {MAX_PAGES}.')
     info.append(f'Extra pages from the SEO: {len(extras)}' + (' (' + ', '.join(n for n, _ in extras) + ')' if extras else ''))
@@ -165,7 +160,7 @@ def cmd_preflight(a):
 
 # --- match gap services to research pages ------------------------------------------------------
 def cmd_match(a):
-    pages, confirm, prob = read_research(a.research)
+    pages, prob = read_research(a.research)
     gap, prob2 = read_gap(a.gap)
     if prob or prob2:
         sys.exit('; '.join(prob + prob2))
@@ -194,41 +189,28 @@ def cmd_match(a):
 
 
 # --- build -------------------------------------------------------------------------------------
-def build_candidates(pages, confirm, match, warnings):
-    """One dict per page that could be written, plus section rows (not pages) and exclusions."""
-    cands, sections, excluded = [], [], []
+def build_candidates(pages, match, warnings):
+    """One dict per page that could be written, plus section rows (not pages). A gap service the client does not offer is dropped, not listed."""
+    cands, sections = [], []
     for _, r in pages.iterrows():
         label, level = s(r['Service / sub-service']), s(r['Level'])
         base = {'label': label, 'level': level, 'source': 'Implied' if s(r['Client listed it']) == 'Implied' else 'Yes',
                 'parent': s(r['Parent page']), 'keyword': s(r['Primary keyword']), 'volume': num(r['Primary keyword volume (national)']),
                 'sections': s(r['Mention on this page as a section']), 'why': s(r['Why']), 'service': label.split(' > ')[0]}
         (cands if s(r['Recommendation']) == 'Own page' else sections).append(base)
-    ccol = confirm.columns[-1] if len(confirm.columns) else None
-    for _, r in confirm.iterrows():
-        label = f"{s(r['Service'])} > {s(r['Sub-Service / Brand / Device'])}"
-        answer = s(r[ccol]).lower() if ccol else ''
-        if answer == 'yes' and s(r['Would be']) == 'Own page':
-            cands.append({'label': label, 'level': s(r['Level']), 'source': 'Confirmed', 'parent': s(r['Service']),
-                          'keyword': s(r['Primary keyword']), 'volume': num(r['Primary keyword volume (national)']), 'sections': '',
-                          'why': '', 'service': s(r['Service'])})
-        elif answer != 'yes':
-            excluded.append((label, s(r['Level']), 'The client said no on the Confirm with client tab.' if answer == 'no'
-                             else 'The client has not answered on the Confirm with client tab.'))
-    names = {c['label'] for c in cands} | {c['label'] for c in sections}
+    names = {norm(c['label']) for c in cands + sections}
     for m in match:
         if m['page']:
             if m['offered'].lower() == 'no':
                 warnings.append(f"Gap says the client does not offer \"{m['gap_service']}\" but it is matched to the research page \"{m['page']}\".")
             continue
         if m['offered'].lower() != 'yes':
-            excluded.append((m['gap_service'], m['level'] or 'Service', 'Competitors rank for it, but the client does not offer it.' if m['offered'].lower() == 'no'
-                             else 'Competitors rank for it, but "Offered by our client" is blank on the gap workbook.'))
             continue
-        if norm(m['gap_service']) in {norm(n) for n in names}:
+        if norm(m['gap_service']) in names:
             sys.exit(f'Gap service "{m["gap_service"]}" has no page set but matches a research page name. Set its page in the match file.')
         cands.append({'label': m['gap_service'], 'level': m['level'], 'source': 'Gap only', 'parent': '', 'keyword': '', 'volume': None,
                       'sections': '', 'why': '', 'service': m['gap_service']})
-    return cands, sections, excluded
+    return cands, sections
 
 
 def attach_gap(cands, match):
@@ -254,7 +236,7 @@ def rank_key(c):
     return (SOURCE_RANK[c['source']], -c['gap'], -(c['volume'] or 0), c['label'])
 
 
-def blog_rows(kept, sections, look, rules, over, excluded):
+def blog_rows(kept, sections, look, rules, over, notes):
     """Two blog rows per kept Service / Sub-Service (and per Brand / Device the blog taxonomy adds), linked to the page that exists."""
     lk = {s(r['Key']): r for _, r in look.iterrows()}
     adds = {}
@@ -288,10 +270,10 @@ def blog_rows(kept, sections, look, rules, over, excluded):
             key = None
         row = adds.get(label) if key is None else lk.get(key)
         if row is None:
-            excluded.append((label, 'Blog', 'No blogs: this item is not in the blog taxonomy.'))
+            notes.append(f'No blogs for {label}: it is not in the blog taxonomy.')
             continue
         if s(row.get('Action')) == 'Exclude':
-            excluded.append((label, 'Blog', 'No blogs: excluded in the blog taxonomy. ' + s(row.get('Status / Notes') or row.get('Notes'))))
+            notes.append(f'No blogs for {label}: excluded in the blog taxonomy.')
             continue
         for n in (1, 2):
             angle = s(row.get(f'Blog {n} angle'))
@@ -304,7 +286,7 @@ def blog_rows(kept, sections, look, rules, over, excluded):
 
 
 def cmd_build(a):
-    pages, confirm, prob = read_research(a.research)
+    pages, prob = read_research(a.research)
     gap, prob2 = read_gap(a.gap)
     if prob or prob2:
         sys.exit('; '.join(prob + prob2))
@@ -323,9 +305,8 @@ def cmd_build(a):
         sys.exit('The match file lists gap services that are not in the gap workbook: ' + '; '.join(missing))
     look, rules, over, blog_title = read_blog(a.blog_taxonomy)
     extras = parse_extras(a.extras)
-    warnings, excluded = [], []
-    cands, sections, ex = build_candidates(pages, confirm, match, warnings)
-    excluded += ex
+    warnings = []
+    cands, sections = build_candidates(pages, match, warnings)
     attach_gap(cands, match)
 
     slots = MAX_PAGES - len(FIXED_PAGES) - len(extras)
@@ -334,7 +315,7 @@ def cmd_build(a):
     by_tier = {t: sorted([c for c in cands if c['level'] == t], key=rank_key) for t in ('Service', 'Sub-Service', 'Brand / Device', 'Concern')}
     main = by_tier['Service'] + by_tier['Sub-Service'] + by_tier['Brand / Device']
     kept, cut = main[:slots], main[slots:]
-    blogs_all = blog_rows(kept, sections, look, rules, over, excluded)
+    blogs_all = blog_rows(kept, sections, look, rules, over, warnings)
     room = slots - len(kept)
     kept_blogs, cut_blogs = blogs_all[:room], blogs_all[room:]
     room -= len(kept_blogs)
@@ -346,9 +327,9 @@ def cmd_build(a):
 
     def add(page, ptype, content, why, parent='', kw='', vol=None, gapn='', sect=''):
         rows.append({'Page': page, 'Page type': ptype, 'Content to write': content, 'Why it is on the roadmap': why, 'Parent page / links to': parent,
-                     'Primary keyword': kw, 'Primary keyword volume (national)': vol,
+                     KW_COL: kw, 'Primary keyword volume (national)': vol, KW_ADD_COL: '',
                      'Competitor gap keywords (2+ in top 10 or 1+ in top 3)': gapn, 'Sections to cover on this page': sect,
-                     'SEO priority (High / Medium / Low)': ''})
+                     PRIORITY_COL: ''})
 
     for name, why in FIXED_PAGES:
         add(name, name, 'Page', why)
@@ -370,21 +351,17 @@ def cmd_build(a):
     roadmap = pd.DataFrame(rows)
     roadmap.insert(0, '#', range(1, len(roadmap) + 1))
 
-    # --- not in the 50
+    # --- over the cap (the only list of things left off: sections are on their parent page, and what the client does not offer is not listed)
     not_in = []
     for c in cut:
-        not_in.append((c['label'], c['level'], f"Over the {MAX_PAGES}-page cap. It ranked below the pages that were kept in the {c['level']} group."))
+        not_in.append((c['label'], c['level'], f"Ranked below the pages that were kept in the {c['level']} group."))
     for b in cut_blogs:
-        not_in.append((b['label'], 'Blog', f"Over the {MAX_PAGES}-page cap (blogs come after Service, Sub-Service and Brand / Device pages)."))
+        not_in.append((b['label'], 'Blog', 'Blogs come after Service, Sub-Service and Brand / Device pages.'))
     if skipped_blog_nodes:
-        not_in.append((f"Blogs for {len(skipped_blog_nodes)} cut pages", 'Blog', 'Not considered: ' + '; '.join(skipped_blog_nodes)))
+        not_in.append((f"Blogs for {len(skipped_blog_nodes)} cut pages", 'Blog', 'Not considered because their page was cut: ' + '; '.join(skipped_blog_nodes)))
     for c in cut_concerns:
-        not_in.append((c['label'], 'Concern', f"Over the {MAX_PAGES}-page cap (concerns come last)."))
-    for label, level, why in excluded:
-        not_in.append((label, level, why))
-    for sec in sections:
-        not_in.append((sec['label'], sec['level'], f"Not its own page: cover it as a section on {sec['parent']} (the research workbook decided this)."))
-    not_df = pd.DataFrame(not_in, columns=['Page or topic', 'Page type', 'Why it is not on the roadmap'])
+        not_in.append((c['label'], 'Concern', 'Concerns come last.'))
+    not_df = pd.DataFrame(not_in, columns=['Page or topic', 'Page type', f'Why it is over the {MAX_PAGES}-page cap'])
 
     # --- checks
     checks = []
@@ -398,8 +375,8 @@ def cmd_build(a):
     page_names = set(roadmap['Page'])
     checks.append(('Every blog links to a page that is on the roadmap',
                    all(re.sub(r' page.*$', '', p) in page_names for p in roadmap.loc[roadmap['Page type'] == 'Blog', 'Parent page / links to'])))
-    checks.append(('Every roadmap page (not extra) came from the research workbook, a confirmed row or an offered gap service',
-                   all(c['label'] in labels or c['source'] in ('Confirmed', 'Gap only') for c in kept + kept_concerns)))
+    checks.append(('Every roadmap page (not extra) came from the research workbook or an offered gap service',
+                   all(c['label'] in labels or c['source'] == 'Gap only' for c in kept + kept_concerns)))
     checks.append(('Cut pages plus kept pages equal all candidates', len(kept) + len(cut) + len(kept_concerns) + len(cut_concerns) == len(cands)))
 
     note = ' | '.join(warnings) if warnings else 'None'
@@ -408,24 +385,26 @@ def cmd_build(a):
         ('Built from', f'The new-site keyword research workbook, the new-site keyword gap workbook and the blog taxonomy ({blog_title}). Nothing was looked up live.'),
         ('Volume: read this first', VOLUME_LABEL),
         ('What this is', f'The pages and blog posts we recommend writing content for, {MAX_PAGES} at most. Home, About Us and every extra page the SEO listed always count toward the {MAX_PAGES} and are never cut.'),
-        ('Order', 'Home, About Us, the SEO\'s extra pages, then Service, Sub-Service, Brand / Device, Blog and Concern pages, until the cap is reached. Inside a group: pages the client listed first, then Implied parents, then client-confirmed pages, then gap-only services; ties go to more competitor gap keywords, then higher volume.'),
+        ('Order', 'Home, About Us, the SEO\'s extra pages, then Service, Sub-Service, Brand / Device, Blog and Concern pages, until the cap is reached. Inside a group: pages the client listed first, then Implied parents, then gap-only services; ties go to more competitor gap keywords, then higher volume.'),
         ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page. A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
-        ('SEO priority', 'The yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
+        ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are not buying searches (for example a photo search). Check each one, then replace it or add keywords in the next yellow column. Home, About Us and extra pages have none: add them.'),
+        ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
-        ('Sections, not pages', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are listed on the Not on the roadmap tab and appear in "Sections to cover" on their parent page.'),
-        ('Not on the roadmap tab', 'Pages over the cap (with the group they ranked in), items the client does not offer or has not confirmed, and items with no blog angles.'),
+        ('Sections', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are not pages. They appear in "Sections to cover on this page" on their parent page.'),
+        ('Cut tab', f'Only exists when something is over the {MAX_PAGES}-page cap: the pages and blogs that did not fit, and the group they ranked in.'),
         ('Warnings', note),
     ]
     out = Path(a.out)
     with pd.ExcelWriter(out, engine='openpyxl') as xw:
         pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
         roadmap.to_excel(xw, sheet_name='Roadmap', index=False)
-        not_df.to_excel(xw, sheet_name='Not on the roadmap', index=False)
+        if len(not_df):
+            not_df.to_excel(xw, sheet_name=CUT_TAB, index=False)
     style(out, len(roadmap))
     counts = roadmap['Page type'].value_counts().to_dict()
     print(f'Wrote {out}')
     print(f'Roadmap: {len(roadmap)} of {MAX_PAGES} rows. ' + ', '.join(f'{k}: {v}' for k, v in counts.items()))
-    print(f'Not on the roadmap: {len(not_df)} rows ({len(cut)} pages, {len(cut_blogs)} blogs, {len(cut_concerns)} concerns over the cap).')
+    print(f'Over the cap: {len(not_df)} rows ({len(cut)} pages, {len(cut_blogs)} blogs, {len(cut_concerns)} concerns).')
     for w in warnings:
         print('WARNING:', w)
     ok = True
@@ -456,12 +435,15 @@ def style(path, n):
         row[0].font = Font(bold=True)
     rm['A4'].fill = rm['B4'].fill = yellow
     ws = wb['Roadmap']
-    col = ws.max_column
+    heads = {c.value: c.column for c in ws[1]}
+    for name in (KW_COL, KW_ADD_COL, PRIORITY_COL):
+        for r in range(1, n + 2):
+            ws.cell(r, heads[name]).fill = yellow if r > 1 else PatternFill('solid', fgColor='BF8F00')
+        ws.column_dimensions[get_column_letter(heads[name])].width = 34
+    col = get_column_letter(heads[PRIORITY_COL])
     dv = DataValidation(type='list', formula1=f'"{PRIORITIES}"', allow_blank=True)
     ws.add_data_validation(dv)
-    for r in range(2, n + 2):
-        ws.cell(r, col).fill = yellow
-    dv.add(f'{get_column_letter(col)}2:{get_column_letter(col)}{n + 1}')
+    dv.add(f'{col}2:{col}{n + 1}')
     wb.save(path)
 
 
