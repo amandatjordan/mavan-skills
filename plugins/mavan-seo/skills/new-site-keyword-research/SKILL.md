@@ -63,15 +63,19 @@ Done when every check prints PASS. Printed warnings (more than 5 concerns, a con
 
 - Open the Pages tab: each "Own page" row has a primary keyword with a volume, and each "Section on..." row names a parent page that exists.
 - Pick 3 rows and compare their primary keyword and volume to the taxonomy's All Keywords tab (filter on the Service, Sub-Service or Brand / Device).
-- Pick 3 Internal links rows and confirm the relationship follows the Read Me rules.
+- Pick 3 rows with an Internal links out entry and confirm the links follow the Internal links rules in the Read Me (a link to a suggested, unconfirmed page carries the "only if the client offers it" tag).
 - Read the Not in the plan tab: every typed item the person gave is either on the Pages tab or listed there with a reason.
 
 Done when all four hold.
 
 ## Step 6: Report
 
-Send the workbook and reply in a few sentences: how many own pages and how many sections, the services with the highest keyword volume, anything on Not in the plan and why, how many items are on Confirm with client, any warning, and the volume caveat (national, taxonomy-level, relative not absolute). Name any typed item the taxonomy does not have, for the `service-taxonomy.xlsx` pull request. Practice-specific package or program names never go in the taxonomy.
+Send the workbook and reply in a few sentences: how many own pages and how many sections, the services with the highest keyword volume, anything on Not in the plan and why, how many rows have a blank Client offers it? for the client to answer (the SEO asks the client; a No drops the row), any warning, and the volume caveat (national, taxonomy-level, relative not absolute). Name any typed item the taxonomy does not have, for the `service-taxonomy.xlsx` pull request. Practice-specific package or program names never go in the taxonomy.
 
 ## Workbook
 
-Tabs: Read Me; Pages (one row per service, sub-service, brand / device and concern, with Own page or Section on a named parent page, why, primary keyword with volume, difficulty and CPC, related keywords, sections searchers look for, what to mention as a section); Internal links (from page, to page, relationship, priority, suggested anchor); Keywords (every keyword with its target page and modifier); Confirm with client (sub-services and brands the client did not list but that have real volume, with a Yes / No column); Not in the plan (not-approved or discontinued items, and items with no match).
+Tabs, in this order: **Pages**, Keywords, Not in the plan, Read Me. Everything a person works from is on Pages, so nothing that needs human input hides on a later tab.
+- **Pages**: one row per service, sub-service, brand / device and concern. Columns: Own page or Section on a named parent page, why, **Client offers it? (Yes / No)**, where the row came from (listed by the client, parent of a listed item, or suggested from the taxonomy), primary keyword with volume, difficulty and CPC, related keywords, sections searchers look for, what to mention as a section, **Internal links out (priority)**, and **Anchor text (SEO fills in)**. Client offers it? is filled with Yes for listed items and parents of listed items, and left blank (yellow) for the sub-services and brands the client did not list but that have real volume; the SEO asks the client and fills in Yes or No. Anchor text is left blank on purpose; this skill never suggests it.
+- **Keywords**: every keyword with its target page and modifier.
+- **Not in the plan**: not-approved or discontinued items, and items with no match.
+- **Read Me**: how to read the workbook, the rules, and the volume caveat.

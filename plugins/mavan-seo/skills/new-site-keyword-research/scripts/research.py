@@ -4,6 +4,7 @@
   research.py match --services "A; B" --products "C; D" [--concerns "E; F"] --out work
   research.py build --selection work/selection.tsv --client "Name" --out NAME_new_site_keyword_research.xlsx
 
+Output tabs: Pages (everything a person works from, including a Client offers it? column and the internal links), Keywords, Not in the plan, Read Me.
 Every count, join and cutoff is done here. Nothing is typed or estimated by hand. Volumes are never added together.
 """
 import argparse
@@ -43,6 +44,9 @@ MODIFIERS = {
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 
+OFFERS_COL = 'Client offers it? (Yes / No)'
+LINKS_COL = 'Internal links out (priority)'
+ANCHOR_COL = 'Anchor text for links to this page (SEO fills in)'
 LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
 DEPTH = {'Service': 1, 'Sub-Service': 2, 'Brand / Device': 3}
 SELECTION_COLS = ['kind', 'input', 'level', 'service', 'sub_service', 'brand_device', 'concern', 'status', 'candidates']
@@ -59,6 +63,11 @@ def fold(text):
 def norm(text):
     t = re.sub(r'\(family\)', ' ', fold(text).lower().replace('&', ' and '))
     return re.sub(r'\s+', ' ', re.sub(r'[^a-z0-9]+', ' ', t)).strip()
+
+
+def display(name):
+    """A taxonomy name as people read it: the taxonomy's "(family)" tag means nothing to them, so it is never shown."""
+    return re.sub(r'\s*\(family\)', '', name).strip()
 
 
 def split_list(text):
@@ -102,16 +111,17 @@ class Taxonomy:
         self.kw['near_me'] = self.kw['Near Me'].map(s) != ''
 
     def find(self, level, service='', sub='', brand='', concern=''):
+        same = lambda a, b: norm(a) == norm(b)   # a reviewer may type Juvéderm for the taxonomy's Juvéderm (family)
         for n in self.nodes:
             if n['Level'] != level:
                 continue
-            if level == 'Service' and n['Service'] == service:
+            if level == 'Service' and same(n['Service'], service):
                 return n
-            if level == 'Sub-Service' and n['Service'] == service and n['Sub-Service'] == sub:
+            if level == 'Sub-Service' and same(n['Service'], service) and same(n['Sub-Service'], sub):
                 return n
-            if level == 'Brand / Device' and n['Service'] == service and n['Brand / Device'] == brand:
+            if level == 'Brand / Device' and same(n['Service'], service) and same(n['Brand / Device'], brand):
                 return n
-            if level == 'Concern' and n['Concern'] == concern:
+            if level == 'Concern' and same(n['Concern'], concern):
                 return n
         return None
 
@@ -135,8 +145,8 @@ def num(v, cast=int):
 
 def label(n):
     if n['Level'] == 'Service' or n['Level'] == 'Concern':
-        return n['name']
-    return f"{n['Service']} > {n['name']}"
+        return display(n['name'])
+    return f"{display(n['Service'])} > {display(n['name'])}"
 
 
 # --- match ---------------------------------------------------------------------------------------
@@ -269,9 +279,11 @@ def build_plan(tax, listed):
     def add(n, how, why=''):
         key = (n['Level'], n['Service'], n['Sub-Service'], n['Brand / Device'], n['Concern'])
         if key not in plan:
-            plan[key] = {'node': n, 'listed': False, 'implied_by': []}
+            plan[key] = {'node': n, 'listed': False, 'suggested': False, 'implied_by': []}
         if how == 'listed':
             plan[key]['listed'] = True
+        elif how == 'suggested':
+            plan[key]['suggested'] = True
         elif why and why not in plan[key]['implied_by']:
             plan[key]['implied_by'].append(why)
         return plan[key]
@@ -283,6 +295,17 @@ def build_plan(tax, listed):
             svc = tax.find('Service', service=n['Service'])
             if svc:
                 add(svc, 'implied', f"{n['name']}")
+    # Sub-Services and Brands / Devices the client did not list but that have real volume (every unlisted dental one):
+    # they join the plan as suggested pages and the Client offers it? column asks the client about each.
+    plan_services = {k[1] for k in plan if k[0] == 'Service'}
+    for n in tax.nodes:
+        if n['Level'] not in ('Sub-Service', 'Brand / Device') or n['Service'] not in plan_services:
+            continue
+        key = (n['Level'], n['Service'], n['Sub-Service'], n['Brand / Device'], n['Concern'])
+        if key in plan or NOT_RECOMMENDED.search(n['Status / Notes']):
+            continue
+        if n['dental'] or node_stats(tax, n)['head_vol'] >= CONFIRM_MIN_VOLUME:
+            add(n, 'suggested')
     for p in plan.values():
         n = p['node']
         st = node_stats(tax, n)
@@ -317,7 +340,7 @@ def build_plan(tax, listed):
             parents = [('Service', n['Service'], '', '', '')]
         elif n['Level'] == 'Brand / Device':
             subs = [x.strip() for x in n['Sub-Service'].split(';') if x.strip()]
-            parents = [k for k in ((('Sub-Service', n['Service'], x, '', '')) for x in subs) if k in plan and plan[k]['own']]
+            parents = [k for k in ((('Sub-Service', n['Service'], x, '', '')) for x in subs) if k in plan and plan[k]['own'] and not plan[k]['suggested']]  # a page nobody has confirmed is never a parent
             if not parents:
                 parents = [('Service', n['Service'], '', '', '')]
         p['parents'] = [k for k in parents if k in plan]
@@ -328,9 +351,8 @@ def build_links(plan, own_names):
     links = []
 
     def add(frm, to, rel, prio):
-        anchor = (plan[to]['head']['Keyword'] if plan[to]['head'] is not None else plan[to]['node']['name'])
-        links.append({'From page': plan[frm]['label'], 'To page': plan[to]['label'], 'Relationship': rel,
-                      'Priority': prio, 'Suggested anchor text': anchor})
+        links.append({'From page': plan[frm]['label'], 'To page': plan[to]['label'], 'Relationship': rel, 'Priority': prio,
+                      'To confirmed': not plan[to]['suggested']})
 
     own = {k for k, p in plan.items() if p['own']}
     for key, p in plan.items():
@@ -402,11 +424,14 @@ def cmd_build(a):
         return (service_order.index(key[1]), DEPTH[key[0]], -p['head_vol'], p['label'])
 
     ordered = sorted(plan.items(), key=sort_key)
+    links_out = {}
+    for l in links:   # already sorted High > Medium > Low
+        links_out.setdefault(l['From page'], []).append(f"{l['To page']} ({l['Priority']})" + ('' if l['To confirmed'] else ' [only if the client offers it]'))
     mentions = {k: [] for k in plan}
     for key, p in plan.items():
         if not p['own']:
             for par in p['parents']:
-                mentions[par].append(f"{p['node']['name']} ({p['head_vol']:,})" if p['count'] else f"{p['node']['name']} (no keywords)")
+                mentions[par].append(f"{display(p['node']['name'])} ({p['head_vol']:,})" if p['count'] else f"{display(p['node']['name'])} (no keywords)")
     for key, p in ordered:
         n = p['node']
         parent_labels = ', '.join(plan[k]['label'] for k in p['parents'])
@@ -416,8 +441,10 @@ def cmd_build(a):
             rec = f'Section on {parent_labels} page' + ('s' if len(p['parents']) > 1 else '')
         head = p['head']
         note = []
-        if p['listed'] is False and n['Level'] != 'Concern':
-            note.append('Added because it is the parent of a listed item; confirm the client offers it')
+        if p['suggested']:
+            note.append('The client did not list this. Ask whether they offer it; if not, drop the row and skip links to it')
+        elif p['listed'] is False and n['Level'] != 'Concern':
+            note.append('Added because it is the parent of a listed item')
         if n['Status / Notes'] and not n['Status / Notes'].startswith(('NEW v5.1', 'Dental')) and 'Not a page gap' not in n['Status / Notes']:
             note.append('Taxonomy note: ' + n['Status / Notes'])
         if not p['count']:
@@ -426,6 +453,8 @@ def cmd_build(a):
             note.append('New in the taxonomy and not yet confirmed')
         rows.append({
             'Level': n['Level'], 'Service / sub-service': p['label'], 'Category': n['Category'] or ('Concerns' if n['Level'] == 'Concern' else ''),
+            OFFERS_COL: '' if p['suggested'] else 'Yes',
+            'Where it came from': 'Listed by the client' if p['listed'] else ('Suggested from the taxonomy, not listed' if p['suggested'] else 'Parent of a listed item'),
             'Recommendation': rec, 'Why': p['why'], 'Parent page': parent_labels if n['Level'] in ('Sub-Service', 'Brand / Device') else '',
             'Primary keyword': head['Keyword'] if head is not None else '',
             'Primary keyword volume (national)': int(head['Volume']) if head is not None else None,
@@ -437,7 +466,8 @@ def cmd_build(a):
             'City-modified searches (not listed)': p['city_count'],
             'Sections searchers look for (keywords)': modifier_counts(p['kw']['Keyword']),
             'Mention on this page as a section': ', '.join(mentions[key]) if p['own'] else '',
-            'Client listed it': 'Yes' if p['listed'] else 'Implied',
+            LINKS_COL: '\n'.join(links_out.get(p['label'], [])),
+            ANCHOR_COL: '',
             'Notes': '. '.join(note)})
     pages = pd.DataFrame(rows)
     for c in ('Primary keyword volume (national)', 'Primary keyword difficulty'):
@@ -455,27 +485,7 @@ def cmd_build(a):
                            'Near me': 'Y' if r['near_me'] else '', 'Modifier': ', '.join(mods)})
     keywords = pd.DataFrame(kwrows)
 
-    # unlisted Sub-Services and Brands / Devices under the plan's Services, at or above the volume cutoff
-    plan_services = {k[1] for k in plan if k[0] == 'Service'}
-    confirm = []
-    for n in tax.nodes:
-        if n['Level'] not in ('Sub-Service', 'Brand / Device') or n['Service'] not in plan_services:
-            continue
-        key = (n['Level'], n['Service'], n['Sub-Service'], n['Brand / Device'], n['Concern'])
-        if key in plan or NOT_RECOMMENDED.search(n['Status / Notes']):
-            continue
-        st = node_stats(tax, n)
-        if st['head_vol'] >= CONFIRM_MIN_VOLUME or n['dental']:
-            confirm.append({'Service': n['Service'], 'Level': n['Level'], 'Sub-Service / Brand / Device': n['name'],
-                            'Primary keyword': st['head']['Keyword'] if st['head'] is not None else '',
-                            'Primary keyword volume (national)': st['head_vol'] if st['head'] is not None else None,
-                            'Would be': 'Own page', 'Client offers it? (Yes / No)': ''})
-    confirm = pd.DataFrame(confirm, columns=['Service', 'Level', 'Sub-Service / Brand / Device', 'Primary keyword',
-                                             'Primary keyword volume (national)', 'Would be', 'Client offers it? (Yes / No)'])
-    if len(confirm):
-        confirm = confirm.sort_values(['Service', 'Primary keyword volume (national)'], ascending=[True, False])
     skipped = pd.DataFrame(skipped, columns=['input', 'kind', 'reason']).rename(columns={'input': 'What was typed', 'kind': 'List', 'reason': 'Why it is not in the plan'})
-    link_df = pd.DataFrame(links, columns=['From page', 'To page', 'Relationship', 'Priority', 'Suggested anchor text'])
 
     # checks
     checks = []
@@ -491,15 +501,19 @@ def cmd_build(a):
         ('New site keyword research', a.client or ''),
         ('Built from', f'{tax.version}. Taxonomy keyword list: {len(tax.kw):,} keywords. Nothing was looked up live.'),
         ('Volume: read this first', VOLUME_LABEL),
-        ('How to read the Pages tab', 'One row per service, sub-service, brand or device and concern the client listed (plus the parent Service of anything listed). '
-                                      '"Own page" rows need a page. "Section on ..." rows are too small to need their own page: cover them as a section on the parent page named, and use their keywords for that section.'),
+        ('How to read the Pages tab', 'One row per service, sub-service, brand or device and concern in the plan. "Own page" rows need a page. "Section on ..." rows are too small to need their own page: '
+                                      'cover them as a section on the parent page named, and use their keywords for that section.'),
+        ('Client offers it? column', 'Yes is filled in for what the client listed and for the parent Service of a listed item. Rows left blank (yellow) are Sub-Services and Brands / Devices the client did not list but that have '
+                                     f'a keyword of {CONFIRM_MIN_VOLUME:,}+ volume (all unlisted dental items, since dental has no minimum). Ask the client, then fill in Yes or No. '
+                                     'A No means no page: drop the row and skip links to it.'),
         ('Page or section rule', f'A Sub-Service or Brand / Device gets its own page when its highest-volume keyword is {PAGE_MIN_VOLUME:,} or more. '
                                  'Services, concerns and dental items the client lists always get a page (no minimum volume for dental). Highest keyword is used, not a sum, because many keywords are the same search worded differently.'),
         ('Service rows', 'A Service row counts only searches that name the service itself. Searches for its brands and devices (for example Botox under Neurotoxin) sit on their own rows, so the Service row also shows the highest keyword anywhere under the service to compare services fairly.'),
         ('Related keywords', f'Top {RELATED_KEYWORDS_SHOWN} by volume on the Pages tab. All of them are on the Keywords tab. City-modified searches (a city name in the keyword) are left out of every figure and only counted.'),
-        ('Internal links', 'Built from the taxonomy hierarchy: Service and Sub-Service pages link both ways, Brand / Device pages link both ways to the Sub-Service (or Service) pages above them, '
-                           'Sub-Services under one Service link to each other (low priority), and each Concern page links both ways to the Service or Sub-Service pages that treat it. Sections have no link of their own.'),
-        ('Confirm with client tab', f'Sub-Services and Brands / Devices under the listed Services that the client did not list but have a keyword of {CONFIRM_MIN_VOLUME:,}+ volume (all unlisted dental items, since dental has no minimum). Ask the client whether they offer them. Yellow column is for the SEO.'),
+        ('Internal links', 'The "Internal links out" column lists the pages each page should link to, with a priority. Built from the taxonomy hierarchy: Service and Sub-Service pages link both ways, '
+                           'Brand / Device pages link both ways to the Sub-Service (or Service) pages above them, Sub-Services under one Service link to each other (low priority), '
+                           'and each Concern page links both ways to the Service or Sub-Service pages that treat it. Sections have no link of their own.'),
+        ('Anchor text', 'Not suggested. The SEO fills in the anchor text to use for links to each page in the yellow column.'),
         ('Sections searchers look for', 'Counts of keywords with a cost, before & after, recovery / risks, comparison, candidacy or best / top word. A simple word check that suggests sections to add to the page; it does not change any page decision.'),
         ('Dental', 'Dental is in the plan with no minimum volume: every listed dental service, sub-service, brand and concern gets its own page. The taxonomy has keyword data for dental concerns only, so other dental rows show no keywords and a note to research volume separately.'),
         ('Left out', 'Treatments the taxonomy marks as not approved, investigational or discontinued (listed on the Not in the plan tab), and local pages. City searches are not part of this workbook.'),
@@ -508,17 +522,16 @@ def cmd_build(a):
     ]
     out = Path(a.out)
     with pd.ExcelWriter(out, engine='openpyxl') as xw:
-        pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
         pages.to_excel(xw, sheet_name='Pages', index=False)
-        link_df.to_excel(xw, sheet_name='Internal links', index=False)
         keywords.to_excel(xw, sheet_name='Keywords', index=False)
-        confirm.to_excel(xw, sheet_name='Confirm with client', index=False)
         skipped.to_excel(xw, sheet_name='Not in the plan', index=False)
-    style(out, len(confirm))
+        pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
+    style(out)
+    to_confirm = int((pages[OFFERS_COL] == '').sum())
     print(f'Wrote {out}')
     print(f"Pages tab: {len(pages)} rows ({(pages['Recommendation'] == 'Own page').sum()} own pages, "
-          f"{(pages['Recommendation'] != 'Own page').sum()} sections). Internal links: {len(link_df)}. Keywords: {len(keywords)}. "
-          f"Confirm with client: {len(confirm)}. Not in the plan: {len(skipped)}.")
+          f"{(pages['Recommendation'] != 'Own page').sum()} sections). Client offers it? left blank to ask the client: {to_confirm}. "
+          f"Internal links: {len(links)}. Keywords: {len(keywords)}. Not in the plan: {len(skipped)}.")
     for w in warnings:
         print('WARNING:', w)
     ok = True
@@ -529,11 +542,10 @@ def cmd_build(a):
         sys.exit(1)
 
 
-def style(path, n_confirm):
+def style(path):
     wb = load_workbook(path)
     head_fill = PatternFill('solid', fgColor='1F3864')
     yellow = PatternFill('solid', fgColor='FFF2CC')
-    widths = {'Read Me': (26, 120), 'Pages': None, 'Internal links': None, 'Keywords': None, 'Confirm with client': None, 'Not in the plan': None}
     for ws in wb:
         for c in ws[1]:
             c.font = Font(bold=True, color='FFFFFF')
@@ -555,18 +567,22 @@ def style(path, n_confirm):
         row[0].font = Font(bold=True)
     rm['B4'].fill = yellow
     rm['A4'].fill = yellow
-    cw = wb['Confirm with client']
-    if n_confirm:
-        for r in range(2, n_confirm + 2):
-            cw.cell(r, 7).fill = yellow
-        dv = DataValidation(type='list', formula1='"Yes,No"', allow_blank=True)
-        cw.add_data_validation(dv)
-        dv.add(f'G2:G{n_confirm + 1}')
     pw = wb['Pages']
+    col = {c.value: c.column for c in pw[1]}
+    offers, anchor, rec = col[OFFERS_COL], col[ANCHOR_COL], col['Recommendation']
+    dv = DataValidation(type='list', formula1='"Yes,No"', allow_blank=True)
+    pw.add_data_validation(dv)
+    dv.add(f'{get_column_letter(offers)}2:{get_column_letter(offers)}{pw.max_row}')
     for r in range(2, pw.max_row + 1):
-        if pw.cell(r, 4).value != 'Own page':
+        own = pw.cell(r, rec).value == 'Own page'
+        pw.cell(r, offers).fill = yellow
+        if own:
+            pw.cell(r, anchor).fill = yellow
+        else:
             for c in range(1, pw.max_column + 1):
                 pw.cell(r, c).font = Font(color='595959')
+    for name in (OFFERS_COL, ANCHOR_COL):
+        pw.cell(1, col[name]).fill = PatternFill('solid', fgColor='BF9000')
     wb.save(path)
 
 
