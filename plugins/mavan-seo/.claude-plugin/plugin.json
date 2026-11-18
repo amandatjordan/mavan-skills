@@ -1,7 +1,7 @@
 {
   "name": "mavan-seo",
-  "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, site diagnosis (Search Console triage), backlinks, prospect audit, new-site keyword gap (competitor gap for a business with no website), prospect diagnosis (authority vs content vs architecture), client diagnosis (same, with Search Console and a 6-month comparison), prospect sales report (also for clients), service page title & H1 review, client report from any audit, migration sheet (merges the prune, IA and service gap audits into one migration workbook)",
-  "version": "1.33.0",
+  "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, site diagnosis (Search Console triage), backlinks, prospect audit, new-site keyword gap (competitor gap for a business with no website), new site keyword research (pages and keywords for a new site from the service taxonomy), prospect diagnosis (authority vs content vs architecture), client diagnosis (same, with Search Console and a 6-month comparison), prospect sales report (also for clients), service page title & H1 review, client report from any audit, migration sheet (merges the prune, IA and service gap audits into one migration workbook)",
+  "version": "1.34.0",
   "author": {
     "name": "Mavan"
   }
