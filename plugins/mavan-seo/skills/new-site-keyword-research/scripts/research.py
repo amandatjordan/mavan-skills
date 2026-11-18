@@ -128,6 +128,11 @@ class Taxonomy:
         return k[m]
 
 
+def num(v, cast=int):
+    """A number from a keyword cell, or None when the taxonomy leaves it blank (Keyword Difficulty and CPC are blank for the concern keywords added in v5.3)."""
+    return None if v is None or pd.isna(v) else cast(v)
+
+
 def label(n):
     if n['Level'] == 'Service' or n['Level'] == 'Concern':
         return n['name']
@@ -291,8 +296,10 @@ def build_plan(tax, listed):
             p['why'] = ('Service the client lists' if p['listed'] else 'Parent of ' + ', '.join(p['implied_by'])) if n['Level'] == 'Service' \
                 else 'Concern the client lists (new sites get very few concern pages)'
         else:
-            p['own'] = p['head_vol'] >= PAGE_MIN_VOLUME
-            if not p['count']:
+            p['own'] = n['dental'] or p['head_vol'] >= PAGE_MIN_VOLUME
+            if n['dental']:
+                p['why'] = 'Dental: no minimum volume is applied, so every listed dental item gets its own page'
+            elif not p['count']:
                 p['why'] = 'No keyword data in the taxonomy, so the volume cutoff cannot decide: section by default. Check volume before building a page'
             elif p['own']:
                 p['why'] = f"Highest keyword volume {p['head_vol']:,} is at least {PAGE_MIN_VOLUME:,}: own page"
@@ -422,8 +429,8 @@ def cmd_build(a):
             'Recommendation': rec, 'Why': p['why'], 'Parent page': parent_labels if n['Level'] in ('Sub-Service', 'Brand / Device') else '',
             'Primary keyword': head['Keyword'] if head is not None else '',
             'Primary keyword volume (national)': int(head['Volume']) if head is not None else None,
-            'Primary keyword difficulty': int(head['Keyword Difficulty']) if head is not None else None,
-            'Primary keyword CPC (USD)': round(float(head['CPC']), 2) if head is not None else None,
+            'Primary keyword difficulty': num(head['Keyword Difficulty']) if head is not None else None,
+            'Primary keyword CPC (USD)': (round(num(head['CPC'], float), 2) if num(head['CPC'], float) is not None else None) if head is not None else None,
             'Highest keyword in the whole service (national)': whole_service(tax, n) if n['Level'] == 'Service' else '',
             f'Related keywords (top {RELATED_KEYWORDS_SHOWN}, volume)': fmt_keywords(p['kw'], RELATED_KEYWORDS_SHOWN),
             'Keywords in taxonomy': p['count'],
@@ -443,7 +450,8 @@ def cmd_build(a):
             mods = [m for m, pat in MODIFIERS.items() if re.search(pat, r['Keyword'].lower())]
             kwrows.append({'Target page': target, 'Topic': p['label'], 'Level': p['node']['Level'],
                            'Keyword': r['Keyword'], 'Volume (national)': int(r['Volume']),
-                           'Keyword difficulty': int(r['Keyword Difficulty']), 'CPC (USD)': round(float(r['CPC']), 2),
+                           'Keyword difficulty': num(r['Keyword Difficulty']),
+                           'CPC (USD)': round(num(r['CPC'], float), 2) if num(r['CPC'], float) is not None else None,
                            'Near me': 'Y' if r['near_me'] else '', 'Modifier': ', '.join(mods)})
     keywords = pd.DataFrame(kwrows)
 
@@ -457,9 +465,10 @@ def cmd_build(a):
         if key in plan or NOT_RECOMMENDED.search(n['Status / Notes']):
             continue
         st = node_stats(tax, n)
-        if st['head_vol'] >= CONFIRM_MIN_VOLUME:
+        if st['head_vol'] >= CONFIRM_MIN_VOLUME or n['dental']:
             confirm.append({'Service': n['Service'], 'Level': n['Level'], 'Sub-Service / Brand / Device': n['name'],
-                            'Primary keyword': st['head']['Keyword'], 'Primary keyword volume (national)': st['head_vol'],
+                            'Primary keyword': st['head']['Keyword'] if st['head'] is not None else '',
+                            'Primary keyword volume (national)': st['head_vol'] if st['head'] is not None else None,
                             'Would be': 'Own page', 'Client offers it? (Yes / No)': ''})
     confirm = pd.DataFrame(confirm, columns=['Service', 'Level', 'Sub-Service / Brand / Device', 'Primary keyword',
                                              'Primary keyword volume (national)', 'Would be', 'Client offers it? (Yes / No)'])
@@ -485,14 +494,14 @@ def cmd_build(a):
         ('How to read the Pages tab', 'One row per service, sub-service, brand or device and concern the client listed (plus the parent Service of anything listed). '
                                       '"Own page" rows need a page. "Section on ..." rows are too small to need their own page: cover them as a section on the parent page named, and use their keywords for that section.'),
         ('Page or section rule', f'A Sub-Service or Brand / Device gets its own page when its highest-volume keyword is {PAGE_MIN_VOLUME:,} or more. '
-                                 'Services and concerns the client lists always get a page. Highest keyword is used, not a sum, because many keywords are the same search worded differently.'),
+                                 'Services, concerns and dental items the client lists always get a page (no minimum volume for dental). Highest keyword is used, not a sum, because many keywords are the same search worded differently.'),
         ('Service rows', 'A Service row counts only searches that name the service itself. Searches for its brands and devices (for example Botox under Neurotoxin) sit on their own rows, so the Service row also shows the highest keyword anywhere under the service to compare services fairly.'),
         ('Related keywords', f'Top {RELATED_KEYWORDS_SHOWN} by volume on the Pages tab. All of them are on the Keywords tab. City-modified searches (a city name in the keyword) are left out of every figure and only counted.'),
         ('Internal links', 'Built from the taxonomy hierarchy: Service and Sub-Service pages link both ways, Brand / Device pages link both ways to the Sub-Service (or Service) pages above them, '
                            'Sub-Services under one Service link to each other (low priority), and each Concern page links both ways to the Service or Sub-Service pages that treat it. Sections have no link of their own.'),
-        ('Confirm with client tab', f'Sub-Services and Brands / Devices under the listed Services that the client did not list but have a keyword of {CONFIRM_MIN_VOLUME:,}+ volume. Ask the client whether they offer them. Yellow column is for the SEO.'),
+        ('Confirm with client tab', f'Sub-Services and Brands / Devices under the listed Services that the client did not list but have a keyword of {CONFIRM_MIN_VOLUME:,}+ volume (all unlisted dental items, since dental has no minimum). Ask the client whether they offer them. Yellow column is for the SEO.'),
         ('Sections searchers look for', 'Counts of keywords with a cost, before & after, recovery / risks, comparison, candidacy or best / top word. A simple word check that suggests sections to add to the page; it does not change any page decision.'),
-        ('Dental', 'Dental services and concerns are in the plan like any other, but the taxonomy has no keyword data for them yet. Their rows show no keywords and a note, and sub-services and brands default to a section until volume is checked.'),
+        ('Dental', 'Dental is in the plan with no minimum volume: every listed dental service, sub-service, brand and concern gets its own page. The taxonomy has keyword data for dental concerns only, so other dental rows show no keywords and a note to research volume separately.'),
         ('Left out', 'Treatments the taxonomy marks as not approved, investigational or discontinued (listed on the Not in the plan tab), and local pages. City searches are not part of this workbook.'),
         ('What the client listed', '; '.join(f"{r['kind']}: {r['input']}" for r, n in listed)),
         ('Warnings', ' | '.join(warnings) if warnings else 'None'),
