@@ -27,7 +27,6 @@ SERVICE_KINDS = ('Service', 'Sub-Service', 'Brand / Device')
 BLOG_PREFIX = '/blog'
 BLOG_INDEX_NAME = 'Blog'
 MAX_SEGMENTS = 3                  # /services/service/child
-MAX_NAV = 8                       # warn above this many Yes in the main nav
 # A page whose name contains one of these is a legal / utility page and defaults to No in the main nav.
 NAV_NO_WORDS = ('privacy', 'terms', 'cookie', 'accessibility', 'sitemap', 'disclaimer', 'hipaa', 'notice', 'thank', '404')
 NAV_FIXED_KINDS = ('Home', 'blog_index', 'blog')   # not changeable by the SEO
@@ -204,8 +203,6 @@ def plan(roadmap_path, csv_path):
         if len(names) > 1:
             warnings.append(f"URL {p} is used by more than one page: {', '.join(names)}.")
     n_nav = sum(1 for d in pages if d['nav'] == 'Yes')
-    if n_nav > MAX_NAV:
-        warnings.append(f'{n_nav} pages are marked Yes for the main nav. Group Services under one dropdown and trim the rest.')
 
     # Links: copied from the roadmap, URLs added. Nothing is added, removed or re-anchored.
     links, inbound = [], {}

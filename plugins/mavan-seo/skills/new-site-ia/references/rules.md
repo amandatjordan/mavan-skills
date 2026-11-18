@@ -24,7 +24,7 @@ Order: roadmap order (without blogs), CSV pages, the blog index, then the blogs.
 - **Always Yes:** Home, the blog index. **Always No:** individual blog posts. These cells are not yellow.
 - Yes: About Us, Service pages, roadmap extra pages (packages, providers, locations and so on) and CSV pages, except legal / utility pages (name contains privacy, terms, cookie, accessibility, sitemap, disclaimer, hipaa, notice, thank or 404), which are No.
 - No: Sub-Service, Brand / Device and Concern pages (reached from their parent page).
-- Every other cell is yellow: a recommendation the SEO can change. More than 8 Yes raises a warning; Services belong in one dropdown.
+- Every other cell is yellow: a recommendation the SEO can change.  There is no limit on how many pages are in the main nav.
 
 ## Internal links
 

@@ -55,7 +55,7 @@ Done when all five hold.
 
 ## Step 5: Report
 
-Send the workbook. Reply in a few sentences: how many pages (and how many are blog posts), the pages added from the CSV and the `/blog` index, that URLs the client gave were used as given and the yellow URLs are our recommendations for the SEO to check, that the SEO can change any yellow cell in the "In main nav" column (Home, the blog index and blog posts are fixed), how many pages are in the main nav and the warning if it is too many, that blog URLs are placeholders until the titles are chosen, each warning, and what needs fixing in the roadmap. Do not recap the steps.
+Send the workbook. Reply in a few sentences: how many pages (and how many are blog posts), the pages added from the CSV and the `/blog` index, that URLs the client gave were used as given and the yellow URLs are our recommendations for the SEO to check, that the SEO can change any yellow cell in the "In main nav" column (Home, the blog index and blog posts are fixed), how many pages are in the main nav, that blog URLs are placeholders until the titles are chosen, each warning, and what needs fixing in the roadmap. Do not recap the steps.
 
 ## Workbook
 
