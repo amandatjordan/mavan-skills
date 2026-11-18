@@ -121,16 +121,21 @@ class ResearchTest(unittest.TestCase):
         self.assertIn('Highest keyword in the whole service', ' '.join(pages.columns))
         self.assertIn('lip filler (2,000)', row['Highest keyword in the whole service (national)'])
 
-    def test_not_recommended_and_dental_are_left_out(self):
-        p, out = self.match_and_build(services='implant', products='oldy; brandy')
+    def test_not_recommended_is_left_out(self):
+        p, out = self.match_and_build(services='filler', products='oldy; brandy')
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         skipped = pd.read_excel(out, sheet_name='Not in the plan')
-        text = ' '.join(skipped['Why it is not in the plan'])
-        self.assertIn('Dental', text)
-        self.assertIn('Do not flag', text)
+        self.assertIn('Do not flag', ' '.join(skipped['Why it is not in the plan']))
         pages = pd.read_excel(out, sheet_name='Pages')
         self.assertNotIn('Filler > Oldy', set(pages['Service / sub-service']))
-        self.assertNotIn('Implants', set(pages['Service / sub-service']))
+
+    def test_dental_is_included_with_a_no_keyword_note(self):
+        p, out = self.match_and_build(services='implant')
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        self.assertEqual(pages.loc['Implants', 'Recommendation'], 'Own page')
+        self.assertEqual(pages.loc['Implants', 'Keywords in taxonomy'], 0)
+        self.assertIn('research its volume separately', pages.loc['Implants', 'Notes'])
 
     def test_internal_links_follow_hierarchy_and_concerns(self):
         p, out = self.match_and_build(services='lip filler; chin filler; facial', products='brandy', concerns='wrinkles; marks')
@@ -173,6 +178,19 @@ class ResearchTest(unittest.TestCase):
 
 
 class RealTaxonomySmoke(unittest.TestCase):
+    def test_both_skills_bundle_the_same_taxonomy(self):
+        other = SKILL.parent / 'service-gap-audit/references/service-taxonomy.xlsx'
+        self.assertEqual(other.read_bytes(), REAL_TAXONOMY.read_bytes(),
+                         'service-taxonomy.xlsx differs between service-gap-audit and new-site-keyword-research: copy the updated file to both')
+
+    def test_every_concern_points_to_real_services(self):
+        tax = pd.read_excel(REAL_TAXONOMY, sheet_name='Taxonomy')
+        names = set(tax[tax.Level.isin(['Service', 'Sub-Service'])][['Service', 'Sub-Service']].stack())
+        for _, r in tax[tax.Level == 'Concern'].iterrows():
+            for nm in [x.strip() for x in str(r['Implies Offered']).split(';') if x.strip()]:
+                self.assertIn(nm, names, f"{r['Concern']} points to {nm!r}, which is not a Service or Sub-Service")
+
+
     def test_real_taxonomy_builds(self):
         tmp = Path(tempfile.mkdtemp())
         run('match', '--services', 'Botox; lip filler; tummy tuck', '--products', 'Juvederm Voluma', '--concerns', 'double chin', '--out', tmp / 'work')

@@ -10,7 +10,8 @@ Category > Service > Sub-Service > Brand / Device. A **Concern** is a problem pe
 
 - Every item the person lists that matches a taxonomy row.
 - The **parent Service** of any listed Sub-Service or Brand / Device, marked "Implied" (the taxonomy's implication rule: a Brand / Device implies its Service). Sub-Services are not implied by a brand; unlisted ones go to Confirm with client.
-- Left out, with the reason on the Not in the plan tab: dental rows (the taxonomy has no keyword data for them), items whose taxonomy note says not US-approved, not FDA-approved, investigational or discontinued, and typed items with no match.
+- Left out, with the reason on the Not in the plan tab: items whose taxonomy note says not US-approved, not FDA-approved, investigational or discontinued, and typed items with no match.
+- **Dental is included.** The taxonomy has no keyword data for dental services yet, so dental rows show no keywords and a note. A dental Sub-Service or Brand / Device with no keywords defaults to a section, because the volume cutoff has nothing to decide with. Check its volume before building a page.
 
 ## Page or section
 
@@ -31,6 +32,7 @@ A section row keeps its keywords: they are the headings and terms for that secti
 - **Highest keyword, never a sum.** Many keywords are the same search worded differently, so adding them double counts.
 - City-modified keywords (a city name in the search, `Geo Modified` in the taxonomy) are excluded from every figure and shown only as a count. "Near me" keywords stay in.
 - A Service row counts only searches that name the service. Searches for its brands (Botox under Neurotoxin) sit on the brand rows, so Service rows also show the highest keyword anywhere under the service, as text, to compare services.
+- Concerns are only those that point to a real Service or Sub-Service. Keywords for a concern that was removed from the taxonomy sit in Unmapped.
 - Only keywords the taxonomy classes as Service or Concern are used. Generic, Exclude and Unmapped keywords are ignored.
 
 ## Internal links

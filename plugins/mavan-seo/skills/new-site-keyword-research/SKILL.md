@@ -26,7 +26,7 @@ Ask for all of this in **one** message, before doing anything else. Say the volu
 | **Top concerns** to address | Optional, up to 5 | Problems patients search for ("double chin", "acne scars"). A new site gets very few concern pages, so suggest up to 5 and accept none |
 | Client name | Optional | Names the workbook |
 
-Dental services are in the taxonomy but have no keyword data, so they cannot be researched here. If the practice is mostly dental, research only its med spa or surgical services and say so.
+Dental services and concerns are in the taxonomy and are handled like any other, but the taxonomy has no keyword data for them yet. Their rows come out with no keywords and a note to research volume separately; tell the person this when they list dental services.
 
 Done when the person has given services and products (or said there are none) and said whether they want concerns.
 
@@ -36,7 +36,7 @@ Done when the person has given services and products (or said there are none) an
 python $SKILL/scripts/research.py match --services "A; B; C" --products "D; E" [--concerns "F; G"] --out work
 ```
 
-Separate items with semicolons. It matches each typed item to the taxonomy by name, then by the taxonomy's match terms (using the most specific level that matches), and writes `work/selection.tsv` with one row per item and a `status` (ok, review, none, dental). It prints every row that is not ok.
+Separate items with semicolons. It matches each typed item to the taxonomy by name, then by the taxonomy's match terms (using the most specific level that matches), and writes `work/selection.tsv` with one row per item and a `status` (ok, review, none). It prints every row that is not ok.
 
 Done when `work/selection.tsv` exists.
 
@@ -46,7 +46,6 @@ Read `work/selection.tsv`. Correct `level`, `service`, `sub_service`, `brand_dev
 - A product or device is a **Brand / Device** row; a treatment is a **Service** or **Sub-Service** row; a problem is a **Concern** row. Name each for what it is (Botox is a Brand / Device under Neurotoxin, never "Neurotoxin").
 - One typed item that names two things ("Juvéderm lip filler") becomes two rows.
 - A row with no match stays with `level` blank. Ask the person what it is in **one** message for all such rows, or leave it out. Never invent a taxonomy name.
-- Leave `dental` rows as they are; the build reports them as left out.
 
 Done when every row is either a valid taxonomy item or deliberately blank.
 
@@ -75,4 +74,4 @@ Send the workbook and reply in a few sentences: how many own pages and how many 
 
 ## Workbook
 
-Tabs: Read Me; Pages (one row per service, sub-service, brand / device and concern, with Own page or Section on a named parent page, why, primary keyword with volume, difficulty and CPC, related keywords, sections searchers look for, what to mention as a section); Internal links (from page, to page, relationship, priority, suggested anchor); Keywords (every keyword with its target page and modifier); Confirm with client (sub-services and brands the client did not list but that have real volume, with a Yes / No column); Not in the plan (dental, not-approved items, no match).
+Tabs: Read Me; Pages (one row per service, sub-service, brand / device and concern, with Own page or Section on a named parent page, why, primary keyword with volume, difficulty and CPC, related keywords, sections searchers look for, what to mention as a section); Internal links (from page, to page, relationship, priority, suggested anchor); Keywords (every keyword with its target page and modifier); Confirm with client (sub-services and brands the client did not list but that have real volume, with a Yes / No column); Not in the plan (not-approved or discontinued items, and items with no match).

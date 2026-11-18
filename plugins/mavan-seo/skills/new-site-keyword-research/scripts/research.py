@@ -179,7 +179,7 @@ def cmd_match(a):
             'sub_service': first['Sub-Service'] if first and first['Level'] == 'Sub-Service' else '',
             'brand_device': first['Brand / Device'] if first and first['Level'] == 'Brand / Device' else '',
             'concern': first['Concern'] if first and first['Level'] == 'Concern' else '',
-            'status': status if not (first and first['dental']) else 'dental',
+            'status': status,
             'candidates': ' | '.join(f"{n['Level']}: {label(n)}" for n in cands)})
     with open(out / 'selection.tsv', 'w', newline='') as f:
         w = csv.DictWriter(f, SELECTION_COLS, delimiter='\t')
@@ -248,9 +248,6 @@ def parse_selection(tax, path):
             problems.append(f"line {i}: no taxonomy row for {r['level']} service={r['service']!r} sub_service={r['sub_service']!r} "
                             f"brand_device={r['brand_device']!r} concern={r['concern']!r}")
             continue
-        if n['dental']:
-            unmatched.append({'input': r['input'], 'kind': r['kind'], 'reason': 'Dental: the taxonomy lists dental services but holds no keyword data for them, so they are not researched here.'})
-            continue
         if NOT_RECOMMENDED.search(n['Status / Notes']):
             blocked.append({'input': r['input'], 'kind': r['kind'], 'reason': 'Not recommended per the taxonomy: ' + n['Status / Notes']})
             continue
@@ -279,7 +276,7 @@ def build_plan(tax, listed):
     for r, n in listed:
         if n['Level'] in ('Sub-Service', 'Brand / Device'):
             svc = tax.find('Service', service=n['Service'])
-            if svc and not svc['dental']:
+            if svc:
                 add(svc, 'implied', f"{n['name']}")
     for p in plan.values():
         n = p['node']
@@ -296,7 +293,7 @@ def build_plan(tax, listed):
         else:
             p['own'] = p['head_vol'] >= PAGE_MIN_VOLUME
             if not p['count']:
-                p['why'] = 'No keywords in the taxonomy for this item: cover it as a section'
+                p['why'] = 'No keyword data in the taxonomy, so the volume cutoff cannot decide: section by default. Check volume before building a page'
             elif p['own']:
                 p['why'] = f"Highest keyword volume {p['head_vol']:,} is at least {PAGE_MIN_VOLUME:,}: own page"
             else:
@@ -416,6 +413,8 @@ def cmd_build(a):
             note.append('Added because it is the parent of a listed item; confirm the client offers it')
         if n['Status / Notes'] and not n['Status / Notes'].startswith(('NEW v5.1', 'Dental')) and 'Not a page gap' not in n['Status / Notes']:
             note.append('Taxonomy note: ' + n['Status / Notes'])
+        if not p['count']:
+            note.append('No keywords in the taxonomy for this item (dental has none yet): research its volume separately')
         if n['Status / Notes'].startswith('NEW v5.1'):
             note.append('New in the taxonomy and not yet confirmed')
         rows.append({
@@ -452,7 +451,7 @@ def cmd_build(a):
     plan_services = {k[1] for k in plan if k[0] == 'Service'}
     confirm = []
     for n in tax.nodes:
-        if n['Level'] not in ('Sub-Service', 'Brand / Device') or n['dental'] or n['Service'] not in plan_services:
+        if n['Level'] not in ('Sub-Service', 'Brand / Device') or n['Service'] not in plan_services:
             continue
         key = (n['Level'], n['Service'], n['Sub-Service'], n['Brand / Device'], n['Concern'])
         if key in plan or NOT_RECOMMENDED.search(n['Status / Notes']):
@@ -477,7 +476,7 @@ def cmd_build(a):
     checks.append(('Every internal link joins two own pages', all(l['From page'] in own_labels and l['To page'] in own_labels for l in links)))
     checks.append(('No page label appears twice', len(pages['Service / sub-service']) == pages['Service / sub-service'].nunique()))
     checks.append(('Keywords tab rows equal the Pages tab keyword counts', len(keywords) == int(pages['Keywords in taxonomy'].sum())))
-    checks.append(('No dental or not-recommended item is in the plan', all(not p['node']['dental'] and not NOT_RECOMMENDED.search(p['node']['Status / Notes']) for p in plan.values())))
+    checks.append(('No not-recommended item is in the plan', all(not NOT_RECOMMENDED.search(p['node']['Status / Notes']) for p in plan.values())))
 
     read_me = [
         ('New site keyword research', a.client or ''),
@@ -493,7 +492,8 @@ def cmd_build(a):
                            'Sub-Services under one Service link to each other (low priority), and each Concern page links both ways to the Service or Sub-Service pages that treat it. Sections have no link of their own.'),
         ('Confirm with client tab', f'Sub-Services and Brands / Devices under the listed Services that the client did not list but have a keyword of {CONFIRM_MIN_VOLUME:,}+ volume. Ask the client whether they offer them. Yellow column is for the SEO.'),
         ('Sections searchers look for', 'Counts of keywords with a cost, before & after, recovery / risks, comparison, candidacy or best / top word. A simple word check that suggests sections to add to the page; it does not change any page decision.'),
-        ('Left out', 'Dental services (no keyword data in the taxonomy), treatments the taxonomy marks as not approved or discontinued, and local pages. City searches are not part of this workbook.'),
+        ('Dental', 'Dental services and concerns are in the plan like any other, but the taxonomy has no keyword data for them yet. Their rows show no keywords and a note, and sub-services and brands default to a section until volume is checked.'),
+        ('Left out', 'Treatments the taxonomy marks as not approved, investigational or discontinued (listed on the Not in the plan tab), and local pages. City searches are not part of this workbook.'),
         ('What the client listed', '; '.join(f"{r['kind']}: {r['input']}" for r, n in listed)),
         ('Warnings', ' | '.join(warnings) if warnings else 'None'),
     ]
