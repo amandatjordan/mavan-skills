@@ -41,10 +41,9 @@ SOURCE_TEXT = {
 }
 PRIORITIES = 'High,Medium,Low'
 CUT_TAB = 'Cut for the 50-page cap'
-KW_COL = 'Primary keyword (SEO: check it fits the page, then update it or add keywords)'
+KW_COL = 'Primary keyword (SEO: check it fits the page, then replace it or add keywords)'
 ANCHOR_COL = 'Must appear on page (anchor text other pages use to link here)'
 ANCHOR_SRC = 'Anchor text for links to this page (SEO fills in)'
-KW_ADD_COL = 'Keywords the SEO adds or swaps in'
 PRIORITY_COL = 'SEO priority (High / Medium / Low)'
 CUT_INSTRUCTIONS = (f'These pages and blogs did not fit under the {MAX_PAGES}-page cap. The SEO makes the final list: move a row to the Roadmap tab to write it, '
                     f'or move a Roadmap row here to drop it. The columns match the Roadmap (the reason it was cut is the last column), so a row can be cut and pasted as it is. '
@@ -353,7 +352,7 @@ def cmd_build(a):
 
     def add(page, ptype, content, why, parent='', kw='', vol=None, gapn='', sect='', anchor='', into=None):
         (rows if into is None else into).append({'Page': page, 'Page type': ptype, 'Content to write': content, 'Why it is on the roadmap': why, 'Parent page / links to': parent,
-                     KW_COL: kw, 'Primary keyword volume (national)': vol, KW_ADD_COL: '', ANCHOR_COL: anchor,
+                     KW_COL: kw, 'Primary keyword volume (national)': vol, ANCHOR_COL: anchor,
                      'Competitor gap keywords (2+ in top 10 or 1+ in top 3)': gapn, 'Sections to cover on this page': sect,
                      PRIORITY_COL: ''})
 
@@ -423,7 +422,7 @@ def cmd_build(a):
         ('What this is', f'The pages and blog posts we recommend writing content for, {MAX_PAGES} at most. Home, About Us and every extra page the SEO listed always count toward the {MAX_PAGES} and are never cut.'),
         ('Order', 'Home, About Us, the SEO\'s extra pages, then Service, Sub-Service, Brand / Device, Blog and Concern pages, until the cap is reached. Inside a group: pages the client listed first, then Implied parents, then gap-only services; ties go to more competitor gap keywords, then higher volume.'),
         ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page. A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
-        ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it or add keywords in the next yellow column. Home, About Us and extra pages have none: add them.'),
+        ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it, or add keywords to the same cell. Home, About Us and extra pages have none: add them.'),
         ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none.'),
         ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
@@ -481,7 +480,7 @@ def style(path, n):
     rm['A4'].fill = rm['B4'].fill = yellow
     ws = wb['Roadmap']
     heads = {c.value: c.column for c in ws[1]}
-    for name in (KW_COL, KW_ADD_COL, PRIORITY_COL):
+    for name in (KW_COL, PRIORITY_COL):
         for r in range(1, n + 2):
             ws.cell(r, heads[name]).fill = yellow if r > 1 else PatternFill('solid', fgColor='BF8F00')
         ws.column_dimensions[get_column_letter(heads[name])].width = 34

@@ -35,7 +35,7 @@ Only gap services the SEO marked **Yes** in "Offered by our client" count. Yes w
 
 ## Primary keywords are for the SEO to check
 
-The primary keyword is the research workbook's highest-volume search for the page. It can be a poor target (for example "face with wrinkles" for Wrinkles / Fine Lines is someone looking at pictures, not looking for a treatment). The Roadmap highlights the column and has a second yellow column for the SEO to replace it or add keywords. The script never judges a keyword.
+The primary keyword is the research workbook's highest-volume search for the page. It can be a poor target (for example "face with wrinkles" for Wrinkles / Fine Lines is someone looking at pictures, not looking for a treatment). The Roadmap highlights the column (yellow) for the SEO to replace the keyword or add keywords in the same cell. The script never judges a keyword.
 
 ## Must appear on page
 
