@@ -1,0 +1,65 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "{{page_url}}#webpage",
+      "url": "{{page_url}}",
+      "name": "{{page_title}}",
+      "description": "{{meta_description}}",
+      "isPartOf": { "@id": "{{site_url}}#website" },
+      "publisher": { "@id": "{{business_id}}" },
+      "breadcrumb": { "@id": "{{page_url}}#breadcrumb" },
+      "mainEntity": { "@id": "{{page_url}}#procedure" }
+    },
+    {
+      "@type": "MedicalProcedure",
+      "@id": "{{page_url}}#procedure",
+      "name": "{{procedure_name}}",
+      "description": "{{procedure_description}}",
+      "url": "{{page_url}}"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "{{page_url}}#breadcrumb",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "{{breadcrumb_1_name}}", "item": "{{breadcrumb_1_url}}" },
+        { "@type": "ListItem", "position": 2, "name": "{{breadcrumb_2_name}}", "item": "{{breadcrumb_2_url}}" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "{{page_url}}#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "{{faq_1_question}}",
+          "acceptedAnswer": { "@type": "Answer", "text": "{{faq_1_answer}}" }
+        },
+        {
+          "@type": "Question",
+          "name": "{{faq_2_question}}",
+          "acceptedAnswer": { "@type": "Answer", "text": "{{faq_2_answer}}" }
+        }
+      ]
+    },
+    {
+      "@type": "MedicalClinic",
+      "@id": "{{business_id}}",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "{{rating_value}}",
+        "reviewCount": "{{review_count}}"
+      },
+      "review": [
+        {
+          "@type": "Review",
+          "author": { "@type": "Person", "name": "{{review_1_author}}" },
+          "datePublished": "{{review_1_date}}",
+          "reviewBody": "{{review_1_text}}",
+          "reviewRating": { "@type": "Rating", "ratingValue": "{{review_1_rating}}" }
+        }
+      ]
+    }
+  ]
+}
