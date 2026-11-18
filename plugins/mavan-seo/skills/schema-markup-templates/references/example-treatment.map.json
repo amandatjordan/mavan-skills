@@ -1,0 +1,31 @@
+{
+  "placeholders": {
+    "page_url": "The full URL of this page",
+    "page_title": "The page's title (the H1 or the SEO title)",
+    "meta_description": "The page's meta description",
+    "site_url": "The site's home page URL, ending in a slash",
+    "business_id": "The business node's @id, the same value the Home template uses",
+    "procedure_name": "The name of the treatment this page is about",
+    "procedure_description": "The treatment's description, copied from the page's introduction",
+    "breadcrumb_1_name": "Name of the first breadcrumb level (the parent page)",
+    "breadcrumb_1_url": "URL of the first breadcrumb level",
+    "breadcrumb_2_name": "Name of the second breadcrumb level (this page)",
+    "breadcrumb_2_url": "URL of the second breadcrumb level (this page)",
+    "faq_1_question": "The first FAQ question on the page",
+    "faq_1_answer": "Its answer, exactly as shown on the page",
+    "faq_2_question": "The second FAQ question on the page",
+    "faq_2_answer": "Its answer, exactly as shown on the page",
+    "rating_value": "The average rating shown on the page",
+    "review_count": "The number of reviews behind that rating",
+    "review_1_author": "Name of the first review's author",
+    "review_1_date": "Date of the first review (YYYY-MM-DD)",
+    "review_1_text": "Text of the first review",
+    "review_1_rating": "Star rating of the first review"
+  },
+  "notes": [
+    "Include a block only if the page has it: FAQPage needs an FAQ section on the page; the review block needs reviews shown on the page. A page without them uses the template without those blocks.",
+    "Repeat: the ListItem for each breadcrumb level (a Sub-Service or Brand / Device page has one more level than a Service page), each Question for each FAQ, and each Review for each review shown.",
+    "The business node here only adds reviews. Its other details (name, address, phone, hours, sameAs) live on the Home page and are joined to it by the same @id.",
+    "Reviews and ratings of a business that are shown on its own website are valid schema.org markup, but Google does not show review stars for them."
+  ]
+}
