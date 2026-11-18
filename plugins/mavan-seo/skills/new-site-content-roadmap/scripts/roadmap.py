@@ -44,6 +44,9 @@ CUT_TAB = 'Cut for the 50-page cap'
 KW_COL = 'Primary keyword (SEO: check it fits the page, then replace it or add keywords)'
 ANCHOR_COL = 'Must appear on page (anchor text other pages use to link here)'
 ANCHOR_SRC = 'Anchor text for links to this page (SEO fills in)'
+LINKS_SRC = 'Internal links out (priority)'
+LINK_TAB = 'Internal links'
+LINK_LEVELS = ('Service', 'Sub-Service', 'Brand / Device')   # every one of these must receive at least one internal link
 PRIORITY_COL = 'SEO priority (High / Medium / Low)'
 CUT_INSTRUCTIONS = (f'These pages and blogs did not fit under the {MAX_PAGES}-page cap. The SEO makes the final list: move a row to the Roadmap tab to write it, '
                     f'or move a Roadmap row here to drop it. The columns match the Roadmap (the reason it was cut is the last column), so a row can be cut and pasted as it is. '
@@ -51,7 +54,7 @@ CUT_INSTRUCTIONS = (f'These pages and blogs did not fit under the {MAX_PAGES}-pa
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
-                 'Parent page', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from', ANCHOR_SRC, 'Why']
+                 'Parent page', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from', ANCHOR_SRC, LINKS_SRC, 'Why']
 MATCH_COLS = ['gap_service', 'offered', 'gap_keywords', 'local_gap_keywords', 'page', 'level', 'status', 'candidates']
 GAP_LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
 
@@ -204,6 +207,47 @@ def cmd_match(a):
 
 
 # --- build -------------------------------------------------------------------------------------
+def parse_links(text, warnings):
+    """The research sheet's "Internal links out (priority)" cell: one "Page name (High)" per line, optionally followed by [a note]."""
+    out = []
+    for line in text.split('\n'):
+        if not line.strip():
+            continue
+        m = re.match(r'^(.*?) \((High|Medium|Low)\)(?: \[.*\])?\s*$', line.strip())
+        if m:
+            out.append((m.group(1).strip(), m.group(2)))
+        else:
+            warnings.append(f'Could not read this internal link on the research sheet: "{line.strip()}".')
+    return out
+
+
+def build_links(kept_pages, kept_blogs):
+    """Links between the pages on the roadmap. The research sheet's links are used when both pages are on the roadmap. A Service,
+    Sub-Service or Brand / Device page that still has no link pointing at it gets one from its parent page (its Service if the parent
+    is not on the roadmap, Home if neither is)."""
+    byname = {c['label']: c for c in kept_pages}
+    links = {}
+    for c in kept_pages:
+        for target, prio in c['links']:
+            if target in byname and target != c['label']:
+                links.setdefault((c['label'], target), (prio, 'From the keyword research'))
+    added = 0
+    for c in kept_pages:
+        if c['level'] in LINK_LEVELS and not any(to == c['label'] for (_, to) in links):
+            src = c['parent'] if c['parent'] in byname else (c['service'] if c['service'] in byname and c['service'] != c['label'] else 'Home')
+            links[(src, c['label'])] = ('High', 'Added so every page gets a link')
+            added += 1
+    rank = {'Home': -1, **{c['label']: i for i, c in enumerate(kept_pages)}}
+    prio = {'High': 0, 'Medium': 1, 'Low': 2}
+    rows = [{'From page': f, 'To page': to, 'Priority': p, 'Anchor text': byname[to]['own_anchor'], 'Where this link came from': src}
+            for (f, to), (p, src) in sorted(links.items(), key=lambda kv: (rank[kv[0][0]], prio[kv[1][0]], rank[kv[0][1]]))]
+    for b in kept_blogs:
+        if b['page'] in byname:
+            rows.append({'From page': b['label'], 'To page': b['page'], 'Priority': 'High', 'Anchor text': byname[b['page']]['own_anchor'],
+                         'Where this link came from': 'The blog links to its page'})
+    return pd.DataFrame(rows, columns=['From page', 'To page', 'Priority', 'Anchor text', 'Where this link came from']), added, byname
+
+
 def build_candidates(pages, match, warnings):
     """One dict per page that could be written, plus section rows (not pages). A gap service the client does not offer is dropped, not listed."""
     cands, sections = [], []
@@ -213,7 +257,7 @@ def build_candidates(pages, match, warnings):
         base = {'label': label, 'level': level, 'source': 'Implied' if came.startswith('parent') else 'Yes' if came.startswith('listed') else 'Suggested',
                 'parent': s(r['Parent page']), 'keyword': s(r['Primary keyword']), 'volume': num(r['Primary keyword volume (national)']),
                 'sections': s(r['Mention on this page as a section']), 'why': s(r['Why']), 'service': label.split(' > ')[0],
-                'anchor': s(r[ANCHOR_SRC])}
+                'anchor': s(r[ANCHOR_SRC]), 'own_anchor': s(r[ANCHOR_SRC]), 'links': parse_links(s(r[LINKS_SRC]), warnings)}
         (cands if s(r['Recommendation']) == 'Own page' else sections).append(base)
     # a section's anchor text is for links to its topic, which live on the parent page: the parent must contain it
     by_label = {c['label']: c for c in cands}
@@ -232,7 +276,7 @@ def build_candidates(pages, match, warnings):
         if norm(m['gap_service']) in names:
             sys.exit(f'Gap service "{m["gap_service"]}" has no page set but matches a research page name. Set its page in the match file.')
         cands.append({'label': m['gap_service'], 'level': m['level'], 'source': 'Gap only', 'parent': '', 'keyword': '', 'volume': None,
-                      'sections': '', 'why': '', 'service': m['gap_service'], 'anchor': ''})
+                      'sections': '', 'why': '', 'service': m['gap_service'], 'anchor': '', 'own_anchor': '', 'links': []})
     return cands, sections
 
 
@@ -377,6 +421,7 @@ def cmd_build(a):
     for c in kept_concerns:
         page_rows(c)
     roadmap = pd.DataFrame(rows)
+    link_df, links_added, link_pages = build_links(kept + kept_concerns, kept_blogs)
     roadmap.insert(0, '#', range(1, len(roadmap) + 1))
 
     # --- over the cap: same columns as the Roadmap, so the SEO can move a row between the two tabs. The reason is the last column.
@@ -414,6 +459,15 @@ def cmd_build(a):
                    all(c['label'] in labels or c['source'] == 'Gap only' for c in kept + kept_concerns)))
     checks.append(('Cut pages plus kept pages equal all candidates', len(kept) + len(cut) + len(kept_concerns) + len(cut_concerns) == len(cands)))
 
+    page_link = link_df[link_df['Where this link came from'] != 'The blog links to its page']
+    checks.append(('Every Service, Sub-Service and Brand / Device page on the roadmap receives a link from another page',
+                   all(c['label'] in set(page_link['To page']) for c in kept if c['level'] in LINK_LEVELS)))
+    ok_names = set(link_pages) | {'Home'} | {b['label'] for b in kept_blogs}
+    checks.append(('Every link joins two pages that are on the roadmap', all(f in ok_names and t in ok_names for f, t in zip(link_df['From page'], link_df['To page']))))
+    checks.append(('No page links to itself', all(f != t for f, t in zip(link_df['From page'], link_df['To page']))))
+    if links_added:
+        warnings.append(f'{links_added} links were added because no link pointed at those pages (see "Where this link came from" on the Internal links tab).')
+
     note = ' | '.join(warnings) if warnings else 'None'
     read_me = [
         ('New site content roadmap', a.client or ''),
@@ -424,6 +478,7 @@ def cmd_build(a):
         ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page. A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
         ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it, or add keywords to the same cell. Home, About Us and extra pages have none: add them.'),
         ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none.'),
+        ('Internal links tab', 'Every link between pages on the roadmap: from page, to page, priority and the anchor text (the research sheet\'s anchor text for the page being linked to). The links come from the keyword research sheet. Where a page would receive no link at all (the pages that linked to it were cut, it is not linked from the research, or it came from the gap), a link from its parent page, or from Home, is added and marked. Blogs link to their page. If the SEO moves pages between the Roadmap and Cut tabs, the links to and from those pages need updating by hand.'),
         ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
         ('Sections', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are not pages. They appear in "Sections to cover on this page" on their parent page.'),
@@ -434,12 +489,14 @@ def cmd_build(a):
     with pd.ExcelWriter(out, engine='openpyxl') as xw:
         pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
         roadmap.to_excel(xw, sheet_name='Roadmap', index=False)
+        link_df.to_excel(xw, sheet_name=LINK_TAB, index=False)
         if len(not_df):
             not_df.to_excel(xw, sheet_name=CUT_TAB, index=False, startrow=1)
     style(out, len(roadmap))
     counts = roadmap['Page type'].value_counts().to_dict()
     print(f'Wrote {out}')
     print(f'Roadmap: {len(roadmap)} of {MAX_PAGES} rows. ' + ', '.join(f'{k}: {v}' for k, v in counts.items()))
+    print(f'Internal links: {len(link_df)} rows ({links_added} added so every page gets a link).')
     print(f'Over the cap: {len(not_df)} rows ({len(cut)} pages, {len(cut_blogs)} blogs, {len(cut_concerns)} concerns).')
     for w in warnings:
         print('WARNING:', w)

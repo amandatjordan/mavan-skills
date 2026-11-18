@@ -18,17 +18,17 @@ REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
               'Primary keyword volume (national)', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from',
-              'Anchor text for links to this page (SEO fills in)']
+              'Anchor text for links to this page (SEO fills in)', 'Internal links out (priority)']
 GAP_HEAD = ['Service', 'Offered by our client (SEO fills in: Yes or No)', 'Keywords with 2+ in top 10 or 1+ in top 3',
             'Local keywords with 2+ in top 10 or 1+ in top 3']
 BLOG_HEAD = ['Key', 'Level', 'Category', 'Service', 'Sub-Service', 'Brand / Device', 'Practice Type', 'Action', 'Blog 1 angle', 'Blog 2 angle',
              'Intent', 'Links to', 'Status / Notes']
 
 
-def page(level, label, rec='Own page', vol=1000, parent='', listed='Yes', sections='', anchor='', offers=None):
+def page(level, label, rec='Own page', vol=1000, parent='', listed='Yes', sections='', anchor='', offers=None, links=''):
     came = {'Yes': 'Listed by the client', 'Implied': 'Parent of a listed item', 'Suggested': 'Suggested from the taxonomy, not listed'}[listed]
     return [level, label, 'Cat', rec, 'Why text', parent, label.split(' > ')[-1].lower(), vol, sections,
-            offers if offers is not None else ('' if listed == 'Suggested' else 'Yes'), came, anchor]
+            offers if offers is not None else ('' if listed == 'Suggested' else 'Yes'), came, anchor, links]
 
 
 def make_research(path, pages):
@@ -160,7 +160,7 @@ class Small(Base):
         # not offered (No or blank): not on the roadmap and not listed anywhere else either
         self.assertNotIn('NAD+', set(self.road['Page']))
         self.assertNotIn('Peels', set(self.road['Page']))
-        self.assertEqual(self.sheets, ['Read Me', 'Roadmap'])
+        self.assertEqual(self.sheets, ['Read Me', 'Roadmap', 'Internal links'])
         everything = ' '.join(str(v) for v in pd.read_excel(self.out, 'Read Me').fillna('').values.ravel())
         self.assertNotIn('NAD+', everything)
 
@@ -237,6 +237,69 @@ class Small(Base):
         self.assertEqual(list(self.road[self.road['Page type'] == 'Service']['Page']), ['Svc Listed', 'Svc Implied', 'Svc Suggested', 'Skin tightening'])
         why = self.road[self.road['Page'] == 'Svc Suggested'].iloc[0]['Why it is on the roadmap']
         self.assertIn('SEO confirmed', why)
+
+    def links(self):
+        return pd.read_excel(self.out, 'Internal links').fillna('')
+
+    def test_internal_links_use_the_research_links_between_roadmap_pages(self):
+        make_research(self.r, [
+            page('Service', 'Filler', anchor='facial fillers', links='Filler > Lip Filler (High)\nFiller > Cheek Filler (High)\nFiller > Chin Filler (High) [only if the client offers it]\nLines (Medium)'),
+            page('Sub-Service', 'Filler > Lip Filler', parent='Filler', anchor='lip fillers', links='Filler (High)'),
+            page('Sub-Service', 'Filler > Cheek Filler', rec='Section on Filler page', parent='Filler', anchor='cheek filler'),
+            page('Sub-Service', 'Filler > Chin Filler', parent='Filler', anchor='chin filler', offers='No', listed='Suggested', links='Filler (High)'),
+            page('Concern', 'Lines', anchor='lines', links='Filler (Medium)'),
+        ])
+        make_gap(self.g, [])
+        self.build()
+        l = self.links()
+        pairs = set(zip(l['From page'], l['To page']))
+        page_pairs = {(f, to) for f, to, src in zip(l['From page'], l['To page'], l['Where this link came from']) if not src.startswith('The blog')}
+        self.assertIn(('Filler', 'Filler > Lip Filler'), pairs)
+        self.assertIn(('Filler > Lip Filler', 'Filler'), pairs)
+        self.assertIn(('Filler', 'Lines'), pairs)
+        # a link to a section, or to a page the client does not offer, is dropped
+        self.assertFalse(any('Cheek Filler' in x or 'Chin Filler' in x for pr in page_pairs for x in pr))
+        # the anchor is the linked page's own anchor text, not the section anchor text added to it for "Must appear on page"
+        self.assertEqual(l[(l['From page'] == 'Filler > Lip Filler') & (l['To page'] == 'Filler')].iloc[0]['Anchor text'], 'facial fillers')
+        self.assertEqual(self.road[self.road['Page'] == 'Filler'].iloc[0]['Must appear on page (anchor text other pages use to link here)'], 'facial fillers; cheek filler')
+
+    def test_every_service_sub_service_and_brand_gets_a_link(self):
+        make_research(self.r, [
+            page('Service', 'Filler', anchor='fillers'),                                   # nothing in the research links to it
+            page('Service', 'Lonely', anchor='lonely'),
+            page('Sub-Service', 'Filler > Lip', parent='Filler'),                           # research gives no link at all
+            page('Brand / Device', 'Filler > Lip > Brandy', parent='Filler > Lip'),
+            page('Brand / Device', 'Facials > Glow', parent='Facials'),                    # parent and service are not on the roadmap
+        ])
+        make_gap(self.g, [['Skin tightening', 'Yes', 1, 0]])
+        self.build()
+        l = self.links()
+        added = {(f, to) for f, to, src in zip(l['From page'], l['To page'], l['Where this link came from']) if src.startswith('Added')}
+        self.assertEqual(added, {('Home', 'Filler'), ('Home', 'Lonely'), ('Filler', 'Filler > Lip'), ('Filler > Lip', 'Filler > Lip > Brandy'),
+                                 ('Home', 'Facials > Glow'), ('Home', 'Skin tightening')})
+        inbound = set(l[l['Where this link came from'] != 'The blog links to its page']['To page'])
+        for pg in self.road[self.road['Page type'].isin(['Service', 'Sub-Service', 'Brand / Device'])]['Page']:
+            self.assertIn(pg, inbound)
+        self.assertIn('links were added', pd.read_excel(self.out, 'Read Me').fillna('').iloc[-1, 1])
+
+    def test_a_brand_whose_parent_is_only_a_section_is_linked_from_its_service(self):
+        make_research(self.r, [
+            page('Service', 'Filler', anchor='fillers'),
+            page('Sub-Service', 'Filler > Cheek', rec='Section on Filler page', parent='Filler'),   # not a page
+            page('Brand / Device', 'Filler > Brandy', parent='Filler > Cheek', anchor='brandy'),
+        ])
+        make_gap(self.g, [])
+        self.build()
+        l = self.links()
+        row = l[l['To page'] == 'Filler > Brandy'].iloc[0]
+        self.assertEqual((row['From page'], row['Where this link came from']), ('Filler', 'Added so every page gets a link'))
+
+    def test_blogs_link_to_their_page_and_blog_rows_do_not_count_as_page_links(self):
+        self.build()
+        l = self.links()
+        blog = l[l['Where this link came from'] == 'The blog links to its page']
+        self.assertEqual(len(blog), int((self.road['Page type'] == 'Blog').sum()))
+        self.assertTrue(blog['From page'].str.startswith('Blog ').all())
 
     def test_priority_dropdown_and_blank(self):
         self.build(extras='Bridal packages|Package')
