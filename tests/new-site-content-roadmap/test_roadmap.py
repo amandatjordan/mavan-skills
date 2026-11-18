@@ -17,16 +17,18 @@ SCRIPT = SKILL / 'scripts/roadmap.py'
 REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
-              'Primary keyword volume (national)', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from']
+              'Primary keyword volume (national)', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from',
+              'Anchor text for links to this page (SEO fills in)']
 GAP_HEAD = ['Service', 'Offered by our client (SEO fills in: Yes or No)', 'Keywords with 2+ in top 10 or 1+ in top 3',
             'Local keywords with 2+ in top 10 or 1+ in top 3']
 BLOG_HEAD = ['Key', 'Level', 'Category', 'Service', 'Sub-Service', 'Brand / Device', 'Practice Type', 'Action', 'Blog 1 angle', 'Blog 2 angle',
              'Intent', 'Links to', 'Status / Notes']
 
 
-def page(level, label, rec='Own page', vol=1000, parent='', listed='Yes', sections=''):
+def page(level, label, rec='Own page', vol=1000, parent='', listed='Yes', sections='', anchor='', offers=None):
     came = {'Yes': 'Listed by the client', 'Implied': 'Parent of a listed item', 'Suggested': 'Suggested from the taxonomy, not listed'}[listed]
-    return [level, label, 'Cat', rec, 'Why text', parent, label.split(' > ')[-1].lower(), vol, sections, '' if listed == 'Suggested' else 'Yes', came]
+    return [level, label, 'Cat', rec, 'Why text', parent, label.split(' > ')[-1].lower(), vol, sections,
+            offers if offers is not None else ('' if listed == 'Suggested' else 'Yes'), came, anchor]
 
 
 def make_research(path, pages):
@@ -97,8 +99,8 @@ class Base(unittest.TestCase):
             self.road = pd.read_excel(out, 'Roadmap').fillna('')
             names = pd.ExcelFile(out).sheet_names
             self.sheets = names
-            self.notin = pd.read_excel(out, 'Cut for the 50-page cap').fillna('') if 'Cut for the 50-page cap' in names else pd.DataFrame(
-                columns=['Page or topic', 'Page type', 'Why it is over the 50-page cap'])
+            self.notin = pd.read_excel(out, 'Cut for the 50-page cap', header=1).fillna('') if 'Cut for the 50-page cap' in names else pd.DataFrame(
+                columns=['Page', 'Page type', 'Why it is over the 50-page cap'])
         self.out = out
         return p
 
@@ -189,16 +191,52 @@ class Small(Base):
     def test_section_listed_not_a_page(self):
         self.build()
         self.assertNotIn('Filler > Cheek Filler', set(self.road['Page']))
-        self.assertNotIn('Filler > Cheek Filler', set(self.notin['Page or topic']))
+        self.assertNotIn('Filler > Cheek Filler', set(self.notin['Page']))
 
     def test_keyword_columns_are_highlighted_for_the_seo(self):
         self.build()
         ws = load_workbook(self.out)['Roadmap']
         heads = {c.value: c.column for c in ws[1]}
-        for name in ('Primary keyword (SEO: check it is a buying search, then update it or add keywords)', 'Keywords the SEO adds or swaps in'):
+        for name in ('Primary keyword (SEO: check it fits the page, then update it or add keywords)', 'Keywords the SEO adds or swaps in'):
             self.assertEqual(ws.cell(2, heads[name]).fill.fgColor.rgb[-6:], 'FFF2CC')
             self.assertEqual(ws.cell(ws.max_row, heads[name]).fill.fgColor.rgb[-6:], 'FFF2CC')
         self.assertIn('Keywords: SEO to check', ' '.join(pd.read_excel(self.out, 'Read Me')['Item']))
+
+    def test_must_appear_on_page_comes_from_the_research_anchor_text(self):
+        make_research(self.r, [
+            page('Service', 'Filler', vol=1300, anchor='facial fillers'),
+            page('Sub-Service', 'Filler > Lip Filler', vol=22000, parent='Filler', anchor='lip fillers near me'),
+            page('Sub-Service', 'Filler > Cheek Filler', rec='Section on Filler page', vol=170, parent='Filler', anchor='cheek filler'),
+            page('Service', 'Facials', vol=900),
+        ])
+        make_gap(self.g, [['Skin tightening', 'Yes', 1, 0]])
+        self.build(extras='Bridal packages|Package')
+        col = 'Must appear on page (anchor text other pages use to link here)'
+        by = dict(zip(self.road['Page'], self.road[col]))
+        self.assertEqual(by['Filler'], 'facial fillers; cheek filler')          # the section's anchor lands on its parent page
+        self.assertEqual(by['Filler > Lip Filler'], 'lip fillers near me')
+        self.assertEqual(by['Facials'], '')
+        for blank in ('Home', 'About Us', 'Bridal packages', 'Skin tightening'):
+            self.assertEqual(by[blank], '')
+        self.assertTrue(all(v == '' for v in self.road[self.road['Page type'] == 'Blog'][col]))
+        self.assertIn('Must appear on page', ' '.join(pd.read_excel(self.out, 'Read Me')['Item']))
+
+    def test_preflight_warns_when_anchor_text_is_missing(self):
+        make_research(self.r, [page('Service', 'Filler', anchor=''), page('Service', 'Facials', anchor='facial')])
+        p = run('preflight', '--research', self.r, '--gap', self.g, '--out', self.work)
+        self.assertIn('1 pages have no anchor text', p.stdout)
+
+    def test_suggested_rows_the_seo_confirmed_rank_after_listed_and_implied(self):
+        make_research(self.r, [
+            page('Service', 'Svc Suggested', vol=90000, listed='Suggested', offers='Yes'),
+            page('Service', 'Svc Implied', vol=100, listed='Implied'),
+            page('Service', 'Svc Listed', vol=100),
+        ])
+        make_gap(self.g, [['Skin tightening', 'Yes', 50, 0]])
+        self.build()
+        self.assertEqual(list(self.road[self.road['Page type'] == 'Service']['Page']), ['Svc Listed', 'Svc Implied', 'Svc Suggested', 'Skin tightening'])
+        why = self.road[self.road['Page'] == 'Svc Suggested'].iloc[0]['Why it is on the roadmap']
+        self.assertIn('SEO confirmed', why)
 
     def test_priority_dropdown_and_blank(self):
         self.build(extras='Bridal packages|Package')
@@ -296,8 +334,16 @@ class Cap(Base):
         self.assertEqual(len(self.road), 50)
         self.assertEqual(int((self.road['Page type'] == 'Blog').sum()), 18)   # 48 slots - 30 services
         self.assertNotIn('Concern', set(self.road['Page type']))
-        self.assertIn('Late', set(self.notin['Page or topic']))
+        self.assertIn('Late', set(self.notin['Page']))
         self.assertIn('Cut for the 50-page cap', self.sheets)
+        # the cut tab has an instruction row, then the Roadmap's columns plus the reason, so rows can be moved as they are
+        ws = load_workbook(self.out)['Cut for the 50-page cap']
+        self.assertIn('makes the final list', ws['A1'].value)
+        self.assertIn('move a row to the Roadmap tab', ws['A1'].value)
+        road_cols = list(pd.read_excel(self.out, 'Roadmap').columns)
+        cut_cols = list(pd.read_excel(self.out, 'Cut for the 50-page cap', header=1).columns)
+        self.assertEqual(cut_cols, road_cols + ['Why it is over the 50-page cap'])
+        self.assertIn('Late', set(self.notin['Page']))
 
     def test_too_many_extras_fail(self):
         p = run('preflight', '--research', self.r, '--gap', self.g, '--extras', '; '.join(f'X{i}' for i in range(49)), '--out', self.work, check=False)

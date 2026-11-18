@@ -14,11 +14,11 @@ All thresholds are constants at the top of `scripts/roadmap.py`. Change them the
 4. **Blog** posts, for each Service and Sub-Service page that made the roadmap.
 5. **Concern** pages.
 
-Pages are added in that order until 50 is reached. A group is only reached once every row in the groups above it fits. Over the cap, the rest go to the "Cut for the 50-page cap" tab with their group. Sections are not listed there: they are in "Sections to cover" on the parent page. Things the client does not offer are not listed anywhere. Blogs for a page that was cut are not listed one by one; one row names those pages.
+Pages are added in that order until 50 is reached. A group is only reached once every row in the groups above it fits. Over the cap, the rest go to the "Cut for the 50-page cap" tab. It starts with an instruction row (the SEO moves rows between it and the Roadmap to make the final list) and has the Roadmap's columns, with the reason last, so a row can be moved as it is. Sections are not listed there: they are in "Sections to cover" on the parent page. Things the client does not offer are not listed anywhere. Blogs for a page that was cut are not listed one by one; one row names those pages.
 
 ## Order inside a group
 
-1. Where the page came from: **client-listed** ("Yes" in "Client offers it?" on the research Pages tab; rows left blank or marked No are not used), then **Implied** parents (a Service added because a listed Brand / Device sits under it), then **gap-only** services (offered by the client, found only in the gap workbook).
+1. Where the page came from: **client-listed** ("Yes" in "Client offers it?" on the research Pages tab; rows left blank or marked No are not used), then **Implied** parents (a Service added because a listed Brand / Device sits under it), then **Suggested** rows (the taxonomy suggested them, the client did not list them, and the SEO confirmed Yes), then **gap-only** services (offered by the client, found only in the gap workbook).
 2. **Competitor gap keywords**, highest first (below).
 3. **Primary keyword volume**, highest first (national, from the research workbook; never summed).
 4. Name, so the order is stable.
@@ -35,7 +35,11 @@ Only gap services the SEO marked **Yes** in "Offered by our client" count. Yes w
 
 ## Primary keywords are for the SEO to check
 
-The primary keyword is the research workbook's highest-volume search for the page. It can be a poor target (for example a photo search such as "face with wrinkles" for Wrinkles / Fine Lines). The Roadmap highlights the column and has a second yellow column for the SEO to replace it or add keywords. The script never judges a keyword.
+The primary keyword is the research workbook's highest-volume search for the page. It can be a poor target (for example "face with wrinkles" for Wrinkles / Fine Lines is someone looking at pictures, not looking for a treatment). The Roadmap highlights the column and has a second yellow column for the SEO to replace it or add keywords. The script never judges a keyword.
+
+## Must appear on page
+
+The research workbook's "Anchor text for links to this page" for each page is copied to the "Must appear on page" column, so content knows which words other pages will use to link to it and must include them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page's cell (links to that topic land on the parent). Blank where the research sheet has none. Home, About Us, extra pages, gap-only pages and blogs have none. Preflight warns when own pages have no anchor text.
 
 ## Blogs
 
