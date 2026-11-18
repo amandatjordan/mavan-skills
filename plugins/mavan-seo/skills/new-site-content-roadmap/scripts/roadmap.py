@@ -221,10 +221,25 @@ def parse_links(text, warnings):
     return out
 
 
+def phrases_of(c):
+    """The phrases a page must contain: its own anchor text plus any a section adds (the "Must appear on page" cell), without repeats."""
+    out, seen = [], set()
+    for x in re.split(r'[;\n]+', c['anchor']):
+        if x.strip() and norm(x) not in seen:
+            seen.add(norm(x))
+            out.append(x.strip())
+    return out
+
+
 def build_links(kept_pages, kept_blogs):
-    """Links between the pages on the roadmap. The research sheet's links are used when both pages are on the roadmap. A Service,
-    Sub-Service or Brand / Device page that still has no link pointing at it gets one from its parent page (its Service if the parent
-    is not on the roadmap, Home if neither is)."""
+    """Links between the pages on the roadmap. Every link that is needed has its own row.
+    1. The research sheet's links are used when both pages are on the roadmap. They use the page's first phrase.
+    2. A Service, Sub-Service or Brand / Device page still without a link pointing at it gets one from its parent page (its Service if the
+       parent is not on the roadmap, Home if neither is).
+    3. Blogs link to their page.
+    4. Every other phrase in a page's "Must appear on page" cell (the ones a section adds) gets a row of its own: a link to that page with that
+       anchor text, from Home or, if Home already links to the page, from the first page on the roadmap that does not. (A page with no link at
+       all, such as a Concern nothing links to, gets a row for its first phrase as well.) The SEO can change the From page."""
     byname = {c['label']: c for c in kept_pages}
     links = {}
     for c in kept_pages:
@@ -237,15 +252,27 @@ def build_links(kept_pages, kept_blogs):
             src = c['parent'] if c['parent'] in byname else (c['service'] if c['service'] in byname and c['service'] != c['label'] else 'Home')
             links[(src, c['label'])] = ('High', 'Added so every page gets a link')
             added += 1
+    phrases = {label: phrases_of(c) for label, c in byname.items()}
     rank = {'Home': -1, **{c['label']: i for i, c in enumerate(kept_pages)}}
     prio = {'High': 0, 'Medium': 1, 'Low': 2}
-    rows = [{'From page': f, 'To page': to, 'Priority': p, 'Anchor text': byname[to]['own_anchor'], 'Where this link came from': src}
+    rows = [{'From page': f, 'To page': to, 'Priority': p, 'Anchor text': (phrases[to] or [''])[0], 'Where this link came from': src}
             for (f, to), (p, src) in sorted(links.items(), key=lambda kv: (rank[kv[0][0]], prio[kv[1][0]], rank[kv[0][1]]))]
-    for b in kept_blogs:
-        if b['page'] in byname:
-            rows.append({'From page': b['label'], 'To page': b['page'], 'Priority': 'High', 'Anchor text': byname[b['page']]['own_anchor'],
-                         'Where this link came from': 'The blog links to its page'})
-    return pd.DataFrame(rows, columns=['From page', 'To page', 'Priority', 'Anchor text', 'Where this link came from']), added, byname
+    blogs = [{'From page': b['label'], 'To page': b['page'], 'Priority': 'High', 'Anchor text': (phrases[b['page']] or [''])[0],
+              'Where this link came from': 'The blog links to its page'} for b in kept_blogs if b['page'] in byname]
+    linked_to = {}
+    for r in rows + blogs:
+        linked_to.setdefault(r['To page'], set()).add(r['From page'])
+    extra = []
+    for label, ph in phrases.items():
+        for phrase in (ph[1:] if label in linked_to else ph):
+            source = next(f for f in ['Home'] + [c['label'] for c in kept_pages] if f != label and f not in linked_to.get(label, set()))
+            linked_to.setdefault(label, set()).add(source)
+            extra.append({'From page': source, 'To page': label, 'Priority': 'High', 'Anchor text': phrase,
+                          'Where this link came from': 'Added so every phrase has a link'})
+            added += 1
+    rows = sorted(rows + extra, key=lambda r: (rank[r['From page']], prio[r['Priority']], rank[r['To page']]))
+    cols = ['From page', 'To page', 'Anchor text', 'Where this link came from']
+    return pd.DataFrame(rows + blogs, columns=cols), added, byname, phrases
 
 
 def build_candidates(pages, match, warnings):
@@ -421,7 +448,7 @@ def cmd_build(a):
     for c in kept_concerns:
         page_rows(c)
     roadmap = pd.DataFrame(rows)
-    link_df, links_added, link_pages = build_links(kept + kept_concerns, kept_blogs)
+    link_df, links_added, link_pages, link_phrases = build_links(kept + kept_concerns, kept_blogs)
     roadmap.insert(0, '#', range(1, len(roadmap) + 1))
 
     # --- over the cap: same columns as the Roadmap, so the SEO can move a row between the two tabs. The reason is the last column.
@@ -464,9 +491,14 @@ def cmd_build(a):
                    all(c['label'] in set(page_link['To page']) for c in kept if c['level'] in LINK_LEVELS)))
     ok_names = set(link_pages) | {'Home'} | {b['label'] for b in kept_blogs}
     checks.append(('Every link joins two pages that are on the roadmap', all(f in ok_names and t in ok_names for f, t in zip(link_df['From page'], link_df['To page']))))
+    used_anchors = {}
+    for to, anchor in zip(link_df['To page'], link_df['Anchor text']):
+        used_anchors.setdefault(to, set()).add(norm(anchor))
+    checks.append(('Every phrase in "Must appear on page" is the anchor text of at least one link to that page',
+                   all(norm(ph) in used_anchors.get(label, set()) for label, phs in link_phrases.items() for ph in phs)))
     checks.append(('No page links to itself', all(f != t for f, t in zip(link_df['From page'], link_df['To page']))))
     if links_added:
-        warnings.append(f'{links_added} links were added because no link pointed at those pages (see "Where this link came from" on the Internal links tab).')
+        warnings.append(f'{links_added} links were added so every page and every "Must appear on page" phrase has a link (see "Where this link came from" on the Internal links tab).')
 
     note = ' | '.join(warnings) if warnings else 'None'
     read_me = [
@@ -478,7 +510,7 @@ def cmd_build(a):
         ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page. A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
         ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it, or add keywords to the same cell. Home, About Us and extra pages have none: add them.'),
         ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none.'),
-        ('Internal links tab', 'Every link between pages on the roadmap: from page, to page, priority and the anchor text (the research sheet\'s anchor text for the page being linked to). The links come from the keyword research sheet. Where a page would receive no link at all (the pages that linked to it were cut, it is not linked from the research, or it came from the gap), a link from its parent page, or from Home, is added and marked. Blogs link to their page. If the SEO moves pages between the Roadmap and Cut tabs, the links to and from those pages need updating by hand.'),
+        ('Internal links tab', 'Every link between pages on the roadmap: from page, to page and the anchor text (the research sheet\'s anchor text for the page being linked to). The links come from the keyword research sheet. Where a page would receive no link at all (the pages that linked to it were cut, it is not linked from the research, or it came from the gap), a link from its parent page, or from Home, is added and marked. Blogs link to their page. Every phrase in "Must appear on page" is the anchor text of at least one link to that page (a page with two phrases gets one link with each). If the SEO moves pages between the Roadmap and Cut tabs, the links to and from those pages need updating by hand.'),
         ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
         ('Sections', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are not pages. They appear in "Sections to cover on this page" on their parent page.'),
@@ -496,7 +528,7 @@ def cmd_build(a):
     counts = roadmap['Page type'].value_counts().to_dict()
     print(f'Wrote {out}')
     print(f'Roadmap: {len(roadmap)} of {MAX_PAGES} rows. ' + ', '.join(f'{k}: {v}' for k, v in counts.items()))
-    print(f'Internal links: {len(link_df)} rows ({links_added} added so every page gets a link).')
+    print(f'Internal links: {len(link_df)} rows ({links_added} added so every page and phrase has a link).')
     print(f'Over the cap: {len(not_df)} rows ({len(cut)} pages, {len(cut_blogs)} blogs, {len(cut_concerns)} concerns).')
     for w in warnings:
         print('WARNING:', w)

@@ -45,11 +45,11 @@ The research workbook's "Anchor text for links to this page" for each page is co
 
 Every Service, Sub-Service and Brand / Device page on the Roadmap must receive at least one internal link from another page. The Internal links tab is built in this order:
 
-1. The links on the research Pages tab ("Internal links out (priority)"), kept only when both pages are on the Roadmap. Links to sections, pages the client does not offer and pages that were cut are dropped.
+1. The links on the research Pages tab ("Internal links out (priority)"; the priority is not carried over), kept only when both pages are on the Roadmap. Links to sections, pages the client does not offer and pages that were cut are dropped.
 2. Any Service, Sub-Service or Brand / Device page still without a link pointing at it gets one, marked "Added so every page gets a link", from its parent page. If the parent is not on the Roadmap (it is a section, was cut or is not offered), from its Service. If that is not on the Roadmap either, from Home. Services and gap-only pages (no parent) get a link from Home.
 3. Each blog links to its page (listed, but a blog link does not count as the link a page must receive).
 
-The anchor text is the linked page's own anchor text from the research sheet (not the extra words a section adds to "Must appear on page"). Blank where the research sheet has none. Concern pages are linked where the research sheet links to them, but are not required to receive a link. If the SEO moves pages between the Roadmap and Cut tabs, the links to and from them have to be updated by hand.
+Every link that is needed has its own row. The anchor text of the research sheet's links is the linked page's first phrase from "Must appear on page" (blank where the research sheet has none). Every other phrase in that cell (the ones a section adds) gets a row of its own: a link to the page with that phrase as the anchor text, from Home or, if Home already links to the page, from the first page on the roadmap that does not, marked "Added so every phrase has a link". A page nothing links to (for example a Concern) gets a row for its first phrase too. The SEO can change the From page of an added row. Concern pages are linked where the research sheet links to them, but are not required to receive a link. If the SEO moves pages between the Roadmap and Cut tabs, the links to and from them have to be updated by hand.
 
 ## Blogs
 
