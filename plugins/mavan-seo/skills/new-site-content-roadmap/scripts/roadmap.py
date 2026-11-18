@@ -46,7 +46,7 @@ PRIORITY_COL = 'SEO priority (High / Medium / Low)'
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
-                 'Parent page', 'Mention on this page as a section', 'Client listed it', 'Why']
+                 'Parent page', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from', 'Why']
 MATCH_COLS = ['gap_service', 'offered', 'gap_keywords', 'local_gap_keywords', 'page', 'level', 'status', 'candidates']
 GAP_LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
 
@@ -98,7 +98,12 @@ def read_research(path):
     missing = [c for c in RESEARCH_COLS if c not in pages.columns]
     if missing:
         return None, ['Research Pages tab is missing columns: ' + ', '.join(missing)]
-    return pages, []
+    # Only rows the client offers are used. A blank is a suggested row nobody has asked the client about yet, and a No is not offered.
+    offers = pages['Client offers it? (Yes / No)'].astype(str).str.strip().str.lower()
+    kept = pages[offers == 'yes'].copy()
+    kept.attrs['blank'] = int((offers == '').sum())
+    kept.attrs['no'] = int((offers == 'no').sum())
+    return kept, []
 
 
 def read_gap(path):
@@ -137,7 +142,9 @@ def cmd_preflight(a):
         fails.append('The bundled blog taxonomy is missing from the skill.')
     if pages is not None:
         own = pages[pages['Recommendation'] == 'Own page']
-        info.append(f'Research: {len(pages)} rows, {len(own)} own pages, {len(pages) - len(own)} sections.')
+        info.append(f'Research: {len(pages)} rows the client offers, {len(own)} own pages, {len(pages) - len(own)} sections.')
+        if pages.attrs.get('blank'):
+            warns.append(f"{pages.attrs['blank']} research rows have a blank \"Client offers it?\". They are left out until the SEO fills in Yes. A No is never used.")
         if len(own) == 0:
             fails.append('The research Pages tab has no "Own page" rows.')
     if gap is not None:
@@ -194,7 +201,7 @@ def build_candidates(pages, match, warnings):
     cands, sections = [], []
     for _, r in pages.iterrows():
         label, level = s(r['Service / sub-service']), s(r['Level'])
-        base = {'label': label, 'level': level, 'source': 'Implied' if s(r['Client listed it']) == 'Implied' else 'Yes',
+        base = {'label': label, 'level': level, 'source': 'Implied' if s(r['Where it came from']) == 'Parent of a listed item' else 'Yes',
                 'parent': s(r['Parent page']), 'keyword': s(r['Primary keyword']), 'volume': num(r['Primary keyword volume (national)']),
                 'sections': s(r['Mention on this page as a section']), 'why': s(r['Why']), 'service': label.split(' > ')[0]}
         (cands if s(r['Recommendation']) == 'Own page' else sections).append(base)

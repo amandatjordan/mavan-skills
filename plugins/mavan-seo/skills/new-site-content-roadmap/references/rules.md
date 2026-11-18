@@ -18,7 +18,7 @@ Pages are added in that order until 50 is reached. A group is only reached once 
 
 ## Order inside a group
 
-1. Where the page came from: **client-listed** ("Yes" on the research Pages tab), then **Implied** parents (a Service added because a listed Brand / Device sits under it), then **gap-only** services (offered by the client, found only in the gap workbook).
+1. Where the page came from: **client-listed** ("Yes" in "Client offers it?" on the research Pages tab; rows left blank or marked No are not used), then **Implied** parents (a Service added because a listed Brand / Device sits under it), then **gap-only** services (offered by the client, found only in the gap workbook).
 2. **Competitor gap keywords**, highest first (below).
 3. **Primary keyword volume**, highest first (national, from the research workbook; never summed).
 4. Name, so the order is stable.

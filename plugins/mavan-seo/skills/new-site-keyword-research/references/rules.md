@@ -9,9 +9,9 @@ Category > Service > Sub-Service > Brand / Device. A **Concern** is a problem pe
 ## What goes in the plan
 
 - Every item the person lists that matches a taxonomy row.
-- The **parent Service** of any listed Sub-Service or Brand / Device, marked "Implied" (the taxonomy's implication rule: a Brand / Device implies its Service). Sub-Services are not implied by a brand; unlisted ones go to Confirm with client.
+- The **parent Service** of any listed Sub-Service or Brand / Device, marked "Implied" (the taxonomy's implication rule: a Brand / Device implies its Service). Sub-Services are not implied by a brand; unlisted ones are suggested rows with Client offers it? left blank.
 - Left out, with the reason on the Not in the plan tab: items whose taxonomy note says not US-approved, not FDA-approved, investigational or discontinued, and typed items with no match.
-- **Dental is included, with no minimum volume.** Every listed dental Service, Sub-Service, Brand / Device and Concern gets its own page, and unlisted dental Sub-Services and Brands all go to Confirm with client. The taxonomy has keyword data for dental concerns only, so other dental rows show no keywords and a note to research volume separately.
+- **Dental is included, with no minimum volume.** Every listed dental Service, Sub-Service, Brand / Device and Concern gets its own page, and every unlisted dental Sub-Service and Brand is a suggested row with Client offers it? left blank. The taxonomy has keyword data for dental concerns only, so other dental rows show no keywords and a note to research volume separately.
 
 ## Page or section
 
@@ -25,6 +25,10 @@ Category > Service > Sub-Service > Brand / Device. A **Concern** is a problem pe
 The cutoff was set from the taxonomy's own distribution (v5.1): 21 of the 49 Sub-Services and 44 of the 92 Brands / Devices that have keywords have a top keyword of 1,000 or more, so about 45% would get their own page. It is a starting point; the SEO can change it.
 
 A section row keeps its keywords: they are the headings and terms for that section on the parent page. The parent page's row lists its sections in "Mention on this page as a section".
+
+## Suggested pages and Client offers it?
+
+Unlisted Sub-Services and Brands / Devices under the plan's Services join the Pages tab as suggested rows when their highest keyword is 1,000 or more (`CONFIRM_MIN_VOLUME`; every unlisted dental one, no minimum). The **Client offers it? (Yes / No)** column is Yes for listed items and parents of listed items, blank for suggested rows. A No means no page. A suggested page is never named as the parent of a section; sections sit on a confirmed page. Taxonomy names are shown without the "(family)" tag.
 
 ## Volume
 
@@ -47,7 +51,7 @@ Built from the hierarchy, only between pages with their own page:
 | Concern -> each Service or Sub-Service page the taxonomy says treats it (its Implies Offered list), and each of those back to the Concern page | Medium |
 | Sub-Services under one Service <-> each other | Low |
 
-Sections have no link of their own. The suggested anchor is the target page's primary keyword.
+Sections have no link of their own. The links are a column on the Pages tab ("Internal links out"), not a separate tab. A link to a suggested page the client has not confirmed is tagged "only if the client offers it". Anchor text is not suggested: the Pages tab has a blank column for the SEO to fill in.
 
 ## Sections searchers look for
 

@@ -22,6 +22,7 @@ TAX = [
     ['Sub-Service', 'Injectables', 'Filler', 'Lip Filler', '', '', 'Both', 'Filler', '', 'lip filler'],
     ['Sub-Service', 'Injectables', 'Filler', 'Chin Filler', '', '', 'Both', 'Filler', '', 'chin filler'],
     ['Brand / Device', 'Injectables', 'Filler', '', 'Brandy', '', 'Both', 'Filler', '', 'brandy'],
+    ['Brand / Device', 'Injectables', 'Filler', '', 'Famy (family)', '', 'Both', 'Filler', '', 'famy'],
     ['Brand / Device', 'Injectables', 'Filler', 'Lip Filler; Chin Filler', 'Brandz', '', 'Both', 'Filler', '', 'brandz'],
     ['Brand / Device', 'Injectables', 'Filler', '', 'Oldy', '', 'Both', 'Filler', 'Discontinued. Do not flag as a gap.', 'oldy'],
     ['Service', 'Dental - Implants', 'Implants', '', '', '', 'Dental', '', '', 'implant'],
@@ -42,9 +43,13 @@ KW = [  # keyword, volume, level, service, sub, brand, concern, near me, geo
     ('brandy near me', 1500, 'Brand / Device', 'Filler', '', 'Brandy', '', 'Y', ''),
     ('brandz', 600, 'Brand / Device', 'Filler', '', 'Brandz', '', '', ''),
     ('oldy', 5000, 'Brand / Device', 'Filler', '', 'Oldy', '', '', ''),
+    ('famy', 1200, 'Brand / Device', 'Filler', '', 'Famy (family)', '', '', ''),
     ('facial', 3000, 'Service', 'Facials', '', '', '', '', ''),
     ('wrinkles', 800, 'Concern', '', '', '', 'Lines', '', ''),
 ]
+OFFERS = 'Client offers it? (Yes / No)'
+LINKS = 'Internal links out (priority)'
+ANCHOR = 'Anchor text for links to this page (SEO fills in)'
 BLANK_KD = {'wrinkles'}  # concern keywords added from a Google Ads check have no difficulty or CPC
 
 
@@ -147,8 +152,8 @@ class ResearchTest(unittest.TestCase):
         self.assertEqual(pages.loc['Implants > Full-Arch', 'Recommendation'], 'Own page')   # no keywords, still a page
         self.assertIn('no minimum volume', pages.loc['Implants > Full-Arch', 'Why'])
         p, out = self.match_and_build(services='implant')
-        conf = pd.read_excel(out, sheet_name='Confirm with client')
-        self.assertIn('Full-Arch', set(conf['Sub-Service / Brand / Device']))   # unlisted dental item listed with no cutoff
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        self.assertTrue(pd.isna(pages.loc['Implants > Full-Arch', OFFERS]))   # unlisted dental item is suggested with no cutoff, client not yet asked
 
     def test_blank_difficulty_and_cpc_are_allowed(self):
         p, out = self.match_and_build(services='filler', concerns='wrinkles')
@@ -158,30 +163,59 @@ class ResearchTest(unittest.TestCase):
         self.assertEqual(row['Primary keyword'], 'wrinkles')
         self.assertTrue(pd.isna(row['Primary keyword difficulty']))
 
-    def test_internal_links_follow_hierarchy_and_concerns(self):
+    def test_internal_links_are_a_column_on_pages(self):
         p, out = self.match_and_build(services='lip filler; chin filler; facial', products='brandy', concerns='wrinkles; marks')
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        links = pd.read_excel(out, sheet_name='Internal links')
-        pairs = set(zip(links['From page'], links['To page']))
-        self.assertIn(('Filler', 'Filler > Lip Filler'), pairs)
-        self.assertIn(('Filler > Lip Filler', 'Filler'), pairs)
-        self.assertIn(('Filler > Brandy', 'Filler'), pairs)
-        self.assertIn(('Lines', 'Filler'), pairs)            # concern -> service that treats it
-        self.assertIn(('Facials', 'Lines'), pairs)           # and back
-        self.assertNotIn(('Filler > Chin Filler', 'Filler'), pairs)   # chin filler is only a section: no page, no link
-        pages = pd.read_excel(out, sheet_name='Pages')
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        out_links = lambda name: str(pages.loc[name, LINKS])
+        self.assertIn('Filler > Lip Filler (High)', out_links('Filler'))
+        self.assertIn('Filler (High)', out_links('Filler > Lip Filler'))
+        self.assertIn('Filler (High)', out_links('Filler > Brandy'))
+        self.assertIn('Filler (Medium)', out_links('Lines'))                 # concern -> service that treats it
+        self.assertIn('Lines (Medium)', out_links('Facials'))                # and back
+        self.assertIn('Facials (Medium)', out_links('Marks'))
+        self.assertNotIn('Chin Filler', out_links('Filler'))                 # chin filler is only a section: no page, no link
         self.assertEqual(len(pages[pages['Level'] == 'Concern']), 2)
-        # Marks only points to Facials, which is on the plan
-        self.assertIn(('Marks', 'Facials'), pairs)
 
-    def test_confirm_tab_lists_unlisted_items_with_volume(self):
+    def test_no_internal_links_tab_and_no_suggested_anchor(self):
+        p, out = self.match_and_build(services='lip filler')
+        self.assertEqual(pd.ExcelFile(out).sheet_names, ['Pages', 'Keywords', 'Not in the plan', 'Read Me'])   # Read Me last, no Confirm / Internal links tabs
+        pages = pd.read_excel(out, sheet_name='Pages')
+        self.assertTrue(pages[ANCHOR].isna().all())          # left blank for the SEO
+
+    def test_unlisted_items_are_pages_rows_with_a_blank_offers_column(self):
         p, out = self.match_and_build(services='filler')
-        conf = pd.read_excel(out, sheet_name='Confirm with client')
-        names = set(conf['Sub-Service / Brand / Device'])
-        self.assertIn('Lip Filler', names)       # 2,000 and unlisted
-        self.assertIn('Brandy', names)           # 1,500
-        self.assertNotIn('Chin Filler', names)   # 400 is under the cutoff
-        self.assertNotIn('Oldy', names)          # not recommended
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        self.assertEqual(pages.loc['Filler', OFFERS], 'Yes')                 # listed
+        for name in ('Filler > Lip Filler', 'Filler > Brandy'):              # 2,000 and 1,500, unlisted
+            self.assertTrue(pd.isna(pages.loc[name, OFFERS]))
+            self.assertEqual(pages.loc[name, 'Where it came from'], 'Suggested from the taxonomy, not listed')
+            self.assertEqual(pages.loc[name, 'Recommendation'], 'Own page')
+        self.assertNotIn('Filler > Chin Filler', pages.index)                # 400 is under the cutoff
+        self.assertNotIn('Filler > Oldy', pages.index)                       # not recommended
+        self.assertIn('only if the client offers it', pages.loc['Filler', LINKS])
+        self.assertIn('Filler > Brandy', set(pd.read_excel(out, sheet_name='Keywords')['Target page']))
+
+    def test_a_suggested_page_is_never_the_parent_of_a_section(self):
+        p, out = self.match_and_build(services='filler', products='brandz')   # Lip Filler is unlisted, so brandz sits on Filler
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        self.assertEqual(pages.loc['Filler > Brandz', 'Recommendation'], 'Section on Filler page')
+
+    def test_family_tag_is_never_shown(self):
+        p, out = self.match_and_build(services='filler', products='famy')
+        pages = pd.read_excel(out, sheet_name='Pages')
+        names = set(pages['Service / sub-service'])
+        self.assertIn('Filler > Famy', names)
+        self.assertFalse(any('family' in n for n in names))
+        self.assertNotIn('family', ' '.join(map(str, pages[LINKS].dropna())))
+
+    def test_reviewer_can_type_the_name_without_the_family_tag(self):
+        def edit(rows):
+            for r in rows:
+                if r['input'] == 'famy':
+                    r['brand_device'] = 'Famy'
+        p, out = self.match_and_build(services='filler', products='famy', edit=edit)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
     def test_bad_selection_row_stops_the_build(self):
         def edit(rows):

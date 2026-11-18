@@ -17,7 +17,7 @@ SCRIPT = SKILL / 'scripts/roadmap.py'
 REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
-              'Primary keyword volume (national)', 'Mention on this page as a section', 'Client listed it']
+              'Primary keyword volume (national)', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from']
 GAP_HEAD = ['Service', 'Offered by our client (SEO fills in: Yes or No)', 'Keywords with 2+ in top 10 or 1+ in top 3',
             'Local keywords with 2+ in top 10 or 1+ in top 3']
 BLOG_HEAD = ['Key', 'Level', 'Category', 'Service', 'Sub-Service', 'Brand / Device', 'Practice Type', 'Action', 'Blog 1 angle', 'Blog 2 angle',
@@ -25,7 +25,8 @@ BLOG_HEAD = ['Key', 'Level', 'Category', 'Service', 'Sub-Service', 'Brand / Devi
 
 
 def page(level, label, rec='Own page', vol=1000, parent='', listed='Yes', sections=''):
-    return [level, label, 'Cat', rec, 'Why text', parent, label.split(' > ')[-1].lower(), vol, sections, listed]
+    came = {'Yes': 'Listed by the client', 'Implied': 'Parent of a listed item', 'Suggested': 'Suggested from the taxonomy, not listed'}[listed]
+    return [level, label, 'Cat', rec, 'Why text', parent, label.split(' > ')[-1].lower(), vol, sections, '' if listed == 'Suggested' else 'Yes', came]
 
 
 def make_research(path, pages):
@@ -160,6 +161,17 @@ class Small(Base):
         self.assertEqual(self.sheets, ['Read Me', 'Roadmap'])
         everything = ' '.join(str(v) for v in pd.read_excel(self.out, 'Read Me').fillna('').values.ravel())
         self.assertNotIn('NAD+', everything)
+
+    def test_research_rows_the_client_has_not_confirmed_are_left_out(self):
+        make_research(self.r, [
+            page('Service', 'Filler', vol=1300), page('Service', 'Facials', vol=74000),
+            page('Sub-Service', 'Filler > Lip Filler', vol=22000, parent='Filler'),
+            page('Sub-Service', 'Filler > Chin Filler', vol=5000, parent='Filler', listed='Suggested'),   # blank: not asked yet
+        ])
+        self.build()
+        names = set(self.road['Page'])
+        self.assertIn('Filler > Lip Filler', names)
+        self.assertNotIn('Filler > Chin Filler', names)
 
     def test_blogs_follow_their_page_and_sections(self):
         self.build()
