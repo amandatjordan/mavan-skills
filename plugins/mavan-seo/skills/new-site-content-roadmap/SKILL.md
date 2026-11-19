@@ -1,6 +1,6 @@
 ---
 name: new-site-content-roadmap
-description: For a brand-new site, turn the new-site keyword research workbook, the new-site keyword gap workbook and the bundled blog taxonomy into the list of pages and blog posts to write content for (50 at most, always including Home and About Us). Asks for the two workbooks and any extra pages that need content (packages, providers, locations, events, financing and so on). Use for a new site content roadmap, "which pages should we write for the new site", or after new site keyword research and the new-site keyword gap.
+description: For a brand-new site, turn the new-site keyword research workbook, the new-site keyword gap workbook (one per set of competitors) and the bundled blog taxonomy into the list of pages and blog posts to write content for (50 at most, always including Home and About Us). Asks for the research workbook, the gap workbook or workbooks and any extra pages that need content (packages, providers, locations, events, financing and so on). Use for a new site content roadmap, "which pages should we write for the new site", or after new site keyword research and the new-site keyword gap.
 ---
 
 # New site content roadmap (Mavan)
@@ -26,18 +26,18 @@ Ask for all of this in **one** message, before doing anything else.
 | Input | Required? | Notes |
 | --- | --- | --- |
 | **New site keyword research** workbook | Required | The .xlsx from `new-site-keyword-research`. Its Pages tab needs **Client offers it? (Yes / No)** filled in (only Yes rows are used; blank and No are left out) and, ideally, the yellow **Anchor text for links to this page** column filled in: it becomes "Must appear on page" |
-| **New-site keyword gap** workbook | Required | The .xlsx from `new-site-keyword-gap`. Its **Offered by our client** column on Service opportunities should be filled in: only Yes services count |
+| **New-site keyword gap** workbook(s) | Required, one or more | The .xlsx from `new-site-keyword-gap`. A client with services that do not overlap has one per set of competitors: ask for all of them and use them together. Each one's **Offered by our client** column on Service opportunities should be filled in: only Yes services count |
 | **Other pages that need content** | Ask, can be none | Pages we would write that are not in either sheet: packages, provider pages, location pages, events, financing, treatments by area or age, and anything else the person names. Give each a name and, if they can, a type (Package, Provider, Location, Event, Financing, Treatment by area, Treatment by age) |
 | Client name | Optional | Names the workbook |
 
 Home and About Us are always added. Do not ask about them. The blog taxonomy is bundled; never ask for it.
 
-Done when both workbooks are attached and the person has given the extra pages or said there are none.
+Done when the research workbook and every gap workbook are attached and the person has given the extra pages or said there are none.
 
 ## Step 2: Preflight
 
 ```
-python $SKILL/scripts/roadmap.py preflight --research RESEARCH.xlsx --gap GAP.xlsx --extras "Bridal packages|Package; Dr Smith|Provider" --out work
+python $SKILL/scripts/roadmap.py preflight --research RESEARCH.xlsx --gap GAP.xlsx [GAP2.xlsx ...] --extras "Bridal packages|Package; Dr Smith|Provider" --out work
 ```
 
 Pass `--extras` only when there are extras (`Name|Type` separated by semicolons). It checks that each workbook is the right kind, counts blank Offered answers and checks that Home, About Us and the extras fit under 50. Read `work/preflight.md`. On NOT READY, send **one** message listing each FAIL and exactly what is needed, then stop. Mention each WARN in the final reply: gap services whose Offered column is blank are left out of the roadmap. If the person wants those in, they fill in the gap workbook and send it again. Done when it says READY.
@@ -45,12 +45,13 @@ Pass `--extras` only when there are extras (`Name|Type` separated by semicolons)
 ## Step 3: Match gap services to research pages
 
 ```
-python $SKILL/scripts/roadmap.py match --research RESEARCH.xlsx --gap GAP.xlsx --out work
+python $SKILL/scripts/roadmap.py match --research RESEARCH.xlsx --gap GAP.xlsx [GAP2.xlsx ...] --out work
 ```
 
 It writes `work/gap_match.tsv`, one row per gap service, and prints every row that is not `ok`. The gap workbook's service names are free text the SEO chose (Fillers, botox, NAD+), so each one has to be matched to a page on the research Pages tab. Read **every** row, ok ones included, and correct `page` in place so it is the **exact label** from the research Pages tab, or blank when the service is not on that tab:
 - A gap service that is one treatment or product matches the page for that treatment or product (botox -> the Botox brand page). A broad name (Fillers) matches the Service page.
 - Two gap services may point to the same page; their numbers are added.
+- With more than one gap workbook, all their services are in this one file. A service name that appears in more than one workbook is already one row, with the higher number (non-local plus local) and Offered = Yes if any of them says Yes.
 - A service with no page and `offered` = Yes becomes a page of its own: set `level` to Service, Sub-Service, Brand / Device or Concern and fix the name's capitalization. Never invent a research label.
 - `offered` can be edited in this file when the person tells you the answer for a blank row. Say you did.
 - A service with no page and Offered No or blank is left off the roadmap and is not listed anywhere.
@@ -60,7 +61,7 @@ Done when every row is either an exact research page or deliberately blank.
 ## Step 4: Build
 
 ```
-python $SKILL/scripts/roadmap.py build --research RESEARCH.xlsx --gap GAP.xlsx --match work/gap_match.tsv --extras "..." --client "CLIENT" --out "CLIENT_new_site_content_roadmap.xlsx"
+python $SKILL/scripts/roadmap.py build --research RESEARCH.xlsx --gap GAP.xlsx [GAP2.xlsx ...] --match work/gap_match.tsv --extras "..." --client "CLIENT" --out "CLIENT_new_site_content_roadmap.xlsx"
 ```
 
 If it stops on a gap service or a page name, fix that row and run again. Done when every check prints PASS. Printed warnings (for example a gap service the client does not offer that is matched to a research page) go in the reply.
@@ -69,7 +70,7 @@ If it stops on a gap service or a page name, fix that row and run again. Done wh
 
 - Roadmap tab: Home, About Us and every extra page are at the top, the row count is 50 or fewer, and the rows follow Service, Sub-Service, Brand / Device, Blog, Concern.
 - Pick 3 page rows and compare the primary keyword and volume to the research Pages tab.
-- Pick 3 gap numbers and compare them to the Service opportunities tab (non-local plus local, of the matched service).
+- Pick 3 gap numbers and compare them to the Service opportunities tab (of the gap workbook the number came from) (non-local plus local, of the matched service).
 - Pick 2 blog rows and compare the angle to the blog taxonomy's Lookup tab.
 - Internal links tab: pick 3 rows and compare them to the research Pages tab's "Internal links out" column. Every Service, Sub-Service and Brand / Device page on the Roadmap is in the To page column (the script checks this). Every phrase in "Must appear on page" is the anchor of at least one row (the script checks this). Say how many links were added and why.
 - Cut tab (only present when something is over 50): starts with the instruction row, has the same columns as the Roadmap with the reason last, and each cut page is there. Sections are not pages: each one is in "Sections to cover" on its parent page.

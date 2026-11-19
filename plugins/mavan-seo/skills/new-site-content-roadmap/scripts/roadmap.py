@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """New-site content roadmap: the pages (and blogs) to write for a new site, at most 50, from the new-site keyword
-research workbook, the new-site keyword gap workbook and the bundled blog taxonomy.
+research workbook, the new-site keyword gap workbook(s) and the bundled blog taxonomy.
 
-  roadmap.py preflight --research R.xlsx --gap G.xlsx [--extras "Name|Type; Name|Type"] --out work
-  roadmap.py match     --research R.xlsx --gap G.xlsx --out work
-  roadmap.py build     --research R.xlsx --gap G.xlsx --match work/gap_match.tsv [--extras "..."] [--client "Name"] --out NAME.xlsx
+  roadmap.py preflight --research R.xlsx --gap G.xlsx [G2.xlsx ...] [--extras "Name|Type; Name|Type"] --out work
+  roadmap.py match     --research R.xlsx --gap G.xlsx [G2.xlsx ...] --out work
+  roadmap.py build     --research R.xlsx --gap G.xlsx [G2.xlsx ...] --match work/gap_match.tsv [--extras "..."] [--client "Name"] --out NAME.xlsx
 
 Every count, join, rank and cut is done here. Nothing is typed or estimated by hand. Volumes are never added together.
 """
@@ -129,6 +129,32 @@ def read_gap(path):
     return g[['Service', 'offered', 'sig', 'lsig']], []
 
 
+def read_gaps(paths):
+    """One or more gap workbooks (a client with services that do not overlap has one per set of competitors), read as one list.
+    A service name found in more than one workbook is counted once, with the row that has the higher total (non-local plus
+    local; the first workbook wins a tie). It is offered if any of its rows says Yes. One workbook is read exactly as before."""
+    if len(paths) == 1:
+        return read_gap(paths[0])
+    frames, probs = [], []
+    for path in paths:
+        g, prob = read_gap(path)
+        probs += [f'{Path(path).name}: {x}' for x in prob]
+        if g is not None:
+            frames.append(g)
+    if probs:
+        return None, probs
+    g = pd.concat(frames, ignore_index=True)
+    g['_order'] = range(len(g))
+    g['_key'] = g['Service'].map(norm)
+    g['_total'] = g['sig'].map(lambda v: num(v) or 0) + g['lsig'].map(lambda v: num(v) or 0)
+    g['_yes'] = g['offered'].astype(str).str.strip().str.lower() == 'yes'
+    any_yes = g.groupby('_key')['_yes'].transform('any')
+    g.loc[any_yes & ~g['_yes'], 'offered'] = 'Yes'
+    named = g[g['_key'] != '']
+    kept = pd.concat([named.sort_values('_total', ascending=False, kind='stable').drop_duplicates('_key'), g[g['_key'] == '']])
+    return kept.sort_values('_order')[['Service', 'offered', 'sig', 'lsig']].reset_index(drop=True), []
+
+
 def read_blog(path):
     xl = pd.ExcelFile(path)
     look = xl.parse('Lookup').fillna('')
@@ -143,7 +169,7 @@ def cmd_preflight(a):
     fails, warns, info = [], [], []
     pages, prob = read_research(a.research) if a.research else (None, ['Research workbook not provided (output of new-site-keyword-research).'])
     fails += prob
-    gap, prob = read_gap(a.gap) if a.gap else (None, ['Gap workbook not provided (output of new-site-keyword-gap).'])
+    gap, prob = read_gaps(a.gap) if a.gap else (None, ['Gap workbook not provided (output of new-site-keyword-gap).'])
     fails += prob
     extras = parse_extras(a.extras)
     if not Path(a.blog_taxonomy).exists():
@@ -160,7 +186,7 @@ def cmd_preflight(a):
             warns.append(f'{noanchor} pages have no anchor text on the research Pages tab, so "Must appear on page" is blank for them.')
     if gap is not None:
         blank = int((gap['offered'].astype(str).str.strip() == '').sum())
-        info.append(f'Gap: {len(gap)} services.')
+        info.append(f'Gap: {len(gap)} services' + (f' from {len(a.gap)} workbooks.' if len(a.gap) > 1 else '.'))
         if blank:
             warns.append(f'{blank} gap services have a blank "Offered by our client". Only Yes counts as offered; the rest are left out.')
     if len(extras) > MAX_PAGES - len(FIXED_PAGES):
@@ -179,7 +205,7 @@ def cmd_preflight(a):
 # --- match gap services to research pages ------------------------------------------------------
 def cmd_match(a):
     pages, prob = read_research(a.research)
-    gap, prob2 = read_gap(a.gap)
+    gap, prob2 = read_gaps(a.gap)
     if prob or prob2:
         sys.exit('; '.join(prob + prob2))
     labels = [x for x in pages['Service / sub-service'] if s(x)]
@@ -381,7 +407,7 @@ def blog_rows(kept, sections, look, rules, over, notes):
 
 def cmd_build(a):
     pages, prob = read_research(a.research)
-    gap, prob2 = read_gap(a.gap)
+    gap, prob2 = read_gaps(a.gap)
     if prob or prob2:
         sys.exit('; '.join(prob + prob2))
     with open(a.match, newline='') as f:
@@ -501,13 +527,14 @@ def cmd_build(a):
         warnings.append(f'{links_added} links were added so every page and every "Must appear on page" phrase has a link (see "Where this link came from" on the Internal links tab).')
 
     note = ' | '.join(warnings) if warnings else 'None'
+    gap_txt = 'the new-site keyword gap workbook' if len(a.gap) == 1 else f'the {len(a.gap)} new-site keyword gap workbooks'
     read_me = [
         ('New site content roadmap', a.client or ''),
-        ('Built from', f'The new-site keyword research workbook, the new-site keyword gap workbook and the blog taxonomy ({blog_title}). Nothing was looked up live.'),
+        ('Built from', f'The new-site keyword research workbook, {gap_txt} and the blog taxonomy ({blog_title}). Nothing was looked up live.'),
         ('Volume: read this first', VOLUME_LABEL),
         ('What this is', f'The pages and blog posts we recommend writing content for, {MAX_PAGES} at most. Home, About Us and every extra page the SEO listed always count toward the {MAX_PAGES} and are never cut.'),
         ('Order', 'Home, About Us, the SEO\'s extra pages, then Service, Sub-Service, Brand / Device, Blog and Concern pages, until the cap is reached. Inside a group: pages the client listed first, then Implied parents, then gap-only services; ties go to more competitor gap keywords, then higher volume.'),
-        ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page. A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
+        ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page.' + (' A service in more than one gap workbook is counted once, with the higher number.' if len(a.gap) > 1 else '') + ' A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
         ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it, or add keywords to the same cell. Home, About Us and extra pages have none: add them.'),
         ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none.'),
         ('Internal links tab', 'Every link between pages on the roadmap: from page, to page and the anchor text (the research sheet\'s anchor text for the page being linked to). The links come from the keyword research sheet. Where a page would receive no link at all (the pages that linked to it were cut, it is not linked from the research, or it came from the gap), a link from its parent page, or from Home, is added and marked. Blogs link to their page. Every phrase in "Must appear on page" is the anchor text of at least one link to that page (a page with two phrases gets one link with each). If the SEO moves pages between the Roadmap and Cut tabs, the links to and from those pages need updating by hand.'),
@@ -586,7 +613,7 @@ def main():
     for name in ('preflight', 'match', 'build'):
         p = sub.add_parser(name)
         p.add_argument('--research', required=(name != 'preflight'))
-        p.add_argument('--gap', required=(name != 'preflight'))
+        p.add_argument('--gap', nargs='+', required=(name != 'preflight'))
         p.add_argument('--blog-taxonomy', default=str(DEFAULT_BLOG))
         if name != 'match':
             p.add_argument('--extras', default='')

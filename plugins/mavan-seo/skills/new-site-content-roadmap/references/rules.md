@@ -27,6 +27,8 @@ Pages are added in that order until 50 is reached. A group is only reached once 
 
 From the gap workbook's Service opportunities tab: "Keywords with 2+ in top 10 or 1+ in top 3" plus the local version of the same column, for the gap service matched to the page. Two gap services matched to one page are added. A Sub-Service or Brand / Device with no gap service of its own shows its Service's number, marked "inherited", so children of a Service with competitor demand rank ahead of children of one without. A gap-only service shows its own number.
 
+**More than one gap workbook.** A client with services that do not overlap has one gap workbook per set of competitors. They are read as one list of gap services. A service name in more than one workbook (matched ignoring case and punctuation) is one row, counted once, with the higher total (non-local plus local) and never added across workbooks; the first workbook wins a tie. It is offered if any of its rows says Yes. Two different service names that match the same page are still added, as above.
+
 The gap workbook's counts are at the service level, so they say which services competitors win, not which sub-services.
 
 ## Gap workbook: who counts
