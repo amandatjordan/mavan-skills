@@ -452,6 +452,88 @@ class Preflight(Base):
         self.assertIn('blank "Offered by our client"', p.stdout)
 
 
+class MultipleGaps(Base):
+    """A client with services that do not overlap has one gap workbook per set of competitors. They are read as one list."""
+    GAPCOL = 'Competitor gap keywords (2+ in top 10 or 1+ in top 3)'
+
+    def setUp(self):
+        super().setUp()
+        self.g2 = self.tmp / 'g2.xlsx'
+        make_research(self.r, [page('Service', 'Filler', vol=1300), page('Service', 'Facials', vol=74000)])
+        make_blog(self.b, [('Service', 'Filler', ''), ('Service', 'Facials', '')])
+
+    def go(self, check=True):
+        run('match', '--research', self.r, '--gap', self.g, self.g2, '--out', self.work)
+        self.out = self.tmp / 'out.xlsx'
+        p = run('build', '--research', self.r, '--gap', self.g, self.g2, '--match', self.work / 'gap_match.tsv', '--blog-taxonomy', self.b,
+                '--client', 'T', '--out', self.out, check=check)
+        if p.returncode == 0:
+            self.road = pd.read_excel(self.out, 'Roadmap').fillna('')
+        return p
+
+    def gap_of(self, page_name):
+        return str(self.road[self.road['Page'] == page_name].iloc[0][self.GAPCOL])
+
+    def test_services_from_every_workbook_are_used(self):
+        make_gap(self.g, [['Fillers', 'Yes', 13, 0]])
+        make_gap(self.g2, [['Facials', 'Yes', 2, 0], ['Skin tightening', 'Yes', 1, 0]])
+        self.go()
+        self.assertEqual({r['gap_service'] for r in self.match_rows()}, {'Fillers', 'Facials', 'Skin tightening'})
+        self.assertEqual(list(self.road[self.road['Page type'] == 'Service']['Page']), ['Filler', 'Facials', 'Skin tightening'])
+        self.assertTrue(self.gap_of('Facials').startswith('2 '))
+
+    def test_same_service_in_two_workbooks_is_counted_once_with_the_higher_number(self):
+        make_gap(self.g, [['Fillers', 'Yes', 13, 0]])
+        make_gap(self.g2, [['fillers', 'Yes', 5, 4]])
+        self.go()
+        self.assertEqual(len(self.match_rows()), 1)
+        self.assertTrue(self.gap_of('Filler').startswith('13 '))  # not 13 + 9
+
+    def test_the_higher_number_can_come_from_the_second_workbook(self):
+        make_gap(self.g, [['Fillers', 'Yes', 3, 0]])
+        make_gap(self.g2, [['Fillers', 'Yes', 5, 4]])
+        self.go()
+        row = self.match_rows()[0]
+        self.assertEqual((row['gap_keywords'], row['local_gap_keywords']), ('5', '4'))
+        self.assertTrue(self.gap_of('Filler').startswith('9 '))
+
+    def test_a_service_is_offered_if_any_workbook_says_yes(self):
+        make_gap(self.g, [['Fillers', 'No', 13, 0]])
+        make_gap(self.g2, [['Fillers', 'Yes', 2, 0]])
+        self.go()
+        row = self.match_rows()[0]
+        self.assertEqual(row['offered'], 'Yes')
+        self.assertTrue(self.gap_of('Filler').startswith('13 '))
+
+    def test_different_services_with_the_same_number_are_all_kept(self):
+        make_gap(self.g, [['Fillers', 'Yes', 4, 0], ['Facials', 'Yes', 4, 0]])
+        make_gap(self.g2, [['Fillers', 'Yes', 4, 0]])
+        self.go()
+        self.assertEqual(len(self.match_rows()), 2)
+
+    def test_preflight_names_the_workbook_that_is_wrong(self):
+        make_gap(self.g, [['Fillers', 'Yes', 1, 0]])
+        Workbook().save(self.g2)
+        p = run('preflight', '--research', self.r, '--gap', self.g, self.g2, '--out', self.work, check=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('g2.xlsx:', p.stdout)
+
+    def test_preflight_counts_the_workbooks(self):
+        make_gap(self.g, [['Fillers', 'Yes', 1, 0]])
+        make_gap(self.g2, [['Facials', '', 1, 0]])
+        p = run('preflight', '--research', self.r, '--gap', self.g, self.g2, '--out', self.work)
+        self.assertIn('Gap: 2 services from 2 workbooks.', p.stdout)
+        self.assertIn('blank "Offered by our client"', p.stdout)
+
+    def test_read_me_says_how_many_gap_workbooks(self):
+        make_gap(self.g, [['Fillers', 'Yes', 1, 0]])
+        make_gap(self.g2, [['Facials', 'Yes', 1, 0]])
+        self.go()
+        text = ' '.join(str(v) for v in pd.read_excel(self.out, 'Read Me').fillna('').values.ravel())
+        self.assertIn('2 new-site keyword gap workbooks', text)
+        self.assertIn('counted once, with the higher number', text)
+
+
 class RealBlogTaxonomy(unittest.TestCase):
     def test_bundled_taxonomy_shape(self):
         look = pd.read_excel(REAL_BLOG, 'Lookup').fillna('')
