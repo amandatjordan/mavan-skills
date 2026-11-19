@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """E-E-A-T & YMYL audit.
 
-  python audit.py preflight --config config.json --crawl crawl.csv --outlinks outlinks.csv --out work [--external external.csv]
-  python audit.py reps      --config config.json --crawl crawl.csv --outlinks outlinks.csv --external external.csv
-  python audit.py queue     --config config.json --crawl crawl.csv --outlinks outlinks.csv --external external.csv --out work [--scope failed|all-high]
+  python audit.py preflight --config config.json --crawl crawl.csv --outlinks outlinks.csv --out work [--external external.csv] [--chrome work/chrome.tsv]
+  python audit.py queue     --config config.json --crawl crawl.csv --outlinks outlinks.csv --external external.csv --out work
+                            [--types Condition,Service] [--max N]
   python audit.py build     --config config.json --crawl crawl.csv --outlinks outlinks.csv --external external.csv
-                            [--claims work/claims.tsv] [--chrome work/chrome.tsv] --out audit.xlsx
+                            --chrome work/chrome.tsv [--claims work/claims.tsv] [--types ...] [--max N] --out audit.xlsx
 
 preflight: checks the config and the exports, prints what is ready, what is a warning and what stops the build, writes
            work/external_urls.txt (the deduped external destinations to crawl in list mode) and shows the start and end of the body
-           text of one page per page type so the person can see whether the content selector is right.
-reps:      proposes one typical page per page type (body word count closest to the type's median) for the Claude in Chrome check.
+           text of one page per page type so the person can see whether the content selector is right. With --chrome it also prints
+           what the crawl detected on each page Claude in Chrome checked, so Claude can fill in the "agrees" column.
 queue:     lists the pages for the accuracy review and writes each page's body text to work/text/ for the AI to read.
-build:     builds the workbook. Every count, share and join happens here. Rules: references/rules.md.
+build:     builds the workbook. Every count and join happens here. Rules: references/rules.md.
 The AI never types a number. It reads body text only for the accuracy review (queue) and writes claims.tsv / chrome.tsv.
 """
 import argparse
@@ -20,10 +20,9 @@ import csv
 import json
 import os
 import re
-import statistics
 import sys
 import unicodedata
-from collections import Counter, defaultdict
+from collections import Counter
 from urllib.parse import unquote, urlsplit
 
 import pandas as pd
@@ -41,25 +40,14 @@ OL_ANCHOR = ["anchor", "anchor text", "link text"]
 OL_POS = ["link position", "position"]
 OL_TYPE = ["type", "link type"]
 OL_STATUS = ["status code", "http status code"]
-EXT_STATUS = STATUS_NAMES
 EXT_TITLE = ["title 1", "title", "page title"]
 EXT_H1 = ["h1-1", "h1", "h1 1"]
 
-TIERS = ["High", "Medium", "Low"]
+DEFAULT_CREDENTIALS = ["MD", "DO", "DDS", "DMD", "NP", "PA", "PA-C", "RN", "PhD", "FACS", "FAAD", "board-certified", "board certified"]
 BLOCKED = {401, 403, 429, 999}
 STOP_WORDS = set("a an and or the of in on for to with by at as is are be from vs near me your you our we it its this that these those into".split())
-GENERIC_WORDS = set("click here read more link article source sources page website site learn see visit via official research study studies shows show shown according report info information".split())
-FLAGGED = ["Dead link", "No response", "Redirect", "Goes to homepage", "No shared words", "Weak source"]
-ACTIONS = {
-    "No author shown": "Show a named author on the page, linked to a bio page.",
-    "No medical / expert reviewer": "Add a reviewer line with the reviewer's credentials and the review date.",
-    "No credentials found": "Show the author's or reviewer's credentials on the page or on the bio page it links to.",
-    "No published date": "Show the published date and the date the page was last reviewed.",
-    "No external citations": "Cite primary sources (government, academic, professional bodies) for the claims on the page.",
-    "Flagged external links": "Fix each flagged link on the External Links tab: replace dead links, update redirects, and point links at the page that supports the claim.",
-    "No schema": "Add the schema type that fits the page type.",
-}
-CHECKS = list(ACTIONS)
+GENERIC_WORDS = set("click here read more link article source sources page website site learn see visit via official research study studies shows show according report info information".split())
+FLAGGED = ["Dead link", "No response", "No shared words"]
 NO_VALUES = {"", "0", "false", "no", "none", "nan"}
 
 
@@ -135,25 +123,17 @@ def load_config(path, findings):
     except (OSError, ValueError) as e:
         sys.exit(f"STOP: cannot read config {path}: {e}")
     cfg.setdefault("columns", {})
-    cfg.setdefault("priority_cutoffs", {"high": 4, "medium": 2})
     cfg.setdefault("content_link_positions", ["Content"])
-    for k in ("weak_domains", "generic_anchor_words", "experience_terms", "own_domains", "credential_terms"):
+    for k in ("experience_terms", "own_domains", "credential_terms"):
         cfg.setdefault(k, [])
-    cfg.setdefault("authoritative", {})
-    cfg["authoritative"].setdefault("tlds", [])
-    cfg["authoritative"].setdefault("domains", [])
     if not cfg["columns"].get("body"):
         findings.append(("STOP", "Config has no columns.body: the crawl column that holds each page's body text."))
     rules = cfg.get("page_types") or []
     if not rules:
         findings.append(("STOP", "Config has no page_types: which URL paths are conditions, services, blogs and so on."))
     for r in rules:
-        if not r.get("name") or not r.get("paths") or r.get("tier") not in TIERS:
-            findings.append(("STOP", f"Page type {r.get('name', '?')} needs a name, paths and a tier of High, Medium or Low."))
-    if not cfg["credential_terms"]:
-        findings.append(("STOP", "Config has no credential_terms (for example MD, DDS, board-certified)."))
-    if not (cfg["authoritative"]["tlds"] or cfg["authoritative"]["domains"]):
-        findings.append(("STOP", "Config has no authoritative rules (tlds or domains)."))
+        if not r.get("name") or not r.get("paths"):
+            findings.append(("STOP", f"Page type {r.get('name', '?')} needs a name and paths."))
     return cfg
 
 
@@ -175,24 +155,8 @@ def resolve(df, name, label, findings):
 def page_type(path, rules):
     for r in rules:
         if any(p.lower() in path for p in r["paths"]):
-            return r["name"], r["tier"]
-    return None, None
-
-
-def domain_type(host, cfg):
-    a = cfg["authoritative"]
-    for t in a["tlds"]:
-        if host.endswith(t.lower().lstrip("*")):
-            return "Authoritative"
-    for d in a["domains"]:
-        d = d.lower().lstrip(".")
-        if host == d or host.endswith("." + d):
-            return "Authoritative"
-    for d in cfg["weak_domains"]:
-        d = d.lower().lstrip(".")
-        if host == d or host.endswith("." + d):
-            return "Weak source"
-    return "Other"
+            return r["name"]
+    return None
 
 
 def term_hits(text, terms):
@@ -213,10 +177,9 @@ def experience_hits(text, cfg):
     return out[:3]
 
 
-def anchor_match(anchor, dest_text, cfg):
+def anchor_match(anchor, dest_text):
     """Match / Partial / No match / Generic anchor / Not checked. Plain word overlap, no judgement."""
-    skip = STOP_WORDS | GENERIC_WORDS | {w.lower() for w in cfg["generic_anchor_words"]}
-    aw = {stem(w) for w in words(anchor) if w not in skip}
+    aw = {stem(w) for w in words(anchor) if w not in STOP_WORDS | GENERIC_WORDS}
     if not aw:
         return "Generic anchor"
     dw = {stem(w) for w in words(dest_text)}
@@ -264,6 +227,7 @@ def analyze(args, need_external):
 
     # ---- pages
     own_hosts = {host_of(u) for u in crawl[ucol] if u} | {h.lower().lstrip(".") for h in cfg["own_domains"]}
+    credential_terms = DEFAULT_CREDENTIALS + cfg["credential_terms"]
     pages, order = {}, []
     excluded = Counter()
     unmatched = []
@@ -278,7 +242,7 @@ def analyze(args, need_external):
         if icol and not str(r[icol]).strip().lower().startswith("indexable"):
             excluded["not indexable"] += 1
             continue
-        ptype, tier = page_type(path_of(url), cfg["page_types"])
+        ptype = page_type(path_of(url), cfg["page_types"])
         if not ptype:
             unmatched.append(url)
             continue
@@ -286,10 +250,10 @@ def analyze(args, need_external):
         body = val("body") or ""
         author, reviewer = val("author"), val("reviewer")
         cred_text = " ".join([body, author or "", reviewer or ""])
-        p = dict(url=url, key=norm_url(url), ptype=ptype, tier=tier, body=body, words=len(body.split()),
+        p = dict(url=url, key=norm_url(url), ptype=ptype, body=body, words=len(body.split()),
                  author=author, reviewer=reviewer, published=val("published"), updated=val("updated"), schema=val("schema"),
                  testimonials=val("testimonials"), before_after=val("before_after"), rating=val("rating"),
-                 creds=term_hits(cred_text, cfg["credential_terms"]), exp=experience_hits(body, cfg), links=[])
+                 creds=term_hits(cred_text, credential_terms), exp=experience_hits(body, cfg), links=[])
         pages[p["key"]] = p
         order.append(p["key"])
 
@@ -301,7 +265,7 @@ def analyze(args, need_external):
         if not eu:
             findings.append(("STOP", f"External list crawl export has no URL column. Columns: {list(ext.columns)}"))
             return dict(findings=findings, cfg=cfg)
-        es, et, eh = find_col(ext, EXT_STATUS), find_col(ext, EXT_TITLE), find_col(ext, EXT_H1)
+        es, et, eh = find_col(ext, STATUS_NAMES), find_col(ext, EXT_TITLE), find_col(ext, EXT_H1)
         for _, r in ext.iterrows():
             ext_map[norm_url(r[eu])] = dict(status=to_int(r[es]) if es else 0, title=clean_text(r[et]) if et else "", h1=clean_text(r[eh]) if eh else "")
     seen, links, dest_urls = set(), [], {}
@@ -323,57 +287,40 @@ def analyze(args, need_external):
         e = ext_map.get(dkey)
         status = e["status"] if e and e["status"] else (to_int(r[ostat]) if ostat else 0)
         title, h1 = (e["title"], e["h1"]) if e else ("", "")
-        host = host_of(dst)
-        dtype = domain_type(host, cfg)
-        match = anchor_match(r[oanc], title + " " + h1, cfg) if e else "Not checked"
+        match = anchor_match(r[oanc], title + " " + h1) if e else "Not checked"
         flags = []
         if status >= 400 and status not in BLOCKED:
             flags.append("Dead link")
         elif status == 0:
             flags.append("No response")
-        elif 300 <= status < 400:
-            flags.append("Redirect")
-        if path_of(dst) in ("/", "") and not urlsplit(dst).query:
-            flags.append("Goes to homepage")
         if match == "No match":
             flags.append("No shared words")
-        if dtype == "Weak source":
-            flags.append("Weak source")
         if status in BLOCKED:
             flags.append("Check manually")
         row = dict(src=pages[src]["url"], pkey=src, anchor=clean_text(r[oanc]), dest=dst, status=status, title=title, h1=h1,
-                   dtype=dtype, host=host, match=match, flags=flags, flagged=[f for f in flags if f in FLAGGED])
+                   match=match, flags=flags, flagged=[f for f in flags if f in FLAGGED])
         pages[src]["links"].append(row)
         links.append(row)
 
-    # ---- checks per page
-    cut = cfg["priority_cutoffs"]
+    # ---- what each page lacks (plain facts, no scoring)
     for k in order:
         p = pages[k]
         p["cites"] = len(p["links"])
-        p["auth"] = sum(1 for l in p["links"] if l["dtype"] == "Authoritative")
         p["flagged_n"] = sum(1 for l in p["links"] if l["flagged"])
-        fails = []
+        lacks = []
         if p["author"] is not None and not present(p["author"]):
-            fails.append("No author shown")
+            lacks.append("No author shown")
         if p["reviewer"] is not None and not present(p["reviewer"]):
-            fails.append("No medical / expert reviewer")
+            lacks.append("No medical / expert reviewer")
         if not p["creds"]:
-            fails.append("No credentials found")
+            lacks.append("No credentials found")
         if p["published"] is not None and not present(p["published"]):
-            fails.append("No published date")
-        if p["cites"] == 0:
-            fails.append("No external citations")
-        if p["flagged_n"]:
-            fails.append("Flagged external links")
+            lacks.append("No published date")
         if p["schema"] is not None and not present(p["schema"]):
-            fails.append("No schema")
-        p["fails"] = fails
-        if p["tier"] == "Low":
-            p["priority"] = "Not scored"
-        else:
-            n = len(fails)
-            p["priority"] = "High" if n >= cut["high"] else ("Medium" if n >= cut["medium"] else "Low")
+            lacks.append("No schema")
+        if p["cites"] == 0:
+            lacks.append("No external citations")
+        p["lacks"] = lacks
 
     # ---- findings
     n_pages = len(order)
@@ -386,14 +333,10 @@ def analyze(args, need_external):
     if ext is None and not need_external:
         findings.append(("WARN", "The list crawl of the external destinations is not done yet: crawl work/external_urls.txt in list mode, then re-run preflight with --external."))
     if n_pages:
-        def some_empty(label, key, keys):
-            empty = [pages[k]["url"] for k in keys if pages[k][key] is not None and not present(pages[k][key])]
+        for lab, key in (("Body text", "body"), ("Author", "author"), ("Reviewer", "reviewer"), ("Published date", "published")):
+            empty = [pages[k]["url"] for k in order if pages[k][key] is not None and not present(pages[k][key])]
             if empty:
-                findings.append(("WARN", f"{label} is empty on {len(empty)} of {len(keys)} pages (first: {', '.join(empty[:3])}). If the pages do show it, the selector is wrong."))
-        some_empty("Body text", "body", order)
-        scored_keys = [k for k in order if pages[k]["tier"] != "Low"]  # Low-YMYL pages are not scored, so a blank author there is expected
-        for lab, key in (("Author", "author"), ("Reviewer", "reviewer"), ("Published date", "published")):
-            some_empty(lab, key, scored_keys)
+                findings.append(("WARN", f"{lab} is empty on {len(empty)} of {n_pages} pages (first: {', '.join(empty[:3])}). If the pages do show it, the selector is wrong."))
         for lab, key in (("testimonial", "testimonials"), ("before/after photo", "before_after"), ("rating", "rating")):
             if cols[key] and not any(present(pages[k][key]) for k in order):
                 findings.append(("WARN", f"No page has a {lab} marker hit. If the site shows them, the marker is wrong."))
@@ -446,66 +389,50 @@ def cmd_preflight(args):
             w = p["body"].split()
             print(f"\n[{p['ptype']}] {p['url']} ({len(w)} words)\n  START: {' '.join(w[:40])}\n  END:   {' '.join(w[-40:])}")
         print()
+        if args.chrome:
+            print("What the crawl detected on the pages checked in Claude in Chrome:")
+            for r in read_tsv(args.chrome, ["url"]):
+                p = res["pages"].get(norm_url(r["url"]))
+                print(f"  {r['url']}\n    " + (crawl_detected(p) if p else "NOT IN THE CRAWL (not an audited page: check the URL or the page type patterns)"))
+            print()
     print_findings(res["findings"])
     if stops:
         sys.exit(1)
 
 
-def cmd_reps(args):
-    res = analyze(args, need_external=True)
-    stop_if_needed(res)
-    by = defaultdict(list)
-    for k in res["order"]:
-        by[res["pages"][k]["ptype"]].append(res["pages"][k])
-    for name, ps in by.items():
-        med = statistics.median(p["words"] for p in ps)
-        rep = min(ps, key=lambda p: abs(p["words"] - med))
-        print(f"{name}\t{rep['url']}\t{rep['words']} words (median {med:g}, {len(ps)} pages)")
-
-
-def scoped(res, scope):
-    out = []
-    for k in res["order"]:
-        p = res["pages"][k]
-        if p["tier"] == "High" and (scope == "all-high" or p["fails"]):
-            out.append(p)
-    return sorted(out, key=lambda p: -len(p["fails"]))
-
-
-def why(p):
-    parts = list(p["fails"]) or ["High-YMYL page (no structural check failed)"]
-    return "; ".join(parts)
+def scoped(res, types=None, max_pages=None):
+    names = {t.strip().lower() for t in types.split(",")} if types else None
+    out = [res["pages"][k] for k in res["order"] if not names or res["pages"][k]["ptype"].lower() in names]
+    return out[:max_pages] if max_pages else out
 
 
 def cmd_queue(args):
     res = analyze(args, need_external=True)
     stop_if_needed(res)
-    for sc in ("failed", "all-high"):
-        q = scoped(res, sc)
-        print(f"scope {sc}: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
-    q = scoped(res, args.scope)
+    for t in dict.fromkeys(res["pages"][k]["ptype"] for k in res["order"]):
+        q = scoped(res, t)
+        print(f"{t}: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
+    q = scoped(res, args.types, args.max)
+    print(f"Queue: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
     tdir = os.path.join(args.out, "text")
     os.makedirs(tdir, exist_ok=True)
     with open(os.path.join(args.out, "queue.tsv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, delimiter="\t")
-        w.writerow(["id", "url", "page_type", "words", "external_citations", "why_in_queue"])
+        w.writerow(["id", "url", "page_type", "words", "external_citations"])
         for i, p in enumerate(q, 1):
-            w.writerow([i, p["url"], p["ptype"], p["words"], p["cites"], why(p)])
+            w.writerow([i, p["url"], p["ptype"], p["words"], p["cites"]])
             with open(os.path.join(tdir, f"{i:03d}.txt"), "w", encoding="utf-8") as t:
                 t.write(f"URL: {p['url']}\nExternal citations on the page: {p['cites']}\n\n{p['body']}\n")
-    print(f"Queue ({args.scope}) written to {args.out}/queue.tsv and {args.out}/text/")
+    print(f"Written to {args.out}/queue.tsv and {args.out}/text/")
 
 
 # ------------------------------------------------------------------ workbook
 FONT = "Arial"
 HDR_FILL = PatternFill("solid", start_color="1F3864")
 YELLOW = PatternFill("solid", start_color="FFF2CC")
-FILLS = {"High": PatternFill("solid", start_color="F8CBAD"), "Medium": PatternFill("solid", start_color="FFE699"),
-         "Low": PatternFill("solid", start_color="C6E0B4")}
-RED = PatternFill("solid", start_color="F8CBAD")
 
 
-def write_sheet(wb, title, header, rows, widths, yellow=(), name=None, fills=None):
+def write_sheet(wb, title, header, rows, widths, yellow=(), name=None):
     ws = wb.create_sheet(title)
     ws.append(header)
     for r in rows:
@@ -522,12 +449,6 @@ def write_sheet(wb, title, header, rows, widths, yellow=(), name=None, fills=Non
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = "A2"
-    if fills:
-        for col, mapping in fills.items():
-            for row in ws.iter_rows(min_row=2, min_col=col, max_col=col):
-                for c in row:
-                    if c.value in mapping:
-                        c.fill = mapping[c.value]
     if rows:
         t = Table(displayName=name or re.sub(r"\W", "", title), ref=f"A1:{get_column_letter(len(header))}{len(rows) + 1}")
         t.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=False)
@@ -535,12 +456,20 @@ def write_sheet(wb, title, header, rows, widths, yellow=(), name=None, fills=Non
     return ws
 
 
-def na(v):
-    return "n/a" if v is None else v
+def na(v, empty="None"):
+    return "n/a" if v is None else (v or empty)
 
 
 def yn(v):
     return "n/a" if v is None else ("Yes" if present(v) else "No")
+
+
+def marker(v):
+    return "Not set up" if v is None else ("Yes" if present(v) else "No")
+
+
+def rating(p):
+    return "Not set up" if p["rating"] is None else (p["rating"] if present(p["rating"]) else "No")
 
 
 def read_tsv(path, need):
@@ -548,16 +477,20 @@ def read_tsv(path, need):
         rows = list(csv.DictReader(fh, delimiter="\t"))
     for col in need:
         if not rows or col not in rows[0]:
-            sys.exit(f"STOP: {path} needs the columns {need}.")
+            sys.exit(f"STOP: {path} needs the columns {need} and at least one row.")
     return rows
+
+
+def crawl_detected(p):
+    return (f"Author: {yn(p['author'])}; reviewer: {yn(p['reviewer'])}; credentials: {', '.join(p['creds']) or 'None'}; "
+            f"testimonials: {marker(p['testimonials'])}; before/after: {marker(p['before_after'])}; rating: {rating(p)}")
 
 
 def cmd_build(args):
     res = analyze(args, need_external=True)
     stop_if_needed(res)
-    cfg, pages, order, links = res["cfg"], res["pages"], res["order"], res["links"]
-    scored = [pages[k] for k in order if pages[k]["tier"] != "Low"]
-    queue = scoped(res, args.scope)
+    pages, order, links = res["pages"], res["order"], res["links"]
+    queue = scoped(res, args.types, args.max)
 
     claims = {}
     if args.claims:
@@ -569,12 +502,16 @@ def cmd_build(args):
         bad = [r["url"] for r in claims.values() if r["specific_claims"] not in ("Yes", "No")]
         if bad:
             sys.exit(f"STOP: claims.tsv specific_claims must be Yes or No: {bad[:3]}")
-    chrome = []
-    if args.chrome:
-        chrome = read_tsv(args.chrome, ["url", "visitor_sees", "agrees", "opportunities"])
-        for r in chrome:
-            if norm_url(r["url"]) not in pages:
-                sys.exit(f"STOP: chrome.tsv has a URL that is not an audited page: {r['url']}")
+    chrome = read_tsv(args.chrome, ["url", "visitor_sees", "agrees", "opportunities"])
+    for r in chrome:
+        if norm_url(r["url"]) not in pages:
+            sys.exit(f"STOP: chrome.tsv has a URL that is not an audited page: {r['url']}")
+        if r["agrees"] not in ("Yes", "Partly", "No"):
+            sys.exit(f"STOP: chrome.tsv agrees must be Yes, Partly or No: {r['url']}")
+    types = list(dict.fromkeys(pages[k]["ptype"] for k in order))
+    checked = {pages[norm_url(r["url"])]["ptype"] for r in chrome}
+    if set(types) - checked:
+        sys.exit(f"STOP: the Claude in Chrome check has no page for: {sorted(set(types) - checked)}")
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -585,22 +522,19 @@ def cmd_build(args):
     r = 1
     ws.cell(r, 1, "E-E-A-T & YMYL audit").font = Font(name=FONT, size=14, bold=True)
     r += 2
-    warns = [m for l, m in res["findings"] if l == "WARN"]
     ws.cell(r, 1, "Preflight warnings").font = b10
-    for m in warns or ["None"]:
+    for m in [m for l, m in res["findings"] if l == "WARN"] or ["None"]:
         r += 1
         ws.cell(r, 1, m).font = f10
     r += 2
-    for lab, val in (("Pages audited", len(order)), ("Pages scored (Medium and High YMYL)", len(scored)),
-                     ("External links checked", len(links)),
-                     ("Pages in the accuracy review queue", len(queue))):
+    for lab, val in (("Pages audited", len(order)), ("External links checked", len(links)), ("Pages in the accuracy review queue", len(queue))):
         ws.cell(r, 1, lab).font = b10
         ws.cell(r, 2, val).font = f10
         ws.cell(r, 2).alignment = Alignment(horizontal="left")
         r += 1
     r += 1
 
-    def table(title, header, rows, widths=None):
+    def table(title, header, rows):
         nonlocal r
         ws.cell(r, 1, title).font = b10
         r += 1
@@ -615,102 +549,67 @@ def cmd_build(args):
                 c.font, c.alignment = f10, Alignment(wrap_text=True, vertical="top", horizontal="left")
         r += 2
 
-    issue_rows = []
-    for chk in CHECKS:
-        hit = [p for p in scored if chk in p["fails"]]
-        if hit:
-            ex = ", ".join(p["url"] for p in sorted(hit, key=lambda p: -len(p["fails"]))[:3])
-            pct = len(hit) / len(scored) if scored else 0
-            issue_rows.append((chk, len(hit), f"{pct:.0%}", ex, ACTIONS[chk]))
-    if claims:
-        hit = [p for k, p in pages.items() if k in claims and claims[k]["specific_claims"] == "Yes" and p["cites"] == 0]
-        if hit:
-            issue_rows.append(("Makes specific claims and has no external citations", len(hit), "", ", ".join(p["url"] for p in hit[:3]),
-                               "Cite a primary source for each specific claim or remove the claim."))
-    issue_rows.sort(key=lambda x: -x[1])
-    table("Issues, most common first (scored pages)", ["Issue", "Pages affected", "% of scored pages", "Example pages", "Recommended action"],
-          issue_rows or [("No issue found", 0, "0%", "", "")])
-    tt = []
-    for rule in cfg["page_types"]:
-        ps = [pages[k] for k in order if pages[k]["ptype"] == rule["name"]]
-        if ps:
-            tt.append((rule["name"], rule["tier"], len(ps)) + tuple(sum(1 for p in ps if p["priority"] == x) for x in ("High", "Medium", "Low")))
-    table("By page type", ["Page type", "YMYL tier", "Pages", "High priority", "Medium priority", "Low priority"], tt)
-    all_p = [pages[k] for k in order]
-    cov = []
-    for lab, fn in (("Customer reviews / testimonials", lambda p: p["testimonials"]), ("Before/after or results photos", lambda p: p["before_after"]),
-                    ("Rating shown on the page", lambda p: p["rating"])):
-        if any(fn(p) is not None for p in all_p):
-            n = sum(1 for p in all_p if fn(p) is not None and present(fn(p)))
-            cov.append((lab, n, f"{n / len(all_p):.0%}"))
-    n = sum(1 for p in all_p if p["creds"])
-    cov.append(("Credentials found", n, f"{n / len(all_p):.0%}"))
-    n = sum(1 for p in all_p if p["exp"])
-    cov.append(("Years of experience stated", n, f"{n / len(all_p):.0%}"))
-    table("Trust signals present (all audited pages)", ["Signal", "Pages with it", "% of audited pages"], cov)
+    head = ["Page type", "Pages", "No author shown", "No reviewer", "No credentials found", "No published date", "No schema",
+            "No external citations", "With flagged links", "No testimonials", "No before/after photos", "No rating shown"]
+    rows = []
+    for t in types:
+        ps = [pages[k] for k in order if pages[k]["ptype"] == t]
+        cnt = lambda lack: sum(1 for p in ps if lack in p["lacks"])
+        none = lambda key: "n/a" if ps[0][key] is None else sum(1 for p in ps if not present(p[key]))
+        rows.append([t, len(ps), cnt("No author shown") if ps[0]["author"] is not None else "n/a",
+                     cnt("No medical / expert reviewer") if ps[0]["reviewer"] is not None else "n/a", cnt("No credentials found"),
+                     cnt("No published date") if ps[0]["published"] is not None else "n/a",
+                     cnt("No schema") if ps[0]["schema"] is not None else "n/a", cnt("No external citations"),
+                     sum(1 for p in ps if p["flagged_n"]), none("testimonials"), none("before_after"), none("rating")])
+    table("What pages lack, by page type (n/a = not on this site)", head, rows)
     fl = Counter(f for l in links for f in l["flags"])
     table("External links by flag", ["Flag", "Links"], [(f, fl[f]) for f in FLAGGED + ["Check manually"] if fl[f]] or [("No flags", 0)])
-    for i, w in enumerate((46, 18, 18, 70, 70), 1):
+    for i, w in enumerate([46, 10, 12, 12, 14, 14, 10, 14, 12, 14, 14, 12], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     # ---- Page Review
-    head = ["URL", "Page type", "YMYL tier", "Author shown", "Reviewer shown", "Credentials found", "Years of experience", "Published",
-            "Last updated", "Schema types", "External citations", "Authoritative citations", "Authoritative share", "Flagged external links",
-            "Testimonials or reviews", "Before/after photos", "Rating shown on page", "Specific claims found", "Checks failed", "Priority",
-            "Failed checks"]
+    head = ["URL", "Page type", "Author shown", "Reviewer shown", "Credentials found", "Years of experience", "Published", "Last updated",
+            "Schema types", "External citations", "Flagged external links", "Testimonials or reviews", "Before/after photos",
+            "Rating shown on page", "Specific claims found", "What the page lacks"]
     rows = []
     for k in order:
         p = pages[k]
-        share = f"{p['auth'] / p['cites']:.0%}" if p["cites"] else "No citations"
-        sc = claims[k]["specific_claims"] if k in claims else ("Not read" if p["tier"] == "High" else "n/a")
-        rows.append([p["url"], p["ptype"], p["tier"], yn(p["author"]), yn(p["reviewer"]), ", ".join(p["creds"]) or "None",
-                     ", ".join(p["exp"]) or "None", na(p["published"]) if p["published"] is None else (p["published"] or "None"),
-                     na(p["updated"]) if p["updated"] is None else (p["updated"] or "None"),
-                     na(p["schema"]) if p["schema"] is None else (p["schema"] or "None"), p["cites"], p["auth"], share, p["flagged_n"],
-                     yn(p["testimonials"]) if p["testimonials"] is not None else "Not set up",
-                     yn(p["before_after"]) if p["before_after"] is not None else "Not set up",
-                     (p["rating"] if present(p["rating"]) else "No") if p["rating"] is not None else "Not set up", sc,
-                     len(p["fails"]) if p["tier"] != "Low" else "Not scored", p["priority"],
-                     "; ".join(p["fails"]) if p["tier"] != "Low" else ""])
-    write_sheet(wb, "Page Review", head, rows, [44, 14, 10, 10, 10, 22, 14, 12, 12, 22, 10, 12, 12, 10, 12, 12, 14, 12, 9, 11, 50],
-                name="PageReview", fills={20: FILLS})
+        rows.append([p["url"], p["ptype"], yn(p["author"]), yn(p["reviewer"]), ", ".join(p["creds"]) or "None", ", ".join(p["exp"]) or "None",
+                     na(p["published"]), na(p["updated"]), na(p["schema"]), p["cites"], p["flagged_n"], marker(p["testimonials"]),
+                     marker(p["before_after"]), rating(p), claims[k]["specific_claims"] if k in claims else "Not read", "; ".join(p["lacks"])])
+    write_sheet(wb, "Page Review", head, rows, [44, 14, 10, 10, 22, 16, 12, 12, 22, 10, 10, 12, 12, 14, 12, 50], name="PageReview")
 
     # ---- External Links
-    head = ["Source page", "Anchor text", "Destination URL", "Destination status", "Destination title", "Destination H1", "Domain type",
+    head = ["Source page", "Anchor text", "Destination URL", "Destination status", "Destination title", "Destination H1",
             "Anchor vs destination", "Flag", "Reviewer note"]
-    rows = [[l["src"], l["anchor"], l["dest"], l["status"] or "No response", l["title"], l["h1"], l["dtype"], l["match"], "; ".join(l["flags"]), None]
+    rows = [[l["src"], l["anchor"], l["dest"], l["status"] or "No response", l["title"], l["h1"], l["match"], "; ".join(l["flags"]), None]
             for l in links]
-    write_sheet(wb, "External Links", head, rows, [40, 28, 46, 12, 34, 28, 14, 14, 28, 30], yellow=(10,), name="ExternalLinks")
+    write_sheet(wb, "External Links", head, rows, [40, 28, 46, 12, 34, 28, 14, 28, 30], yellow=(9,), name="ExternalLinks")
 
     # ---- Accuracy Review Queue
-    head = ["URL", "Page type", "Why it is in the queue", "External citations", "Specific claims found", "Claims to verify",
-            "Cited sources", "Reviewer", "Result", "Notes"]
+    head = ["URL", "Page type", "What the page lacks", "External citations", "Specific claims found", "Claims to verify", "Cited sources",
+            "Reviewer", "Result", "Notes"]
     rows = []
     for p in queue:
         cl = claims.get(p["key"])
-        rows.append([p["url"], p["ptype"], why(p), p["cites"], cl["specific_claims"] if cl else "Not read",
+        rows.append([p["url"], p["ptype"], "; ".join(p["lacks"]), p["cites"], cl["specific_claims"] if cl else "Not read",
                      cl["claims_to_verify"] if cl else "", "\n".join(l["dest"] for l in p["links"]), None, None, None])
-    write_sheet(wb, "Accuracy Review Queue", head, rows, [44, 14, 44, 10, 12, 60, 50, 14, 16, 30], yellow=(8, 9, 10), name="AccuracyQueue")
+    write_sheet(wb, "Accuracy Review Queue", head, rows, [44, 14, 40, 10, 12, 60, 50, 14, 16, 30], yellow=(8, 9, 10), name="AccuracyQueue")
 
-    # ---- Chrome Page Check (only when the person ran it)
-    if chrome:
-        head = ["Page type", "URL", "What the crawl detected", "What a visitor sees", "Agrees with the crawl", "Other opportunities"]
-        rows = []
-        for cr in chrome:
-            p = pages[norm_url(cr["url"])]
-            seen = (f"Author: {yn(p['author'])}; reviewer: {yn(p['reviewer'])}; credentials: {', '.join(p['creds']) or 'None'}; "
-                    f"testimonials: {yn(p['testimonials'])}; before/after: {yn(p['before_after'])}; rating: "
-                    f"{(p['rating'] if present(p['rating']) else 'No') if p['rating'] is not None else 'Not set up'}")
-            rows.append([p["ptype"], p["url"], seen, cr["visitor_sees"], cr["agrees"], cr["opportunities"]])
-        write_sheet(wb, "Chrome Page Check", head, rows, [14, 44, 50, 60, 14, 60], name="ChromePageCheck")
+    # ---- Chrome Page Check
+    head = ["Page type", "URL", "What the crawl detected", "What a visitor sees", "Agrees with the crawl", "Other opportunities"]
+    rows = []
+    for cr in chrome:
+        p = pages[norm_url(cr["url"])]
+        rows.append([p["ptype"], p["url"], crawl_detected(p), cr["visitor_sees"], cr["agrees"], cr["opportunities"]])
+    write_sheet(wb, "Chrome Page Check", head, rows, [14, 44, 50, 60, 14, 60], name="ChromePageCheck")
 
-    out = args.out
-    wb.save(out)
-    qa(out, pages, order, links, queue, scored, args)
-    print(f"Saved {out}")
+    wb.save(args.out)
+    qa(args.out, pages, order, links, queue, chrome, types)
+    print(f"Saved {args.out}")
 
 
-def qa(path, pages, order, links, queue, scored, args):
+def qa(path, pages, order, links, queue, chrome, types):
     wb = load_workbook(path)
     ok = True
 
@@ -723,12 +622,12 @@ def qa(path, pages, order, links, queue, scored, args):
     check("every audited page appears once in Page Review", [r[0] for r in pr] == [pages[k]["url"] for k in order] and len({r[0] for r in pr}) == len(pr))
     el = list(wb["External Links"].iter_rows(min_row=2, values_only=True))
     check("External Links has one row per source page and destination", len(el) == len(links) == len({(l["pkey"], norm_url(l["dest"])) for l in links}))
-    check("page citation counts add up to the External Links rows", sum(r[10] for r in pr) == len(el))
-    check("Low-YMYL pages are not scored", all(r[18] == "Not scored" and r[19] == "Not scored" for r in pr if r[2] == "Low"))
-    check("every scored page has a priority", all(r[19] in ("High", "Medium", "Low") for r in pr if r[2] != "Low"))
+    check("page citation counts add up to the External Links rows", sum(r[9] for r in pr) == len(el))
+    check("flagged counts match the External Links flags", sum(r[10] for r in pr) == sum(1 for r in el if any(f in (r[7] or "") for f in FLAGGED)))
     aq = list(wb["Accuracy Review Queue"].iter_rows(min_row=2, values_only=True))
-    check("every queued page is a High-YMYL audited page", all(pages[norm_url(r[0])]["tier"] == "High" for r in aq))
-    check("flagged counts match the External Links flags", sum(r[13] for r in pr) == sum(1 for r in el if any(f in (r[8] or "") for f in FLAGGED)))
+    check("the accuracy queue has one row per queued page", [r[0] for r in aq] == [p["url"] for p in queue])
+    cc = list(wb["Chrome Page Check"].iter_rows(min_row=2, values_only=True))
+    check("every page type has a Claude in Chrome check", set(types) <= {r[0] for r in cc})
     if not ok:
         sys.exit("QA failed")
 
@@ -736,21 +635,23 @@ def qa(path, pages, order, links, queue, scored, args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("preflight", "reps", "queue", "build"):
+    for name in ("preflight", "queue", "build"):
         s = sub.add_parser(name)
+        if name == "preflight":
+            s.add_argument("--chrome")
         s.add_argument("--config", required=True)
         s.add_argument("--crawl", required=True)
         s.add_argument("--outlinks", required=True)
         s.add_argument("--external")
-        if name in ("preflight", "queue", "build"):
-            s.add_argument("--out", required=True)
+        s.add_argument("--out", required=True)
         if name in ("queue", "build"):
-            s.add_argument("--scope", choices=["failed", "all-high"], default="failed")
+            s.add_argument("--types")
+            s.add_argument("--max", type=int)
         if name == "build":
             s.add_argument("--claims")
-            s.add_argument("--chrome")
+            s.add_argument("--chrome", required=True)
     args = ap.parse_args()
-    {"preflight": cmd_preflight, "reps": cmd_reps, "queue": cmd_queue, "build": cmd_build}[args.cmd](args)
+    {"preflight": cmd_preflight, "queue": cmd_queue, "build": cmd_build}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -10,9 +10,8 @@ Every rule in the skill is hit at least once:
   /services/weight-loss-program a destination that blocks the crawler (403)
   /blog/10-foods-...            affiliate link, no author
   /blog/is-intermittent-...     only citation is dead, no author, no dates
-  /providers/dr-alex-sample     no external citations
-  /about/ /contact/             Low-YMYL type: not scored
-  /tag/wellness/                matches no page type; /old-page/ is a 404 (left out)
+  /providers/ /about/ /contact/ /tag/   match none of the three page types (left out, listed in the preflight warnings)
+  /old-page/                    404 (left out)
 Footer links to social sites are in the outlinks export and must be ignored (link position Footer).
 """
 import csv
@@ -104,15 +103,10 @@ CONFIG = {
                 "reviewer": "Reviewer 1", "published": "Published 1", "updated": "Updated 1", "schema": "Schema 1",
                 "testimonials": "Testimonials 1", "before_after": "Before After 1", "rating": "Rating 1"},
     "page_types": [
-        {"name": "Condition", "paths": ["/conditions/"], "tier": "High"},
-        {"name": "Service", "paths": ["/services/"], "tier": "High"},
-        {"name": "Blog", "paths": ["/blog/"], "tier": "High"},
-        {"name": "Provider", "paths": ["/providers/"], "tier": "Medium"},
-        {"name": "Company", "paths": ["/about", "/contact"], "tier": "Low"},
+        {"name": "Condition", "paths": ["/conditions/"]},
+        {"name": "Service", "paths": ["/services/"]},
+        {"name": "Blog", "paths": ["/blog/"]},
     ],
-    "credential_terms": ["MD", "DDS", "NP", "RN", "PhD", "FAAD", "board-certified", "board certified"],
-    "authoritative": {"tlds": [], "domains": ["health-agency.example", "diabetes-assoc.example", "journal-medicine.example", "nutrition-univ.example"]},
-    "weak_domains": ["forum.example"],
     "content_link_positions": ["Content"],
 }
 
@@ -120,6 +114,7 @@ CLAIMS = [  # url path, specific claims?, claims to verify (all fake)
     ("/conditions/type-2-diabetes/", "Yes", '"You can reverse diabetes naturally in 30 days" | "Metformin is a common first treatment"'),
     ("/conditions/hypertension/", "Yes", '"Normal blood pressure is 120/80" | "Lowering sodium helps most people"'),
     ("/conditions/migraine/", "Yes", '"Coffee always triggers migraines" | "Magnesium cures migraines" | "New drugs prevent attacks"'),
+    ("/services/botox/", "Yes", '"The treatment is labeled by the regulator for this use"'),
     ("/services/hormone-therapy/", "Yes", '"Hormone therapy is risk free" | "Safe for every woman over 40"'),
     ("/services/weight-loss-program/", "Yes", '"Lose 20 pounds in 30 days" | "Clinically proven"'),
     ("/blog/10-foods-that-lower-cholesterol/", "Yes", '"These foods lower LDL by 40 percent"'),
