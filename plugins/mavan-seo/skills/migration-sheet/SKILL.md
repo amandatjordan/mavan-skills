@@ -21,7 +21,7 @@ This skill merges the audits' decisions into **one workbook**: the single source
 1. Old-site crawl exports, with the XML sitemap added as a crawl source: URL export, internal links export, redirects export (optional). Sitebulb or Screaming Frog. See `references/inputs.md`.
 2. The **Content Prune & Merge** workbook, the SEO's working copy (it still has Kept pages and Check page type). Run first.
 3. The **IA audit** workbook, the SEO's working copy (it still has README and Check page type). Run second, using the prune workbook.
-4. The **Service Gap** workbook, only when the practice offers med spa or surgical services (whatever its main practice type).
+4. The **Service Gap** workbook, only when the practice offers med spa, surgical or dental services (whatever its main practice type).
 5. A backlink export (Ahrefs or Semrush backlinks). It is also where media files with backlinks come from.
 6. The Search Console sheet (tab "Claude Use This", Page and Impressions columns).
 
