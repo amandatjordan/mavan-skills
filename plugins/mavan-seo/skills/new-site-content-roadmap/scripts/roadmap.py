@@ -3,7 +3,7 @@
 research workbook, the new-site keyword gap workbook(s) and the bundled blog taxonomy.
 
   roadmap.py preflight --research R.xlsx --gap G.xlsx [G2.xlsx ...] [--extras "Name|Type; Name|Type"] --out work
-  roadmap.py match     --research R.xlsx --gap G.xlsx [G2.xlsx ...] --out work
+  roadmap.py match     --research R.xlsx --gap G.xlsx [G2.xlsx ...] [--service-taxonomy T.xlsx] --out work
   roadmap.py build     --research R.xlsx --gap G.xlsx [G2.xlsx ...] --match work/gap_match.tsv [--extras "..."] [--client "Name"] --out NAME.xlsx
 
 Every count, join, rank and cut is done here. Nothing is typed or estimated by hand. Volumes are never added together.
@@ -23,6 +23,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_BLOG = SKILL_DIR / 'references' / 'blog-taxonomy.xlsx'
+DEFAULT_TAX = SKILL_DIR / 'references' / 'service-taxonomy.xlsx'
 
 # --- Rules (explained in references/rules.md) --------------------------------------------------
 MAX_PAGES = 50                                   # Home, About Us, extra pages, pages and blogs all count
@@ -55,7 +56,8 @@ VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitor
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
                  'Parent page', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from', ANCHOR_SRC, LINKS_SRC, 'Why']
-MATCH_COLS = ['gap_service', 'offered', 'gap_keywords', 'local_gap_keywords', 'page', 'level', 'status', 'candidates']
+MATCH_COLS = ['gap_service', 'offered', 'gap_keywords', 'local_gap_keywords', 'page', 'level', 'status', 'candidates', 'taxonomy_name']
+TAX_DEPTH = {'Service': 1, 'Sub-Service': 2, 'Brand / Device': 3}
 GAP_LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
 
 
@@ -203,12 +205,65 @@ def cmd_preflight(a):
 
 
 # --- match gap services to research pages ------------------------------------------------------
+def fold(text):
+    return ''.join(c for c in unicodedata.normalize('NFKD', str(text)) if not unicodedata.combining(c))
+
+
+def read_service_taxonomy(path):
+    """The service taxonomy's nodes, each with the label the research Pages tab and the blog taxonomy use for it:
+    Service = its name, Sub-Service = "Service > Sub-Service", Brand / Device = "Service > Brand", Concern = its name."""
+    path = Path(path)
+    if not path.exists():
+        sys.exit(f'Service taxonomy not found: {path}')
+    tax = pd.read_excel(path, sheet_name='Taxonomy')
+    need = {'Level', 'Service', 'Sub-Service', 'Brand / Device', 'Concern', 'Match Terms (regex)'}
+    if need - set(tax.columns):
+        sys.exit(f'The service taxonomy Taxonomy tab is missing columns: {sorted(need - set(tax.columns))}')
+    nodes = []
+    for _, r in tax.iterrows():
+        level, svc = s(r['Level']), s(r['Service'])
+        brand = re.sub(r'\s*\(family\)', '', s(r['Brand / Device'])).strip()
+        label, name = {'Service': (svc, svc), 'Sub-Service': (f"{svc} > {s(r['Sub-Service'])}", s(r['Sub-Service'])),
+                       'Brand / Device': (f'{svc} > {brand}', brand), 'Concern': (s(r['Concern']), s(r['Concern']))}.get(level, ('', ''))
+        if label:
+            nodes.append({'label': label, 'level': level, 'name': name, 'pattern': s(r['Match Terms (regex)'])})
+    return nodes
+
+
+def taxonomy_hits(nodes, text):
+    """(hits, basis) for the taxonomy nodes a typed gap service name stands for. basis is 'name' when it is a node's exact name (any level),
+    else 'pattern' for the nodes' Match Terms. Services, Sub-Services and Brands / Devices are tried before Concerns; of several pattern
+    hits only the most specific level is kept."""
+    t, raw = norm(text), fold(text).lower()
+    exact = [n for n in nodes if norm(n['name']) == t]
+    if exact:
+        return exact, 'name'
+    for concern in (False, True):
+        pool = [n for n in nodes if (n['level'] == 'Concern') == concern]
+        hits = []
+        for n in pool:
+            if n['pattern']:
+                try:
+                    if re.search(n['pattern'], raw, re.I) or re.search(n['pattern'], str(text).lower(), re.I):
+                        hits.append(n)
+                except re.error:
+                    continue
+        if hits and not concern:
+            deepest = max(TAX_DEPTH[n['level']] for n in hits)
+            hits = [n for n in hits if TAX_DEPTH[n['level']] == deepest]
+        if hits:
+            return hits, 'pattern'
+    return [], ''
+
+
+
 def cmd_match(a):
     pages, prob = read_research(a.research)
     gap, prob2 = read_gaps(a.gap)
     if prob or prob2:
         sys.exit('; '.join(prob + prob2))
     labels = [x for x in pages['Service / sub-service'] if s(x)]
+    nodes = read_service_taxonomy(a.service_taxonomy)
     rows = []
     for _, g in gap.iterrows():
         gt = tokens(g['Service'])
@@ -219,7 +274,15 @@ def cmd_match(a):
         rows.append({'gap_service': s(g['Service']), 'offered': s(g['offered']), 'gap_keywords': int(num(g['sig']) or 0),
                      'local_gap_keywords': int(num(g['lsig']) or 0), 'page': cand[0] if cand else '',
                      'level': '' if cand else 'Service', 'status': 'ok' if exact else ('review' if partial else 'none'),
-                     'candidates': '; '.join(cand[:5])})
+                     'candidates': '; '.join(cand[:5]), 'taxonomy_name': ''})
+        if not cand:
+            # no research page: the service may still be a taxonomy service under another name (Nose Job = Rhinoplasty)
+            hits, basis = taxonomy_hits(nodes, g['Service'])
+            if len(hits) == 1:
+                rows[-1].update(level=hits[0]['level'], status='taxonomy' if basis == 'name' else 'taxonomy?',
+                                taxonomy_name=hits[0]['label'], candidates=hits[0]['label'])
+            elif hits:
+                rows[-1].update(status='review', candidates='; '.join(h['label'] for h in hits[:5]))
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     with open(out / 'gap_match.tsv', 'w', newline='') as f:
@@ -228,7 +291,10 @@ def cmd_match(a):
         w.writerows(rows)
     print(f'Wrote {out / "gap_match.tsv"}: {len(rows)} gap services')
     for r in rows:
-        if r['status'] != 'ok':
+        if r['status'] in ('taxonomy', 'taxonomy?'):
+            how = 'calls it' if r['status'] == 'taxonomy' else 'may call it (a search-term match: check it)'
+            print(f"  {r['status'].upper():8} {r['gap_service']} (offered: {r['offered'] or 'blank'}) -> no research page; the service taxonomy {how} \"{r['taxonomy_name']}\" ({r['level']})")
+        elif r['status'] != 'ok':
             print(f"  {r['status'].upper():6} {r['gap_service']} (offered: {r['offered'] or 'blank'}) -> {r['page'] or 'no research page'}   [{r['candidates']}]")
 
 
@@ -301,6 +367,11 @@ def build_links(kept_pages, kept_blogs):
     return pd.DataFrame(rows + blogs, columns=cols), added, byname, phrases
 
 
+def gap_label(m):
+    """The name of a gap-only page: its service taxonomy name when the match file has one, else the gap workbook's own name."""
+    return s(m.get('taxonomy_name')) or m['gap_service']
+
+
 def build_candidates(pages, match, warnings):
     """One dict per page that could be written, plus section rows (not pages). A gap service the client does not offer is dropped, not listed."""
     cands, sections = [], []
@@ -326,10 +397,14 @@ def build_candidates(pages, match, warnings):
             continue
         if m['offered'].lower() != 'yes':
             continue
-        if norm(m['gap_service']) in names:
+        label = gap_label(m)
+        if norm(label) in names:
             sys.exit(f'Gap service "{m["gap_service"]}" has no page set but matches a research page name. Set its page in the match file.')
-        cands.append({'label': m['gap_service'], 'level': m['level'], 'source': 'Gap only', 'parent': '', 'keyword': '', 'volume': None,
-                      'sections': '', 'why': '', 'service': m['gap_service'], 'anchor': '', 'own_anchor': '', 'links': []})
+        if any(c['label'] == label for c in cands):
+            continue   # two gap services with the same taxonomy name are one page; attach_gap adds their numbers
+        cands.append({'label': label, 'level': m['level'], 'source': 'Gap only', 'parent': '', 'keyword': '', 'volume': None,
+                      'sections': '', 'why': '', 'service': label.split(' > ')[0], 'anchor': '', 'own_anchor': '', 'links': [],
+                      'in_taxonomy': bool(m.get('taxonomy_name'))})
     return cands, sections
 
 
@@ -342,8 +417,8 @@ def attach_gap(cands, match):
             sig[m['page']][1].append(m['gap_service'])
     for c in cands:
         if c['source'] == 'Gap only':
-            m = next(m for m in match if m['gap_service'] == c['label'])
-            c['gap'], c['gap_note'] = int(m['gap_keywords']) + int(m['local_gap_keywords']), 'from the gap workbook'
+            ms = [m for m in match if not m['page'] and m['offered'].lower() == 'yes' and gap_label(m) == c['label']]
+            c['gap'], c['gap_note'] = sum(int(m['gap_keywords']) + int(m['local_gap_keywords']) for m in ms), 'from the gap workbook'
         elif c['label'] in sig:
             c['gap'], c['gap_note'] = sig[c['label']][0], 'gap service: ' + ', '.join(sig[c['label']][1])
         elif c['level'] in ('Sub-Service', 'Brand / Device') and c['service'] in sig:
@@ -390,7 +465,10 @@ def blog_rows(kept, sections, look, rules, over, notes):
             key = None
         row = adds.get(label) if key is None else lk.get(key)
         if row is None:
-            notes.append(f'No blogs for {label}: it is not in the blog taxonomy.')
+            if node.get('source') == 'Gap only' and not node.get('in_taxonomy'):
+                notes.append(f'No blogs for {label}: no service in the service taxonomy matches it, so it is not in the blog taxonomy.')
+            else:
+                notes.append(f'No blogs for {label}: it is not in the blog taxonomy.')
             continue
         if s(row.get('Action')) == 'Exclude':
             notes.append(f'No blogs for {label}: excluded in the blog taxonomy.')
@@ -615,7 +693,9 @@ def main():
         p.add_argument('--research', required=(name != 'preflight'))
         p.add_argument('--gap', nargs='+', required=(name != 'preflight'))
         p.add_argument('--blog-taxonomy', default=str(DEFAULT_BLOG))
-        if name != 'match':
+        if name == 'match':
+            p.add_argument('--service-taxonomy', default=str(DEFAULT_TAX))
+        else:
             p.add_argument('--extras', default='')
         if name == 'build':
             p.add_argument('--match', required=True)

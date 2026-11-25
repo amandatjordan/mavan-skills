@@ -7,7 +7,7 @@ description: For a brand-new site, turn the new-site keyword research workbook, 
 
 One question for a business building a **new site**: of everything the keyword research and the competitor gap found, which pages and blog posts should we write content for first? The answer is a list of **50 pages at most**. Home, About Us, every extra page the SEO names and every blog post count toward the 50.
 
-Work only from the two workbooks, the bundled blog taxonomy and what the person types in. **Never visit a live site, and use no Composio tool, DataForSEO, Semrush, Ahrefs export or other connector.** Use no tool, dependency, fallback or extra step beyond those named here without asking the person and explaining why. If a step is unreliable, expensive or needs workarounds, stop and tell the person. Every count, rank and cut is done by `scripts/roadmap.py`; never type or estimate a number. What each rule means is in [references/rules.md](references/rules.md).
+Work only from the two workbooks, the bundled blog taxonomy and service taxonomy, and what the person types in. **Never visit a live site, and use no Composio tool, DataForSEO, Semrush, Ahrefs export or other connector.** Use no tool, dependency, fallback or extra step beyond those named here without asking the person and explaining why. If a step is unreliable, expensive or needs workarounds, stop and tell the person. Every count, rank and cut is done by `scripts/roadmap.py`; never type or estimate a number. What each rule means is in [references/rules.md](references/rules.md).
 
 `$SKILL` below is this skill's folder (the base directory shown when the skill loads; `${CLAUDE_SKILL_DIR}` in Claude Code). The script needs Python 3 with pandas and openpyxl. Work in a folder named after the client with a `work/` subfolder, and keep a task list with one item per step.
 
@@ -48,15 +48,16 @@ Pass `--extras` only when there are extras (`Name|Type` separated by semicolons)
 python $SKILL/scripts/roadmap.py match --research RESEARCH.xlsx --gap GAP.xlsx [GAP2.xlsx ...] --out work
 ```
 
-It writes `work/gap_match.tsv`, one row per gap service, and prints every row that is not `ok`. The gap workbook's service names are free text the SEO chose (Fillers, botox, NAD+), so each one has to be matched to a page on the research Pages tab. Read **every** row, ok ones included, and correct `page` in place so it is the **exact label** from the research Pages tab, or blank when the service is not on that tab:
+It writes `work/gap_match.tsv`, one row per gap service, and prints every row that is not `ok`. A gap service with no research page is also looked up in the bundled service taxonomy (`references/service-taxonomy.xlsx`), by its exact name and then by each node's Match Terms, because the blog taxonomy is keyed by the taxonomy's names (a gap sheet's "Nose Job" is Rhinoplasty there). A hit fills `taxonomy_name` (the name the roadmap page will use) and `level`; the printed row says `TAXONOMY` for an exact name and `TAXONOMY?` for a search-term match, which you must check. Several hits are listed as `REVIEW` with no name filled in. The gap workbook's service names are free text the SEO chose (Fillers, botox, NAD+), so each one has to be matched to a page on the research Pages tab. Read **every** row, ok ones included, and correct `page` in place so it is the **exact label** from the research Pages tab, or blank when the service is not on that tab:
 - A gap service that is one treatment or product matches the page for that treatment or product (botox -> the Botox brand page). A broad name (Fillers) matches the Service page.
 - Two gap services may point to the same page; their numbers are added.
 - With more than one gap workbook, all their services are in this one file. A service name that appears in more than one workbook is already one row, with the higher number (non-local plus local) and Offered = Yes if any of them says Yes.
-- A service with no page and `offered` = Yes becomes a page of its own: set `level` to Service, Sub-Service, Brand / Device or Concern and fix the name's capitalization. Never invent a research label.
+- A service with no page and `offered` = Yes becomes a page of its own. Its name is `taxonomy_name` when that is filled in (check the `TAXONOMY?` ones against what the service really is, and clear `taxonomy_name` and set `level` yourself if the guess is wrong); with several candidates, pick one and type its full label into `taxonomy_name`. When there is no `taxonomy_name`, set `level` to Service, Sub-Service, Brand / Device or Concern and fix the name's capitalization. Never invent a research label or a taxonomy name.
+- Two gap services with the same `taxonomy_name` are one page and their numbers are added (Remove Wrinkles and Deep Wrinkles both point to the Wrinkles / Fine Lines concern).
 - `offered` can be edited in this file when the person tells you the answer for a blank row. Say you did.
 - A service with no page and Offered No or blank is left off the roadmap and is not listed anywhere.
 
-Done when every row is either an exact research page or deliberately blank.
+Done when every row is an exact research page, a taxonomy name you have checked, or deliberately blank.
 
 ## Step 4: Build
 
@@ -79,7 +80,7 @@ Done when all five hold.
 
 ## Step 6: Report
 
-Send the workbook. Reply in a few sentences: how many rows by type, what was cut for the 50 cap (the number by group, and which Service pages if any), the extra pages, how many internal links were added so every page receives one, any warning, that the SEO must check the yellow primary keyword column (a primary keyword is only the highest-volume search for the page and may be a search from someone looking at pictures or reading about a topic, for example "face with wrinkles") and replace it or add keywords, that content must use the "Must appear on page" words (the anchor text other pages link with), that the SEO fills in the yellow priority column and makes the final call, and the volume caveat (national, taxonomy-level, relative not absolute). Do not recap the steps.
+Send the workbook. Reply in a few sentences: how many rows by type, what was cut for the 50 cap (the number by group, and which Service pages if any), the extra pages, how many internal links were added so every page receives one, any warning (include each gap service that has no service in the taxonomy and so got no blogs, and each gap service that took a taxonomy name, naming the page it became), that the SEO must check the yellow primary keyword column (a primary keyword is only the highest-volume search for the page and may be a search from someone looking at pictures or reading about a topic, for example "face with wrinkles") and replace it or add keywords, that content must use the "Must appear on page" words (the anchor text other pages link with), that the SEO fills in the yellow priority column and makes the final call, and the volume caveat (national, taxonomy-level, relative not absolute). Do not recap the steps.
 
 ## Workbook
 

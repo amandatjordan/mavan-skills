@@ -15,6 +15,7 @@ from openpyxl import Workbook, load_workbook
 SKILL = Path(__file__).resolve().parents[2] / 'plugins/mavan-seo/skills/new-site-content-roadmap'
 SCRIPT = SKILL / 'scripts/roadmap.py'
 REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
+REAL_TAX = SKILL / 'references/service-taxonomy.xlsx'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
               'Primary keyword volume (national)', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from',
@@ -74,6 +75,21 @@ def make_blog(path, nodes, excluded=(), adds=()):
     wb.save(path)
 
 
+TAX_HEAD = ['Level', 'Category', 'Service', 'Sub-Service', 'Brand / Device', 'Concern', 'Match Terms (regex)']
+
+
+def make_tax(path, nodes=()):
+    """A small service taxonomy: (level, service, sub, brand, concern, regex) rows. The default has one node no test names, so a
+    gap service only gets a taxonomy name when a test adds the node."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Taxonomy'
+    ws.append(TAX_HEAD)
+    for level, svc, sub, brand, concern, pat in (nodes or [('Service', 'Unrelated Zzz', '', '', '', 'zzzqqq')]):
+        ws.append([level, 'Cat', svc, sub or None, brand or None, concern or None, pat or None])
+    wb.save(path)
+
+
 def run(*args, check=True):
     p = subprocess.run([sys.executable, '-I', str(SCRIPT), *map(str, args)], capture_output=True, text=True)
     if check and p.returncode != 0:
@@ -86,9 +102,11 @@ class Base(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.r, self.g, self.b = self.tmp / 'r.xlsx', self.tmp / 'g.xlsx', self.tmp / 'b.xlsx'
         self.work = self.tmp / 'work'
+        self.t = self.tmp / 'tax.xlsx'
+        make_tax(self.t)
 
     def build(self, extras='', client='T', check=True):
-        run('match', '--research', self.r, '--gap', self.g, '--out', self.work)
+        run('match', '--research', self.r, '--gap', self.g, '--service-taxonomy', self.t, '--out', self.work)
         return self.build_only(extras, client, check)
 
     def build_only(self, extras='', client='T', check=True):
@@ -376,6 +394,96 @@ class Small(Base):
         self.assertIn('does not offer', p.stdout)
 
 
+class GapNamesMatchTheServiceTaxonomy(Base):
+    """A gap sheet's service names are typed by hand (Nose Job). The service taxonomy knows them as Rhinoplasty, and the blog taxonomy is keyed by
+    those names, so a gap-only page must take the taxonomy name or it gets no blogs."""
+    NODES = [('Service', 'Rhinoplasty', '', '', '', 'nose job|rhinoplasty'),
+             ('Service', 'Hair Restoration', '', '', '', 'hair restoration'),
+             ('Sub-Service', 'Hair Restoration', 'Hair Transplant', '', '', 'hair transplant'),
+             ('Brand / Device', 'Neurotoxin', '', 'Xeomin', '', 'xeomin'),
+             ('Concern', '', '', '', 'Wrinkles / Fine Lines', 'wrinkle'),
+             ('Concern', '', '', '', 'Diastasis Recti', 'diastasis'),
+             ('Service', 'Tummy Tuck', '', '', '', 'tummy tuck|diastasis'),
+             ('Service', 'Laser Hair Removal', '', '', '', 'laser'), ('Service', 'Laser Resurfacing', '', '', '', 'laser')]
+
+    def setUp(self):
+        super().setUp()
+        make_tax(self.t, self.NODES)
+        make_research(self.r, [page('Service', 'Filler', vol=1300)])
+        make_blog(self.b, [('Service', 'Filler', ''), ('Service', 'Rhinoplasty', ''), ('Sub-Service', 'Hair Restoration', 'Hair Transplant')])
+
+    def gap(self, *names):
+        make_gap(self.g, [[n, 'Yes', 3, 1] for n in names])
+
+    def row(self, name):
+        return next(r for r in self.match_rows() if r['gap_service'] == name)
+
+    def test_exact_name_and_pattern_hits_are_suggested_with_the_taxonomy_name_and_level(self):
+        self.gap('Rhinoplasty', 'Nose Job', 'Hair Transplant', 'Xeomin')
+        p = run('match', '--research', self.r, '--gap', self.g, '--service-taxonomy', self.t, '--out', self.work)
+        r = self.row('Rhinoplasty')
+        self.assertEqual((r['status'], r['taxonomy_name'], r['level']), ('taxonomy', 'Rhinoplasty', 'Service'))
+        r = self.row('Nose Job')   # found by the node's Match Terms, so the person is told to check it
+        self.assertEqual((r['status'], r['taxonomy_name'], r['level']), ('taxonomy?', 'Rhinoplasty', 'Service'))
+        self.assertEqual((self.row('Hair Transplant')['taxonomy_name'], self.row('Hair Transplant')['level']), ('Hair Restoration > Hair Transplant', 'Sub-Service'))
+        self.assertEqual((self.row('Xeomin')['taxonomy_name'], self.row('Xeomin')['level']), ('Neurotoxin > Xeomin', 'Brand / Device'))
+        self.assertIn('Nose Job', p.stdout)
+        self.assertIn('check it', p.stdout)
+
+    def test_an_exact_concern_name_beats_a_pattern_hit_on_a_service(self):
+        self.gap('Diastasis Recti')
+        run('match', '--research', self.r, '--gap', self.g, '--service-taxonomy', self.t, '--out', self.work)
+        r = self.row('Diastasis Recti')
+        self.assertEqual((r['taxonomy_name'], r['level']), ('Diastasis Recti', 'Concern'))
+
+    def test_several_pattern_hits_are_left_for_the_person_to_choose(self):
+        self.gap('Laser')
+        run('match', '--research', self.r, '--gap', self.g, '--service-taxonomy', self.t, '--out', self.work)
+        r = self.row('Laser')
+        self.assertEqual((r['status'], r['taxonomy_name']), ('review', ''))
+        self.assertIn('Laser Hair Removal', r['candidates'])
+        self.assertIn('Laser Resurfacing', r['candidates'])
+
+    def test_a_research_page_wins_over_the_taxonomy(self):
+        self.gap('Filler')
+        make_tax(self.t, self.NODES + [('Service', 'Filler', '', '', '', 'filler')])
+        run('match', '--research', self.r, '--gap', self.g, '--service-taxonomy', self.t, '--out', self.work)
+        r = self.row('Filler')
+        self.assertEqual((r['page'], r['taxonomy_name']), ('Filler', ''))
+
+    def test_gap_only_page_takes_the_taxonomy_name_and_gets_its_blogs(self):
+        self.gap('Nose Job', 'Hair Transplant')
+        self.build()
+        pages = list(self.road['Page'])
+        self.assertIn('Rhinoplasty', pages)
+        self.assertIn('Hair Restoration > Hair Transplant', pages)
+        self.assertNotIn('Nose Job', pages)
+        blogs = [x for x in pages if x.startswith('Blog')]
+        self.assertTrue(any('Rhinoplasty' in b for b in blogs) and any('Hair Transplant' in b for b in blogs))
+
+    def test_two_gap_services_with_one_taxonomy_name_are_one_page_and_their_numbers_add(self):
+        self.gap('Nose Job', 'Rhinoplasty')
+        self.build()
+        rows = self.road[self.road['Page'] == 'Rhinoplasty']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(str(rows.iloc[0]['Competitor gap keywords (2+ in top 10 or 1+ in top 3)']).split(' ')[0], '8')
+
+    def test_a_gap_service_with_no_taxonomy_match_keeps_its_name_and_the_warning_says_why(self):
+        self.gap('Endermologie')
+        p = self.build()
+        self.assertIn('Endermologie', list(self.road['Page']))
+        self.assertIn('No blogs for Endermologie: no service in the service taxonomy matches it', p.stdout)
+
+    def test_a_match_file_without_the_taxonomy_column_still_builds(self):
+        self.gap('Endermologie')
+        self.build()
+        rows = self.match_rows()
+        for r in rows:
+            r.pop('taxonomy_name')
+        self.save_match(rows)
+        self.assertEqual(self.build_only(check=False).returncode, 0)
+
+
 class Cap(Base):
     def setUp(self):
         super().setUp()
@@ -463,7 +571,7 @@ class MultipleGaps(Base):
         make_blog(self.b, [('Service', 'Filler', ''), ('Service', 'Facials', '')])
 
     def go(self, check=True):
-        run('match', '--research', self.r, '--gap', self.g, self.g2, '--out', self.work)
+        run('match', '--research', self.r, '--gap', self.g, self.g2, '--service-taxonomy', self.t, '--out', self.work)
         self.out = self.tmp / 'out.xlsx'
         p = run('build', '--research', self.r, '--gap', self.g, self.g2, '--match', self.work / 'gap_match.tsv', '--blog-taxonomy', self.b,
                 '--client', 'T', '--out', self.out, check=check)
@@ -535,6 +643,32 @@ class MultipleGaps(Base):
 
 
 class RealBlogTaxonomy(unittest.TestCase):
+    def test_this_skill_bundles_the_same_service_taxonomy_as_the_other_skills(self):
+        for other in ('new-site-keyword-research', 'service-gap-audit'):
+            self.assertEqual((SKILL.parent / other / 'references/service-taxonomy.xlsx').read_bytes(), REAL_TAX.read_bytes(),
+                             f'service-taxonomy.xlsx differs between new-site-content-roadmap and {other}: copy the updated file to all three skills')
+
+    def test_blog_taxonomy_has_a_row_for_every_service_and_sub_service_in_the_service_taxonomy(self):
+        tax = pd.read_excel(REAL_TAX, 'Taxonomy').fillna('')
+        want = {f"{r.Level}|{r.Service}|{r['Sub-Service']}|" for _, r in tax.iterrows() if r.Level in ('Service', 'Sub-Service')}
+        have = set(pd.read_excel(REAL_BLOG, 'Lookup')['Key'])
+        self.assertEqual(sorted(want - have), [], 'in the service taxonomy but not in the blog taxonomy Lookup: add the same rows to Lookup')
+        self.assertEqual(sorted(have - want), [], 'in the blog taxonomy Lookup but not in the service taxonomy')
+
+    def test_real_taxonomy_names_a_gap_services_the_way_the_blog_taxonomy_does(self):
+        tmp = Path(tempfile.mkdtemp())
+        make_research(tmp / 'r.xlsx', [page('Service', 'Microneedling')])
+        make_gap(tmp / 'g.xlsx', [[n, 'Yes', 1, 0] for n in ('Nose Job', 'Blepharoplasty', 'Hair Transplant', 'Diep Flap')])
+        run('match', '--research', tmp / 'r.xlsx', '--gap', tmp / 'g.xlsx', '--out', tmp / 'w')
+        with open(tmp / 'w/gap_match.tsv', newline='') as f:
+            got = {r['gap_service']: r['taxonomy_name'] for r in csv.DictReader(f, delimiter='\t')}
+        look = set(pd.read_excel(REAL_BLOG, 'Lookup')['Key'])
+        self.assertEqual(got, {'Nose Job': 'Rhinoplasty', 'Blepharoplasty': 'Blepharoplasty (Eyelid Surgery)', 'Hair Transplant': 'Hair Restoration > Hair Transplant',
+                               'Diep Flap': 'Breast Reconstruction > DIEP Flap Reconstruction'})
+        for name in got.values():
+            parts = name.split(' > ')
+            self.assertIn(f'Service|{parts[0]}||' if len(parts) == 1 else f'Sub-Service|{parts[0]}|{parts[1]}|', look)
+
     def test_bundled_taxonomy_shape(self):
         look = pd.read_excel(REAL_BLOG, 'Lookup').fillna('')
         self.assertTrue({'Key', 'Level', 'Service', 'Sub-Service', 'Action', 'Blog 1 angle', 'Blog 2 angle'} <= set(look.columns))
