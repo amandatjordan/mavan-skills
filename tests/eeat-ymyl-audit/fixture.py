@@ -108,6 +108,8 @@ CONFIG = {
         {"name": "Blog", "paths": ["/blog/"]},
     ],
     "content_link_positions": ["Content"],
+    "credible_domains": ["health-agency.example", "diabetes-assoc.example", "nutrition-univ.example", "journal-medicine.example",
+                         "blocked-journal.example"],
 }
 
 CLAIMS = [  # url path, specific claims?, claims to verify (all fake)
@@ -125,10 +127,14 @@ CHROME = [  # url path, what a visitor sees, agrees, other opportunities (all fa
     ("/conditions/type-2-diabetes/", "Author and reviewer names are in a small grey line under the title. No disclaimer that the page is not medical advice. Related-conditions links sit at the bottom.",
      "Yes", "Move the reviewer line above the first paragraph. Add a short not-medical-advice note and a booking button near the top."),
     ("/services/botox/", "Four before and after photos are real patient results with a consent note. The star rating is a widget that loads after the page. The booking button is below three screens of text.",
-     "Partly", "The crawl found the rating from the page code, but visitors only see it after a delay. Add a booking button higher up and caption each photo with the treatment and time since."),
+     "Yes", "The crawl found the rating from the page code, but visitors only see it after a delay. Add a booking button higher up and caption each photo with the treatment and time since."),
     ("/blog/10-foods-that-lower-cholesterol/", "No author, date or reviewer is visible. The superfood link opens a shop with a discount code. Wording is generic and repeats the same sentence structure in each section.",
      "Yes", "Add an author box, a reviewed-by line and a date. Replace the shop link with a primary source. Rewrite the generic sections in the practice's voice."),
 ]
+
+
+CHECKS = [("Author 1", ["Blog"]), ("Reviewer 1", ["Blog"]), ("Updated 1", ["Blog"]), ("Testimonials 1", ["Condition", "Blog"]),
+          ("Before After 1", ["Condition", "Blog"]), ("Rating 1", ["Condition", "Blog"])]
 
 
 def write_csv(path, header, rows):
@@ -164,4 +170,10 @@ def make(d):
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["url", "visitor_sees", "agrees", "opportunities"])
         w.writerows([(SITE + p, a, b, c) for p, a, b, c in CHROME])
-    return {k: d / k for k in ("crawl.csv", "outlinks.csv", "external.csv", "config.json", "claims.tsv", "chrome.tsv")}
+    with open(d / "checks.tsv", "w", newline="", encoding="utf-8") as fh:  # extractions empty on a whole type, checked in Chrome
+        w = csv.writer(fh, delimiter="\t")
+        w.writerow(["column", "page_type", "result", "pages_checked"])
+        for col, types in CHECKS:
+            for t in types:
+                w.writerow([col, t, "Confirmed absent", "sample page and the page the selector was tested on"])
+    return {k: d / k for k in ("crawl.csv", "outlinks.csv", "external.csv", "config.json", "claims.tsv", "chrome.tsv", "checks.tsv")}
