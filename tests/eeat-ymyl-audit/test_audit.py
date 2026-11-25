@@ -63,7 +63,7 @@ class Audit(unittest.TestCase):
     def test_preflight_shows_what_the_crawl_detected_on_chrome_pages(self):
         p = run("preflight", *self.common(), "--external", self.f["external.csv"], "--chrome", self.f["chrome.tsv"], "--out", self.d / "work5")
         self.assertIn("What the crawl detected on the pages checked in Claude in Chrome", p.stdout)
-        self.assertIn("Author: Yes; reviewer: Yes; credentials: MD, board-certified", p.stdout)
+        self.assertIn("Reviewer who is a medical professional: Yes; External link to a credible medical source: Yes", p.stdout)
 
     def test_queue_counts_per_type_and_text_files(self):
         out = self.d / "work3"
@@ -87,41 +87,39 @@ class Audit(unittest.TestCase):
                 "--chrome", self.f["chrome.tsv"], "--out", out)
         self.assertNotIn("FAIL", p.stdout)
         wb = load_workbook(out)
-        self.assertEqual(wb.sheetnames, ["Recommendations", "Page Review", "External Links", "Accuracy Review Queue", "Chrome Page Check"])
-        rows = {r[0]: r for r in wb["Page Review"].iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(wb.sheetnames, ["Recommendations", "All Pages", "External Links Needed", "External Link Issues",
+                                         "Claims Needing Verification", "Sample Page Check"])
+        head = [c.value for c in wb["All Pages"][1]]
+        rows = {r[0]: dict(zip(head, r)) for r in wb["All Pages"].iter_rows(min_row=2, values_only=True)}
         self.assertEqual(len(rows), 8)  # providers, about, contact, tag page and the 404 are left out
-        mig = rows[SITE + "/conditions/migraine/"]
-        self.assertEqual(mig[2], "No")           # author
-        self.assertEqual(mig[9], 2)              # citations
-        self.assertEqual(mig[10], 0)             # no flagged links: forum is not flagged any more
-        self.assertIn("No schema", mig[15])
-        self.assertEqual(rows[SITE + "/services/botox/"][5], "12 years of experience")
-        self.assertEqual(rows[SITE + "/services/botox/"][14], "Yes")
-        links = list(wb["External Links"].iter_rows(min_row=2, values_only=True))
-        self.assertEqual(len(links), len(fixture.LINKS))
-        flags = {r[2]: r[8] for r in links}
-        self.assertIn("Dead link", flags["https://health-agency.example/high-blood-pressure"])
-        self.assertIn("No shared words", flags["https://best-supplements.example/blood-sugar-support"])
-        self.assertIn("Check manually", flags["https://blocked-journal.example/paper"])
-        self.assertNotIn("Dead link", flags["https://blocked-journal.example/paper"])
-        self.assertFalse(flags["https://health-agency.example/"])  # a homepage link or redirect is not flagged
-        match = {r[2]: r[7] for r in links}
-        self.assertEqual({r[2]: r[6] for r in links}["https://diabetes-assoc.example/standards-of-care"], "Title and H1")
-        self.assertEqual(match["https://health-agency.example/"], "Generic anchor")
-        self.assertEqual(match["https://diabetes-assoc.example/standards-of-care"], "Partial")
-        queue = list(wb["Accuracy Review Queue"].iter_rows(min_row=2, values_only=True))
-        self.assertEqual(len(queue), 8)
-        self.assertEqual(sum(1 for r in queue if r[4] == "Not read"), 0)
-        chrome = list(wb["Chrome Page Check"].iter_rows(min_row=2, values_only=True))
+        blog = rows[SITE + "/blog/is-intermittent-fasting-safe/"]
+        self.assertEqual(blog["External link to a credible medical source"], "Missing")
+        self.assertEqual(rows[SITE + "/conditions/migraine/"]["Author shown"], "Not required")  # authors are for blogs only
+        self.assertEqual(rows[SITE + "/conditions/migraine/"]["Published date shown"], "Not required")
+        self.assertEqual(rows[SITE + "/services/botox/"]["Years of experience"], "12 years of experience")
+        self.assertEqual(rows[SITE + "/services/botox/"]["Before/after photos"], "Yes")
+        needed = [r[0] for r in wb["External Links Needed"].iter_rows(min_row=2, values_only=True)]
+        self.assertEqual(needed, [SITE + "/blog/is-intermittent-fasting-safe/"])
+        self.assertEqual(wb["External Links Needed"].cell(2, 8).value, "Dev")
+        issues = {r[2]: r for r in wb["External Link Issues"].iter_rows(min_row=2, values_only=True)}
+        self.assertIn("Dead link", issues["https://health-agency.example/high-blood-pressure"][4])
+        self.assertIn("No shared words", issues["https://best-supplements.example/blood-sugar-support"][4])
+        self.assertIn("Check manually", issues["https://blocked-journal.example/paper"][4])
+        self.assertNotIn("https://health-agency.example/", issues)  # a homepage link with a generic anchor is not an issue
+        claims = list(wb["Claims Needing Verification"].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(len(claims), sum(len(c[2].split("|")) for c in fixture.CLAIMS))  # one row per claim
+        self.assertEqual(claims[0][7], "Content")
+        rec = [r for r in wb["Recommendations"].iter_rows(values_only=True) if r and r[0] in ("High", "Medium", "Low")]
+        self.assertTrue(any("1 of 2 blog posts have no external link" in (r[1] or "") for r in rec))
+        self.assertTrue(all(r[5] in ("Dev", "Content") for r in rec))
+        chrome = list(wb["Sample Page Check"].iter_rows(min_row=2, values_only=True))
         self.assertEqual({r[0] for r in chrome}, {"Condition", "Service", "Blog"})
-        self.assertIn("Author: Yes", chrome[0][2])
 
     def test_build_without_claims(self):
         out = self.d / "plain.xlsx"
         run("build", *self.common(), "--external", self.f["external.csv"], "--chrome", self.f["chrome.tsv"], "--out", out)
-        wb = load_workbook(out)
-        queue = list(wb["Accuracy Review Queue"].iter_rows(min_row=2, values_only=True))
-        self.assertTrue(all(r[4] == "Not read" for r in queue))
+        claims = list(load_workbook(out)["Claims Needing Verification"].iter_rows(min_row=2, values_only=True))
+        self.assertTrue(claims and all(r[2] == "Not read" for r in claims))
 
     def test_build_stops_without_chrome_check_for_every_type(self):
         import csv
@@ -132,7 +130,7 @@ class Audit(unittest.TestCase):
             csv.writer(fh, delimiter="\t").writerows(rows[:3])  # header + Condition + Service
         p = run("build", *self.common(), "--external", self.f["external.csv"], "--chrome", short, "--out", self.d / "y.xlsx", check=False)
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("Claude in Chrome check has no page for", p.stdout + p.stderr)
+        self.assertIn("sample page check has no page for", p.stdout + p.stderr)
 
     def test_build_stops_without_external_export(self):
         p = run("build", *self.common(), "--chrome", self.f["chrome.tsv"], "--out", self.d / "x.xlsx", check=False)
@@ -278,11 +276,11 @@ class PageTypeLabels(unittest.TestCase):
         p = run("build", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"], "--checks", self.f["checks.tsv"],
                 "--external", ext, "--claims", self.f["claims.tsv"], "--chrome", self.f["chrome.tsv"], "--out", out)
         self.assertNotIn("FAIL", p.stdout)
-        links = list(load_workbook(out)["External Links"].iter_rows(min_row=2, values_only=True))
-        self.assertTrue(all(r[6] == "URL" for r in links))
+        links = list(load_workbook(out)["External Link Issues"].iter_rows(min_row=2, values_only=True))
+        self.assertTrue(links and all(r[5] == "URL" for r in links))
         by = {r[2]: r for r in links}
-        self.assertIn("No shared words", by["https://best-supplements.example/blood-sugar-support"][8] or "")
-        self.assertIn("Dead link", by["https://health-agency.example/high-blood-pressure"][8])
+        self.assertIn("No shared words", by["https://best-supplements.example/blood-sugar-support"][4])
+        self.assertIn("Dead link", by["https://health-agency.example/high-blood-pressure"][4])
 
     def test_url_helpers(self):
         sys.path.insert(0, str(SCRIPT.parent))
@@ -297,11 +295,23 @@ class PageTypeLabels(unittest.TestCase):
         p = run("build", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
                 "--external", self.f["external.csv"], "--chrome", self.f["chrome.tsv"], "--out", self.d / "x.xlsx", check=False)
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("CHECK: Rating 1 is empty on all 3 Condition pages", p.stdout)
+        self.assertIn("CHECK: Testimonials 1 is empty on all 3 Condition pages", p.stdout)
         q = run("preflight", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
                 "--external", self.f["external.csv"], "--checks", self.f["checks.tsv"], "--out", self.d / "wc")
         self.assertIn("confirmed absent in Claude in Chrome", q.stdout)
         self.assertNotIn("CHECK:", q.stdout)
+
+    def test_body_markers_and_checks_only_for_required(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import audit
+        found = audit.body_found("Botox FAQs Is it safe? ★★★★★", {"body_markers": {"faq": r"\bFAQs?\b", "rating": "★"}})
+        self.assertEqual(found("faq", None), "Found in body text")
+        self.assertEqual(found("rating", ""), "Found in body text")
+        self.assertIsNone(found("before_after", None))
+        self.assertFalse(audit.required_for("before_after", "blog"))
+        self.assertTrue(audit.required_for("before_after", "service"))
+        self.assertTrue(audit.required_for("reviewer", "condition"))
+        self.assertFalse(audit.required_for("published", "service"))
 
     def test_page_type_without_paths_needs_a_source(self):
         cfg = json.loads(json.dumps(fixture.CONFIG))

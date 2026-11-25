@@ -13,7 +13,8 @@ Each rule reads one element of the page and becomes a column in the crawl export
 | Reviewer | The visible reviewer or "medically reviewed by" line |
 | Published, Updated | The visible dates (or the dates in the page's schema) |
 | Schema | The `@type` values in the page's JSON-LD |
-| Testimonials, Before After, Rating | Empty (or 0) when the page has none; anything else when it does |
+| Testimonials, Before After, Rating | Empty (or 0) when the page has none; anything else when it does. Match every form the audited templates use (review cards, a before/after slider, star icons), tested on an audited page, not only on a testimonials or gallery page |
+| FAQ | The first question of the page's FAQ section; empty when the page has none |
 
 For each rule Claude writes an XPath and a CSS selector, because Screaming Frog accepts either and Sitebulb uses CSS selectors. If an item is not on the site, Claude says "not on this site" and the person adds no rule for it.
 

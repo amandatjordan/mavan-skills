@@ -29,6 +29,7 @@ import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 URL_NAMES = ["address", "url", "page url"]
@@ -252,6 +253,25 @@ def schema_types(v):
     return ", ".join(dict.fromkeys(t for t in found if t not in SCHEMA_SKIP)) or v
 
 
+CREDIBLE_TLDS = (".gov", ".edu", ".org", ".gov.uk", ".nhs.uk", ".ac.uk", ".gc.ca")
+CREDIBLE_HOSTS = {  # medical journals, databases and reputable medical sites outside .gov / .edu / .org
+    "nejm.org", "jamanetwork.com", "thelancet.com", "bmj.com", "nature.com", "sciencedirect.com", "springer.com",
+    "link.springer.com", "wiley.com", "onlinelibrary.wiley.com", "journals.lww.com", "academic.oup.com", "cochranelibrary.com",
+    "frontiersin.org", "mdpi.com", "karger.com", "tandfonline.com", "journals.sagepub.com", "cell.com", "jaad.org",
+    "webmd.com", "medicalnewstoday.com", "healthline.com", "verywellhealth.com", "merckmanuals.com", "uptodate.com", "drugs.com",
+}
+
+
+def is_credible(url, cfg):
+    """A credible source: .gov, .edu, .org (and national equivalents), a known medical journal or reputable medical site, or a host
+    the config adds. Social, shop and booking links are not."""
+    h = host_of(url)
+    extra = {x.lower().lstrip(".") for x in cfg.get("credible_domains", [])}
+    if any(h == x or h.endswith("." + x) for x in CREDIBLE_HOSTS | extra):
+        return True
+    return h.endswith(CREDIBLE_TLDS)
+
+
 def anchor_match(anchor, dest_text):
     """Match / Partial / No match / Generic anchor / Not checked. Plain word overlap, no judgement."""
     aw = {stem(w) for w in words(anchor) if w not in STOP_WORDS | GENERIC_WORDS}
@@ -262,6 +282,120 @@ def anchor_match(anchor, dest_text):
         return "Not checked"
     hit = len(aw & dw)
     return "Match" if hit == len(aw) else ("Partial" if hit else "No match")
+
+
+ROLES = ("condition", "service", "blog")
+# Every check the audit makes. roles: page roles it applies to ("all" = every audited page). Priority, next step and handoff are
+# the defaults written to the Recommendations tab (references/rules.md).
+REQS = [
+    dict(key="reviewer", label="Reviewer who is a medical professional", roles="all", priority="High", tab="All Pages",
+         missing="No medical reviewer shown", sentence="do not show a reviewer who is a medical professional",
+         next="SEO: get the reviewing provider's name and credentials from the client. Dev: add a medically reviewed by line to the page templates.",
+         handoff="Dev"),
+    dict(key="credible_source", label="External link to a credible medical source", roles="all", priority="High", tab="External Links Needed",
+         missing="No credible external source", sentence="have no external link to a medical journal, .gov, .edu, .org or reputable medical site",
+         next="SEO: choose a source and the anchor text for each page in External Links Needed. Dev: add the links.", handoff="Dev"),
+    dict(key="credentials", label="Credentials or years of experience mentioned", roles="all", priority="Medium", tab="All Pages",
+         missing="No credentials or experience mentioned", sentence="do not mention any credentials or years of experience",
+         next="SEO: confirm the provider's credentials and years of experience. Content: add them to the page copy.", handoff="Content"),
+    dict(key="author", label="Author shown", roles=("blog",), priority="Medium", tab="All Pages",
+         missing="No author shown", sentence="do not show an author",
+         next="SEO: confirm the author with the client. Dev: add an author byline with a bio link to the blog template.", handoff="Dev"),
+    dict(key="published", label="Published date shown", roles=("blog",), priority="Low", tab="All Pages",
+         missing="No published date", sentence="do not show a published date",
+         next="Dev: show the published date on the blog template.", handoff="Dev"),
+    dict(key="condition_schema", label="MedicalCondition schema", roles=("condition",), priority="Medium", tab="All Pages",
+         missing="No MedicalCondition schema", sentence="do not use MedicalCondition schema",
+         next="SEO: confirm the schema template. Dev: add MedicalCondition schema to the concern / condition template.", handoff="Dev"),
+    dict(key="procedure_schema", label="MedicalProcedure schema", roles=("service",), priority="Medium", tab="All Pages",
+         missing="No MedicalProcedure schema", sentence="do not use MedicalProcedure schema",
+         next="SEO: confirm the schema template. Dev: add MedicalProcedure schema to the service template.", handoff="Dev"),
+    dict(key="faq_schema", label="FAQPage schema on pages with FAQs", roles="faq", priority="Low", tab="All Pages",
+         missing="FAQs without FAQPage schema", sentence="have FAQs but no FAQPage schema",
+         next="Dev: output FAQPage schema from the FAQ section on every page that has one.", handoff="Dev"),
+    dict(key="reviews", label="Reviews or testimonials", roles=("service", "condition"), priority="Medium", tab="All Pages",
+         missing="No reviews or testimonials", sentence="show no reviews or testimonials",
+         next="SEO: pick relevant reviews for each page. Content: add them to the pages.", handoff="Content"),
+    dict(key="before_after", label="Before/after photos", roles=("service",), priority="Medium", tab="All Pages",
+         missing="No before/after photos", sentence="show no before/after photos",
+         next="SEO: collect consented before/after photos for each treatment from the client. Content: add them to the pages.", handoff="Content"),
+    dict(key="rating", label="Google rating shown", roles=("service",), priority="Medium", tab="All Pages",
+         missing="No Google rating shown", sentence="do not show the Google rating",
+         next="Dev: add the Google rating to the service template.", handoff="Dev"),
+]
+REQ_BY_KEY = {r["key"]: r for r in REQS}
+
+
+BODY_MARKER_KEYS = ("faq", "testimonials", "before_after", "rating")
+
+
+def body_found(body, cfg):
+    """config body_markers: a regular expression per marker, looked for in the body text when the crawl has no marker column or
+    the column is empty. Lets a marker be added after the crawl when the element's text or code is in the body."""
+    pats = {k: v for k, v in (cfg.get("body_markers") or {}).items() if k in BODY_MARKER_KEYS and v}
+
+    def found(key, value):
+        if key not in pats or (value is not None and present(value)):
+            return value
+        return "Found in body text" if re.search(pats[key], body) else ""
+    return found
+
+
+REQ_FOR_COLUMN = {"author": "author", "reviewer": "reviewer", "published": "published", "testimonials": "reviews",
+                  "before_after": "before_after", "rating": "rating"}
+
+
+def required_for(key, role):
+    """Whether an extraction feeds a requirement of this page role. Schema and FAQ feed every role; updated date none."""
+    if key in ("schema", "faq"):
+        return True
+    req = REQ_BY_KEY.get(REQ_FOR_COLUMN.get(key, ""))
+    return bool(req) and (req["roles"] == "all" or role in req["roles"])
+
+
+def role_of(ptype, cfg):
+    for r in cfg["page_types"]:
+        if r["name"] == ptype and r.get("role") in ROLES:
+            return r["role"]
+    n = ptype.lower()
+    return "condition" if ("condition" in n or "concern" in n) else "service" if "service" in n else \
+        "blog" if any(x in n for x in ("blog", "post", "article")) else "other"
+
+
+def has_type(schema, name):
+    return bool(schema) and re.search(r"\b" + name + r"\b", schema) is not None
+
+
+def evaluate(p, role, credential_terms):
+    """Yes / Missing / Not required (or Not checked when the crawl has no column for it) for every check."""
+    out = {}
+    for r in REQS:
+        k = r["key"]
+        if r["roles"] == "faq":
+            applies = p["faq"] is not None and present(p["faq"])
+        else:
+            applies = r["roles"] == "all" or role in r["roles"]
+        if not applies:
+            out[k] = "Not required" if not (r["roles"] == "faq" and p["faq"] is None) else "Not checked"
+            continue
+        if k == "reviewer":
+            ok = p["reviewer"] is not None and present(p["reviewer"]) and bool(term_hits(p["reviewer"], credential_terms))
+        elif k == "credible_source":
+            ok = bool(p["credible"])
+        elif k == "credentials":
+            ok = bool(p["creds"] or p["exp"])
+        elif k in ("author", "published", "before_after", "rating"):
+            ok = p[k] is not None and present(p[k])
+        elif k == "reviews":
+            ok = p["testimonials"] is not None and present(p["testimonials"])
+        elif k in ("condition_schema", "procedure_schema", "faq_schema"):
+            if p["schema"] is None:
+                out[k] = "Not checked"
+                continue
+            ok = has_type(p["schema"], {"condition_schema": "MedicalCondition", "procedure_schema": "MedicalProcedure",
+                                        "faq_schema": "FAQPage"}[k])
+        out[k] = "Yes" if ok else "Missing"
+    return out
 
 
 # ------------------------------------------------------------------ analysis
@@ -292,7 +426,7 @@ def analyze(args, need_external):
     scol = resolve(crawl, c.get("status"), "status", findings) if c.get("status") else find_col(crawl, STATUS_NAMES)
     icol = resolve(crawl, c.get("indexability"), "indexability", findings) if c.get("indexability") else find_col(crawl, INDEX_NAMES)
     cols = {k: resolve(crawl, c.get(k), k, findings) for k in
-            ("body", "author", "reviewer", "published", "updated", "schema", "testimonials", "before_after", "rating")}
+            ("body", "author", "reviewer", "published", "updated", "schema", "testimonials", "before_after", "rating", "faq")}
 
     osrc, odst = find_col(outl, OL_SOURCE), find_col(outl, OL_DEST)
     oanc, opos, otype, ostat = (find_col(outl, n) for n in (OL_ANCHOR, OL_POS, OL_TYPE, OL_STATUS))
@@ -334,11 +468,13 @@ def analyze(args, need_external):
             continue
         val = lambda k: clean_text(r[cols[k]]) if cols[k] else None
         body = val("body") or ""
+        found = body_found(body, cfg)
         author, reviewer = val("author"), val("reviewer")
         cred_text = " ".join([body, author or "", reviewer or ""])
         p = dict(url=url, key=norm_url(url), ptype=ptype, body=body, words=len(body.split()),
                  author=author, reviewer=reviewer, published=val("published"), updated=val("updated"), schema=schema_types(val("schema")),
-                 testimonials=val("testimonials"), before_after=val("before_after"), rating=val("rating"),
+                 testimonials=found("testimonials", val("testimonials")), before_after=found("before_after", val("before_after")),
+                 rating=found("rating", val("rating")), faq=found("faq", val("faq")),
                  creds=term_hits(cred_text, credential_terms), exp=experience_hits(body, cfg), links=[])
         pages[p["key"]] = p
         order.append(p["key"])
@@ -389,29 +525,19 @@ def analyze(args, need_external):
         if status in BLOCKED:
             flags.append("Check manually")
         row = dict(src=pages[src]["url"], pkey=src, anchor=clean_text(r[oanc]), dest=dst, status=status, title=title, h1=h1,
-                   compared=compared, match=match, flags=flags, flagged=[f for f in flags if f in FLAGGED])
+                   compared=compared, match=match, flags=flags, flagged=[f for f in flags if f in FLAGGED],
+                   credible=is_credible(dst, cfg))
         pages[src]["links"].append(row)
         links.append(row)
 
-    # ---- what each page lacks (plain facts, no scoring)
+    # ---- requirements by page role (references/rules.md): Yes / Missing / Not required
     for k in order:
         p = pages[k]
         p["cites"] = len(p["links"])
+        p["credible"] = [l for l in p["links"] if l["credible"]]
         p["flagged_n"] = sum(1 for l in p["links"] if l["flagged"])
-        lacks = []
-        if p["author"] is not None and not present(p["author"]):
-            lacks.append("No author shown")
-        if p["reviewer"] is not None and not present(p["reviewer"]):
-            lacks.append("No medical / expert reviewer")
-        if not p["creds"]:
-            lacks.append("No credentials found")
-        if p["published"] is not None and not present(p["published"]):
-            lacks.append("No published date")
-        if p["schema"] is not None and not present(p["schema"]):
-            lacks.append("No schema")
-        if p["cites"] == 0:
-            lacks.append("No external citations")
-        p["lacks"] = lacks
+        p["checks"] = evaluate(p, role_of(p["ptype"], cfg), credential_terms)
+        p["lacks"] = [REQ_BY_KEY[key]["missing"] for key, v in p["checks"].items() if v == "Missing"]
 
     # ---- findings
     n_pages = len(order)
@@ -431,12 +557,14 @@ def analyze(args, need_external):
         # An extraction that is empty on every page of a page type is more often a wrong selector than a site that lacks
         # the element. It must be checked in Claude in Chrome (work/checks.tsv) before the queue and the workbook.
         confirmed = load_checks(getattr(args, "checks", None), findings)
-        for key in ("author", "reviewer", "published", "updated", "schema", "testimonials", "before_after", "rating"):
+        for key in ("author", "reviewer", "published", "updated", "schema", "testimonials", "before_after", "rating", "faq"):
             if not cols[key]:
                 continue
             for t in dict.fromkeys(pages[k]["ptype"] for k in order):
                 tp = [k for k in order if pages[k]["ptype"] == t]
                 if any(present(pages[k][key]) for k in tp):
+                    continue
+                if not required_for(key, role_of(t, cfg)):  # only what this page type needs is worth a check
                     continue
                 hit = confirmed.get((cols[key].lower(), t.lower())) or confirmed.get((key, t.lower()))
                 if hit:
@@ -591,15 +719,7 @@ def na(v, empty="None"):
 
 
 def yn(v):
-    return "n/a" if v is None else ("Yes" if present(v) else "No")
-
-
-def marker(v):
-    return "Not set up" if v is None else ("Yes" if present(v) else "No")
-
-
-def rating(p):
-    return "Not set up" if p["rating"] is None else (p["rating"] if present(p["rating"]) else "No")
+    return "Not on this site" if v is None else ("Yes" if present(v) else "No")
 
 
 def read_tsv(path, need):
@@ -612,14 +732,29 @@ def read_tsv(path, need):
 
 
 def crawl_detected(p):
-    return (f"Author: {yn(p['author'])}; reviewer: {yn(p['reviewer'])}; credentials: {', '.join(p['creds']) or 'None'}; "
-            f"testimonials: {marker(p['testimonials'])}; before/after: {marker(p['before_after'])}; rating: {rating(p)}")
+    return "; ".join(f"{REQ_BY_KEY[k]['label']}: {v}" for k, v in p["checks"].items() if v != "Not required") + \
+        f"; FAQ section: {yn(p['faq'])}; schema types: {na(p['schema'])}"
+
+
+def split_claims(text):
+    return [c.strip().strip('"').strip() for c in str(text or "").split("|") if c.strip().strip('"').strip()]
+
+
+def add_list(ws, col, first, last, options):
+    dv = DataValidation(type="list", formula1='"' + ",".join(options) + '"', allow_blank=True)
+    ws.add_data_validation(dv)
+    dv.add(f"{col}{first}:{col}{max(first, last)}")
+
+
+def plural(t, cfg=None):
+    role = role_of(t, cfg) if cfg else ""
+    return "blog posts" if role == "blog" else ("concern / condition pages" if role == "condition" else f"{t.lower()} pages")
 
 
 def cmd_build(args):
     res = analyze(args, need_external=True)
     stop_if_needed(res)
-    pages, order, links = res["pages"], res["order"], res["links"]
+    pages, order, links, cfg = res["pages"], res["order"], res["links"], res["cfg"]
     queue = scoped(res, args.types, args.max, args.max_per_type)
 
     claims = {}
@@ -637,109 +772,173 @@ def cmd_build(args):
         if norm_url(r["url"]) not in pages:
             sys.exit(f"STOP: chrome.tsv has a URL that is not an audited page: {r['url']}")
         if r["agrees"] not in ("Yes", "Partly", "No"):
-            sys.exit(f"STOP: chrome.tsv agrees must be Yes, Partly or No: {r['url']}")
+            sys.exit(f"STOP: chrome.tsv agrees must be Yes, Partly or No (the person's check of the sample page): {r['url']}")
+        if r["agrees"] != "Yes":
+            sys.exit(f"STOP: the person does not agree with what the crawl found on {r['url']}: fix the extraction and re-crawl first.")
     types = list(dict.fromkeys(pages[k]["ptype"] for k in order))
     checked = {pages[norm_url(r["url"])]["ptype"] for r in chrome}
     if set(types) - checked:
-        sys.exit(f"STOP: the Claude in Chrome check has no page for: {sorted(set(types) - checked)}")
+        sys.exit(f"STOP: the sample page check has no page for: {sorted(set(types) - checked)}")
+
+    claim_rows = []
+    for p in queue:
+        cl = claims.get(p["key"])
+        cited = "\n".join(l["dest"] for l in p["credible"]) or "None"
+        if not cl:
+            claim_rows.append([p["url"], p["ptype"], "Not read", cited, None, None, None, "Content"])
+        for c in split_claims(cl["claims_to_verify"]) if cl and cl["specific_claims"] == "Yes" else []:
+            claim_rows.append([p["url"], p["ptype"], c, cited, None, None, None, "Content"])
+    need_links = [pages[k] for k in order if pages[k]["checks"]["credible_source"] == "Missing"]
+    issue_links = [l for l in links if l["flags"]]
 
     wb = Workbook()
     wb.remove(wb.active)
-
-    # ---- Recommendations
-    ws = wb.create_sheet("Recommendations")
     f10, b10 = Font(name=FONT, size=10), Font(name=FONT, size=10, bold=True)
-    r = 1
-    ws.cell(r, 1, "E-E-A-T & YMYL audit").font = Font(name=FONT, size=14, bold=True)
-    r += 2
-    ws.cell(r, 1, "Preflight warnings").font = b10
-    for m in [m for l, m in res["findings"] if l == "WARN"] or ["None"]:
-        r += 1
-        ws.cell(r, 1, m).font = f10
-    r += 2
-    for lab, val in (("Pages audited", len(order)), ("External links checked", len(links)), ("Pages in the accuracy review queue", len(queue))):
-        ws.cell(r, 1, lab).font = b10
-        ws.cell(r, 2, val).font = f10
-        ws.cell(r, 2).alignment = Alignment(horizontal="left")
-        r += 1
-    r += 1
 
-    def table(title, header, rows):
+    # ---- Recommendations: the rollup of every finding, with priority, owner and handoff
+    ws = wb.create_sheet("Recommendations")
+    r = 1
+    ws.cell(r, 1, "E-E-A-T & YMYL audit: recommendations").font = Font(name=FONT, size=14, bold=True)
+    r += 1
+    ws.cell(r, 1, f"{len(order)} pages audited: " + ", ".join(f"{sum(1 for k in order if pages[k]['ptype'] == t)} {t}" for t in types)
+            + f". {len(claim_rows)} claims to verify. Work the issues top to bottom; the Where to look tab has the page list.").font = f10
+    r += 2
+
+    def header(cols):
         nonlocal r
-        ws.cell(r, 1, title).font = b10
-        r += 1
-        for i, h in enumerate(header, 1):
+        for i, h in enumerate(cols, 1):
             c = ws.cell(r, i, h)
             c.font, c.fill = Font(name=FONT, bold=True, color="FFFFFF", size=10), HDR_FILL
-            c.alignment = Alignment(wrap_text=True)
-        for row in rows:
-            r += 1
-            for i, v in enumerate(row, 1):
-                c = ws.cell(r, i, v)
-                c.font, c.alignment = f10, Alignment(wrap_text=True, vertical="top", horizontal="left")
-        r += 2
+            c.alignment = Alignment(wrap_text=True, vertical="center")
 
-    head = ["Page type", "Pages", "No author shown", "No reviewer", "No credentials found", "No published date", "No schema",
-            "No external citations", "With flagged links", "No testimonials", "No before/after photos", "No rating shown"]
-    rows = []
-    for t in types:
-        ps = [pages[k] for k in order if pages[k]["ptype"] == t]
-        cnt = lambda lack: sum(1 for p in ps if lack in p["lacks"])
-        none = lambda key: "n/a" if ps[0][key] is None else sum(1 for p in ps if not present(p[key]))
-        rows.append([t, len(ps), cnt("No author shown") if ps[0]["author"] is not None else "n/a",
-                     cnt("No medical / expert reviewer") if ps[0]["reviewer"] is not None else "n/a", cnt("No credentials found"),
-                     cnt("No published date") if ps[0]["published"] is not None else "n/a",
-                     cnt("No schema") if ps[0]["schema"] is not None else "n/a", cnt("No external citations"),
-                     sum(1 for p in ps if p["flagged_n"]), none("testimonials"), none("before_after"), none("rating")])
-    table("What pages lack, by page type (n/a = not on this site)", head, rows)
-    fl = Counter(f for l in links for f in l["flags"])
-    table("External links by flag", ["Flag", "Links"], [(f, fl[f]) for f in FLAGGED + ["Check manually"] if fl[f]] or [("No flags", 0)])
-    for i, w in enumerate([46, 10, 12, 12, 14, 14, 10, 14, 12, 14, 14, 12], 1):
+    def line(vals, yellow=()):
+        nonlocal r
+        r += 1
+        for i, v in enumerate(vals, 1):
+            c = ws.cell(r, i, v)
+            c.font, c.alignment = f10, Alignment(wrap_text=True, vertical="top", horizontal="left")
+            if i in yellow:
+                c.fill = YELLOW
+
+    issues = []
+    for q in REQS:
+        by_type = []
+        for t in types:
+            tp = [pages[k] for k in order if pages[k]["ptype"] == t]
+            app = [p for p in tp if p["checks"][q["key"]] in ("Yes", "Missing")]
+            miss = [p for p in app if p["checks"][q["key"]] == "Missing"]
+            if miss:
+                by_type.append((t, len(miss), len(app)))
+        for t, x, y in by_type:
+            what = (f"Across the board, {plural(t, cfg)} {q['sentence']} ({x} of {y})." if x == y
+                    else f"{x} of {y} {plural(t, cfg)} {q['sentence']}.")
+            issues.append(dict(priority=q["priority"], text=what, n=f"{x} of {y}", tab=q["tab"], next=q["next"], handoff=q["handoff"]))
+    if claim_rows:
+        nread = sum(1 for c in claim_rows if c[2] == "Not read")
+        issues.append(dict(priority="High", text=f"{len(claim_rows) - nread} specific medical or factual claims on {len({c[0] for c in claim_rows})} pages need verifying against a real source"
+                           + (f"; {nread} pages were not read" if nread else "") + ".",
+                           n=str(len(claim_rows) - nread), tab="Claims Needing Verification",
+                           next="SEO: verify each claim, mark it Accurate claim or Bad claim, add the source to cite and write the updated claim. Content: update the pages.",
+                           handoff="Content"))
+    dead = [l for l in issue_links if "Dead link" in l["flags"] or "No response" in l["flags"]]
+    if issue_links:
+        fl = Counter(f for l in issue_links for f in l["flags"])
+        issues.append(dict(priority="High" if dead else "Medium",
+                           text=f"{len(issue_links)} external links have an issue: " + ", ".join(f"{n} {f.lower()}" for f, n in fl.most_common()) + ".",
+                           n=str(len(issue_links)), tab="External Link Issues",
+                           next="SEO: choose Keep, Replace or Remove for each link and give the replacement URL and anchor. Dev: make the changes.",
+                           handoff="Dev"))
+    order_p = {"High": 0, "Medium": 1, "Low": 2}
+    issues.sort(key=lambda i: order_p[i["priority"]])
+    ws.cell(r, 1, "Issues found, by priority").font = b10
+    r += 1
+    cols = ["Priority", "Issue", "Pages / items", "Where to look", "Next steps (SEO / Dev / Content)", "Completion handoff", "Status"]
+    header(cols)
+    first = r + 1
+    for i in issues:
+        line([i["priority"], i["text"], i["n"], i["tab"], i["next"], i["handoff"], "Not started"], yellow=(7,))
+    if not issues:
+        line(["", "No issues found.", "", "", "", "", ""])
+    add_list(ws, "G", first, r, ["Not started", "In progress", "Done"])
+    r += 2
+
+    ws.cell(r, 1, "Manual checks for the SEO").font = b10
+    r += 1
+    header(["What to check", "Where", "Items"])
+    manual = [
+        ("Choose a credible source and the anchor text for each page with no credible external link", "External Links Needed", len(need_links)),
+        ("Decide Keep, Replace or Remove for each external link with an issue (blocked links need a look in a browser)", "External Link Issues", len(issue_links)),
+        ("Verify each claim, set the claim status, add the source to cite and the updated claim", "Claims Needing Verification", len(claim_rows)),
+        ("Confirm who reviews the content and their credentials, for the reviewer line", "Client", ""),
+    ]
+    for m in manual:
+        if m[2] != 0:
+            line(list(m))
+    r += 2
+
+    ws.cell(r, 1, "Ownership").font = b10
+    r += 1
+    header(["Owner", "Issues"])
+    for owner in ("Dev", "Content"):
+        line([owner, "\n".join(f"{i['priority']}: {i['text']}" for i in issues if i["handoff"] == owner) or "None"])
+    r += 2
+
+    warns = [m for l, m in res["findings"] if l == "WARN"] + [m for l, m in res["findings"] if l == "OK" and "confirmed absent" in m]
+    ws.cell(r, 1, "Crawl notes").font = b10
+    for m in warns or ["None"]:
+        line([m])
+    for i, w in enumerate([12, 70, 12, 24, 60, 14, 14], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    # ---- Page Review
-    head = ["URL", "Page type", "Author shown", "Reviewer shown", "Credentials found", "Years of experience", "Published", "Last updated",
-            "Schema types", "External citations", "Flagged external links", "Testimonials or reviews", "Before/after photos",
-            "Rating shown on page", "Specific claims found", "What the page lacks"]
+    # ---- All Pages: reference sheet of every check on every page
+    head = ["URL", "Page type"] + [q["label"] for q in REQS] + ["FAQ section", "Schema types", "Credentials found", "Years of experience",
+                                                                  "External links", "Credible external links", "External links with an issue"]
     rows = []
     for k in order:
         p = pages[k]
-        rows.append([p["url"], p["ptype"], yn(p["author"]), yn(p["reviewer"]), ", ".join(p["creds"]) or "None", ", ".join(p["exp"]) or "None",
-                     na(p["published"]), na(p["updated"]), na(p["schema"]), p["cites"], p["flagged_n"], marker(p["testimonials"]),
-                     marker(p["before_after"]), rating(p), claims[k]["specific_claims"] if k in claims else "Not read", "; ".join(p["lacks"])])
-    write_sheet(wb, "Page Review", head, rows, [44, 14, 10, 10, 22, 16, 12, 12, 22, 10, 10, 12, 12, 14, 12, 50], name="PageReview")
+        rows.append([p["url"], p["ptype"]] + [p["checks"][q["key"]] for q in REQS] +
+                    [yn(p["faq"]), na(p["schema"]), ", ".join(p["creds"]) or "None", ", ".join(p["exp"]) or "None",
+                     p["cites"], len(p["credible"]), p["flagged_n"]])
+    write_sheet(wb, "All Pages", head, rows, [44, 12] + [13] * len(REQS) + [10, 30, 22, 16, 10, 10, 10], name="AllPages")
 
-    # ---- External Links
-    head = ["Source page", "Anchor text", "Destination URL", "Destination status", "Destination title", "Destination H1",
-            "Anchor compared with", "Anchor vs destination", "Flag", "Reviewer note"]
-    rows = [[l["src"], l["anchor"], l["dest"], l["status"] or "No response", l["title"], l["h1"], l["compared"], l["match"], "; ".join(l["flags"]), None]
-            for l in links]
-    write_sheet(wb, "External Links", head, rows, [40, 28, 46, 12, 34, 28, 14, 14, 28, 30], yellow=(10,), name="ExternalLinks")
-
-    # ---- Accuracy Review Queue
-    head = ["URL", "Page type", "What the page lacks", "External citations", "Specific claims found", "Claims to verify", "Cited sources",
-            "Reviewer", "Result", "Notes"]
+    # ---- External Links Needed (dev handoff)
+    head = ["URL", "Page type", "External links on the page now (not credible)", "Claims on the page", "Source to link to",
+            "Anchor text on the page", "Notes", "Completion handoff"]
     rows = []
-    for p in queue:
+    for p in need_links:
         cl = claims.get(p["key"])
-        rows.append([p["url"], p["ptype"], "; ".join(p["lacks"]), p["cites"], cl["specific_claims"] if cl else "Not read",
-                     cl["claims_to_verify"] if cl else "", "\n".join(l["dest"] for l in p["links"]), None, None, None])
-    write_sheet(wb, "Accuracy Review Queue", head, rows, [44, 14, 40, 10, 12, 60, 50, 14, 16, 30], yellow=(8, 9, 10), name="AccuracyQueue")
+        rows.append([p["url"], p["ptype"], "\n".join(l["dest"] for l in p["links"]) or "None",
+                     " | ".join(split_claims(cl["claims_to_verify"]))[:500] if cl else "Not read", None, None, None, "Dev"])
+    write_sheet(wb, "External Links Needed", head, rows, [44, 12, 40, 50, 40, 30, 30, 12], yellow=(5, 6, 7), name="LinksNeeded")
 
-    # ---- Chrome Page Check
-    head = ["Page type", "URL", "What the crawl detected", "What a visitor sees", "Agrees with the crawl", "Other opportunities"]
+    # ---- External Link Issues (dev handoff)
+    head = ["Source page", "Anchor text", "Destination URL", "Status", "Issue", "Anchor compared with", "Credible source",
+            "Action", "Replacement URL", "New anchor text", "Notes", "Completion handoff"]
+    rows = [[l["src"], l["anchor"], l["dest"], l["status"] or "No response", "; ".join(l["flags"]), l["compared"],
+             "Yes" if l["credible"] else "No", None, None, None, None, "Dev"] for l in issue_links]
+    ws2 = write_sheet(wb, "External Link Issues", head, rows, [40, 28, 46, 10, 26, 12, 10, 12, 40, 28, 30, 12], yellow=(8, 9, 10, 11), name="LinkIssues")
+    add_list(ws2, "H", 2, len(rows) + 1, ["Keep", "Replace", "Remove"])
+
+    # ---- Claims Needing Verification (content handoff)
+    head = ["URL", "Page type", "Claim (page's own words)", "Credible sources the page cites now", "Source to cite", "Claim status",
+            "Claim update", "Completion handoff"]
+    ws3 = write_sheet(wb, "Claims Needing Verification", head, claim_rows, [40, 12, 60, 36, 40, 16, 50, 12], yellow=(5, 6, 7), name="Claims")
+    add_list(ws3, "F", 2, len(claim_rows) + 1, ["Accurate claim", "Bad claim"])
+
+    # ---- Sample Page Check
+    head = ["Page type", "URL", "What the crawl detected", "What a visitor sees", "Person agrees with the crawl", "Other opportunities"]
     rows = []
     for cr in chrome:
         p = pages[norm_url(cr["url"])]
         rows.append([p["ptype"], p["url"], crawl_detected(p), cr["visitor_sees"], cr["agrees"], cr["opportunities"]])
-    write_sheet(wb, "Chrome Page Check", head, rows, [14, 44, 50, 60, 14, 60], name="ChromePageCheck")
+    write_sheet(wb, "Sample Page Check", head, rows, [14, 44, 60, 60, 14, 60], name="SamplePageCheck")
 
     wb.save(args.out)
-    qa(args.out, pages, order, links, queue, chrome, types)
+    qa(args.out, pages, order, links, need_links, issue_links, claim_rows, chrome, types)
     print(f"Saved {args.out}")
 
 
-def qa(path, pages, order, links, queue, chrome, types):
+def qa(path, pages, order, links, need_links, issue_links, claim_rows, chrome, types):
     wb = load_workbook(path)
     ok = True
 
@@ -748,16 +947,22 @@ def qa(path, pages, order, links, queue, chrome, types):
         print(f"{'PASS' if cond else 'FAIL'}: {label}")
         ok = ok and cond
 
-    pr = list(wb["Page Review"].iter_rows(min_row=2, values_only=True))
-    check("every audited page appears once in Page Review", [r[0] for r in pr] == [pages[k]["url"] for k in order] and len({r[0] for r in pr}) == len(pr))
-    el = list(wb["External Links"].iter_rows(min_row=2, values_only=True))
-    check("External Links has one row per source page and destination", len(el) == len(links) == len({(l["pkey"], norm_url(l["dest"])) for l in links}))
-    check("page citation counts add up to the External Links rows", sum(r[9] for r in pr) == len(el))
-    check("flagged counts match the External Links flags", sum(r[10] for r in pr) == sum(1 for r in el if any(f in (r[8] or "") for f in FLAGGED)))
-    aq = list(wb["Accuracy Review Queue"].iter_rows(min_row=2, values_only=True))
-    check("the accuracy queue has one row per queued page", [r[0] for r in aq] == [p["url"] for p in queue])
-    cc = list(wb["Chrome Page Check"].iter_rows(min_row=2, values_only=True))
-    check("every page type has a Claude in Chrome check", set(types) <= {r[0] for r in cc})
+    ap = list(wb["All Pages"].iter_rows(min_row=2, values_only=True))
+    check("every audited page appears once in All Pages", [r[0] for r in ap] == [pages[k]["url"] for k in order])
+    ci = 2 + [q["key"] for q in REQS].index("credible_source")
+    ln = list(wb["External Links Needed"].iter_rows(min_row=2, values_only=True))
+    check("External Links Needed lists exactly the pages with no credible source",
+          [r[0] for r in ln] == [r[0] for r in ap if r[ci] == "Missing"] == [p["url"] for p in need_links])
+    li = list(wb["External Link Issues"].iter_rows(min_row=2, values_only=True))
+    check("External Link Issues lists every flagged link once", len(li) == len(issue_links) == sum(1 for l in links if l["flags"]))
+    cl = list(wb["Claims Needing Verification"].iter_rows(min_row=2, values_only=True))
+    check("Claims Needing Verification has one row per claim", len(cl) == len(claim_rows))
+    rec = [r for r in wb["Recommendations"].iter_rows(values_only=True) if r and r[0] in ("High", "Medium", "Low")]
+    miss = sum(1 for r in ap for v in r[2:2 + len(REQS)] if v == "Missing")
+    nums = [re.match(r"(\d+) of (\d+)", str(r[2])) for r in rec]
+    check("Recommendations counts add up to the Missing cells in All Pages", sum(int(m.group(1)) for m in nums if m) == miss)
+    cc = list(wb["Sample Page Check"].iter_rows(min_row=2, values_only=True))
+    check("every page type has a sample page the person checked", set(types) <= {r[0] for r in cc} and all(r[4] == "Yes" for r in cc))
     if not ok:
         sys.exit("QA failed")
 

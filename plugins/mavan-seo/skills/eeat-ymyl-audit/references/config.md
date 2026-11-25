@@ -16,14 +16,17 @@ Written by Claude (SKILL.md Step 4) from the page type source (Step 2) and the h
     "schema": "Schema 1",
     "testimonials": "Testimonials 1",
     "before_after": "Before After 1",
-    "rating": "Rating 1"
+    "rating": "Rating 1",
+    "faq": "FAQ 1"
   },
   "page_type_source": {"file": "work/ia_audit.xlsx", "sheet": "All Pages", "url_column": "URL", "type_column": "Page Type"},
   "page_types": [
-    {"name": "Condition", "labels": ["Concern", "Condition"]},
-    {"name": "Service", "labels": ["Service"]},
-    {"name": "Blog", "labels": ["Blog", "Blog Post"]}
+    {"name": "Condition", "labels": ["Concern", "Condition"], "role": "condition"},
+    {"name": "Service", "labels": ["Service"], "role": "service"},
+    {"name": "Blog", "labels": ["Blog", "Blog Post"], "role": "blog"}
   ],
+  "credible_domains": [],
+  "body_markers": {},
   "credential_terms": [],
   "experience_terms": [],
   "content_link_positions": ["Content"],
@@ -40,3 +43,7 @@ Written by Claude (SKILL.md Step 4) from the page type source (Step 2) and the h
 - **experience_terms** are extra phrases to count as years of experience. A number of years followed by "experience" or "practice" is always recognised ("18 years of experience").
 - **content_link_positions** are the Link Position values that count as citations. Menus and footers are left out. Ignored when the outlinks export has no link position column (preflight warns).
 - **own_domains** are extra hosts that count as the client's own site (for example a booking subdomain), so links to them are not citations. Hosts in the crawl are already counted.
+- **role** on a page type says which requirements apply (`rules.md`): `condition`, `service` or `blog`. Left out, it comes from the name (concern / condition, service, blog / post / article); any other type gets only the requirements for every page.
+- **columns.faq** is the FAQ extraction (the first FAQ question). It decides which pages need FAQPage schema.
+- **credible_domains** are extra hosts that count as credible medical sources, on top of .gov, .edu, .org and the built-in journals and medical sites (`rules.md`).
+- **body_markers** are regular expressions looked for in the body text for `faq`, `testimonials`, `before_after` or `rating` when the crawl has no marker column or it is empty (for example `{"faq": "\\b(FAQs?|Frequently Asked Questions)\\b", "rating": "★"}`). Use one only after checking in Claude in Chrome that the pattern matches the element on the sample pages and nothing else.
