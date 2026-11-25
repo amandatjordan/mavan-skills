@@ -35,6 +35,16 @@ The gap workbook's counts are at the service level, so they say which services c
 
 Only gap services the SEO marked **Yes** in "Offered by our client" count. Yes with no research page becomes a gap-only page. No or blank is left off the roadmap and not listed anywhere. A "No" gap service matched to a research page the client listed raises a warning (the two workbooks disagree).
 
+## Fields the SEO completes (we never fill them in)
+
+We make no recommendations for these. They are empty yellow columns, and the script must never write text into them:
+
+- **Page title, H1 and meta description**, on the Roadmap and on the Cut tab. The H1 of Home and of every Service page (Page type = Service) must include the location / city name; those H1 cells are orange and the column header says so. Sub-Service, Brand / Device, Concern, blog and extra pages are not marked.
+- **Primary keyword to check** and **SEO priority**, on the Roadmap and on the Cut tab (the priority has the High / Medium / Low dropdown on both).
+- **Anchor text**, on the Internal links tab (yellow column). It is pre-filled only where the research sheet gave anchor text for the linked page. The SEO adds the anchor text they want used for every link, and the content team checks the Internal links tab for the anchor text each page needs (the "Must appear on page" header says so).
+
+The Cut tab is treated exactly like the Roadmap: the same columns, the same yellow and orange cells and the same dropdown, so a row can be moved between the two tabs as it is. The Read Me's second row says the SEO must update ALL THE TABS. The Roadmap header stays on row 1 and the Internal links header stays on row 1 (and the Cut tab keeps its instruction row), because `new-site-ia`, `gbp-setup` and `schema-markup-templates` read those tabs by header.
+
 ## Primary keywords are for the SEO to check
 
 The primary keyword is the research workbook's highest-volume search for the page. It can be a poor target (for example "face with wrinkles" for Wrinkles / Fine Lines is someone looking at pictures, not looking for a treatment). The Roadmap highlights the column (yellow) for the SEO to replace the keyword or add keywords in the same cell. The script never judges a keyword.

@@ -11,11 +11,14 @@ from pathlib import Path
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 SKILL = Path(__file__).resolve().parents[2] / 'plugins/mavan-seo/skills/new-site-content-roadmap'
 SCRIPT = SKILL / 'scripts/roadmap.py'
 REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
 REAL_TAX = SKILL / 'references/service-taxonomy.xlsx'
+CUT_TAB = 'Cut for the 50-page cap'
+LINK_ANCHOR = 'Anchor text (SEO: add the anchor text you want used for this link)'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
               'Primary keyword volume (national)', 'Mention on this page as a section', 'Client offers it? (Yes / No)', 'Where it came from',
@@ -121,6 +124,10 @@ class Base(unittest.TestCase):
                 columns=['Page', 'Page type', 'Why it is over the 50-page cap'])
         self.out = out
         return p
+
+    def col(self, prefix):
+        """A Roadmap column by the start of its header (the headers carry instructions for the SEO)."""
+        return next(c for c in self.road.columns if c.startswith(prefix))
 
     def match_rows(self):
         with open(self.work / 'gap_match.tsv', newline='') as f:
@@ -229,7 +236,7 @@ class Small(Base):
         ])
         make_gap(self.g, [['Skin tightening', 'Yes', 1, 0]])
         self.build(extras='Bridal packages|Package')
-        col = 'Must appear on page (anchor text other pages use to link here)'
+        col = self.col('Must appear on page')
         by = dict(zip(self.road['Page'], self.road[col]))
         self.assertEqual(by['Filler'], 'facial fillers; cheek filler')          # the section's anchor lands on its parent page
         self.assertEqual(by['Filler > Lip Filler'], 'lip fillers near me')
@@ -257,7 +264,7 @@ class Small(Base):
         self.assertIn('SEO confirmed', why)
 
     def links(self):
-        return pd.read_excel(self.out, 'Internal links').fillna('')
+        return pd.read_excel(self.out, 'Internal links').fillna('').rename(columns={LINK_ANCHOR: 'Anchor text'})
 
     def test_internal_links_use_the_research_links_between_roadmap_pages(self):
         make_research(self.r, [
@@ -279,7 +286,7 @@ class Small(Base):
         self.assertFalse(any('Cheek Filler' in x or 'Chin Filler' in x for pr in page_pairs for x in pr))
         # the anchor is the linked page's own anchor text, not the section anchor text added to it for "Must appear on page"
         self.assertEqual(l[(l['From page'] == 'Filler > Lip Filler') & (l['To page'] == 'Filler')].iloc[0]['Anchor text'], 'facial fillers')
-        self.assertEqual(self.road[self.road['Page'] == 'Filler'].iloc[0]['Must appear on page (anchor text other pages use to link here)'], 'facial fillers; cheek filler')
+        self.assertEqual(self.road[self.road['Page'] == 'Filler'].iloc[0][self.col('Must appear on page')], 'facial fillers; cheek filler')
         # the section's phrase has a link of its own (its own row), and the existing links keep the first phrase
         own = l[(l['To page'] == 'Filler') & (l['Anchor text'] == 'cheek filler')]
         self.assertEqual(list(zip(own['From page'], own['Where this link came from'])), [('Home', 'Added so every phrase has a link')])
@@ -482,6 +489,92 @@ class GapNamesMatchTheServiceTaxonomy(Base):
             r.pop('taxonomy_name')
         self.save_match(rows)
         self.assertEqual(self.build_only(check=False).returncode, 0)
+
+
+class SeoFields(Base):
+    """The SEO completes these by hand on the Roadmap, the Cut tab and the Internal links tab. We never suggest text for them."""
+    YELLOW, ORANGE = 'FFF2CC', 'F8CBAD'
+
+    def setUp(self):
+        super().setUp()
+        pages = [page('Service', f'Svc{i:02d}', vol=1000 + i, anchor=f'svc {i}') for i in range(52)]
+        pages += [page('Sub-Service', 'Svc00 > Sub00', vol=500, parent='Svc00'), page('Concern', 'Lines', vol=100)]
+        make_research(self.r, pages)
+        make_gap(self.g, [['Svc00', 'Yes', 3, 0]])
+        make_blog(self.b, [('Service', f'Svc{i:02d}', '') for i in range(52)] + [('Sub-Service', 'Svc00', 'Sub00')])
+        self.build()
+        self.wb = load_workbook(self.out)
+
+    def heads(self, ws, row):
+        return {c.value: c.column for c in ws[row]}
+
+    def fill(self, ws, r, c):
+        return ws.cell(r, c).fill.fgColor.rgb[-6:]
+
+    def test_page_title_h1_and_meta_description_are_empty_columns_on_roadmap_and_cut(self):
+        for df in (self.road, self.notin):
+            for prefix in ('Page title', 'H1', 'Meta description'):
+                col = next(c for c in df.columns if c.startswith(prefix))
+                self.assertTrue((df[col] == '').all(), f'{prefix} must be empty: we make no recommendations')
+        self.assertIn('Service', set(self.notin['Page type']))   # the test really produced a Cut tab with Service rows
+
+    def test_the_cut_tab_has_the_roadmap_columns_then_the_reason(self):
+        self.assertEqual(list(self.notin.columns)[:-1], list(self.road.columns))
+
+    def test_all_seo_columns_are_yellow_on_both_tabs_and_h1_of_home_and_service_pages_is_orange(self):
+        for tab, top in (('Roadmap', 1), (CUT_TAB, 2)):
+            ws = self.wb[tab]
+            heads = self.heads(ws, top)
+            kinds = {r: ws.cell(r, heads['Page type']).value for r in range(top + 1, ws.max_row + 1)}
+            self.assertTrue(kinds)
+            for prefix in ('Primary keyword (SEO', 'Page title', 'H1', 'Meta description', 'SEO priority'):
+                c = next(v for k, v in heads.items() if k.startswith(prefix))
+                for r, kind in kinds.items():
+                    want = self.ORANGE if prefix == 'H1' and kind in ('Home', 'Service') else self.YELLOW
+                    self.assertEqual(self.fill(ws, r, c), want, f'{tab} row {r} ({kind}) {prefix}')
+
+    def test_the_h1_header_says_home_and_service_pages_need_the_location(self):
+        h1 = next(c for c in self.road.columns if c.startswith('H1'))
+        self.assertIn('Home and Service pages', h1)
+        self.assertIn('location / city name', h1)
+
+    def test_the_cut_tab_has_the_priority_dropdown_like_the_roadmap(self):
+        for tab, top in (('Roadmap', 1), (CUT_TAB, 2)):
+            ws = self.wb[tab]
+            col = get_column_letter(next(v for k, v in self.heads(ws, top).items() if k.startswith('SEO priority')))
+            ranges = [str(r) for dv in ws.data_validations.dataValidation for r in dv.sqref.ranges if dv.formula1 == '"High,Medium,Low"']
+            self.assertEqual(ranges, [f'{col}{top + 1}:{col}{ws.max_row}'], tab)
+
+    def test_the_cut_instruction_row_says_to_fill_it_in_like_the_roadmap(self):
+        text = self.wb[CUT_TAB]['A1'].value
+        self.assertIn('exactly like the Roadmap', text)
+        self.assertIn('H1', text)
+
+    def test_must_appear_on_page_header_sends_the_content_team_to_the_internal_links_tab(self):
+        header = self.col('Must appear on page')
+        self.assertIn('Content team', header)
+        self.assertIn('Internal links tab', header)
+        self.assertIn('anchor text needed on each page', header)
+
+    def test_internal_links_anchor_text_column_is_yellow_and_says_the_seo_adds_it(self):
+        ws = self.wb['Internal links']
+        heads = self.heads(ws, 1)
+        self.assertEqual(list(heads), ['From page', 'To page', LINK_ANCHOR, 'Where this link came from'])
+        c = heads[LINK_ANCHOR]
+        self.assertIn('SEO: add the anchor text you want used', LINK_ANCHOR)
+        for r in range(2, ws.max_row + 1):
+            self.assertEqual(self.fill(ws, r, c), self.YELLOW)
+
+    def test_read_me_says_the_seo_must_update_all_the_tabs(self):
+        rm = pd.read_excel(self.out, 'Read Me').fillna('')
+        row = rm[rm['Item'].str.contains('ALL THE TABS')].iloc[0]
+        self.assertEqual(rm.index[rm['Item'].str.contains('ALL THE TABS')][0], 1)   # right under the title
+        for word in ('Roadmap tab', 'Cut for the 50-page cap tab', 'Internal links tab', 'anchor text', 'page title, H1 and meta description',
+                     'location / city name', 'We do not suggest'):
+            self.assertIn(word, row['Detail'])
+        ws = self.wb['Read Me']
+        self.assertEqual(ws['A3'].fill.fgColor.rgb[-6:], self.YELLOW)
+        self.assertEqual(rm.iloc[0]['Item'][:25], 'New site content roadmap')   # other skills find the client name on this row
 
 
 class Cap(Base):
