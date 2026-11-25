@@ -45,18 +45,18 @@ Done when every check prints PASS. Printed warnings go in the reply.
 
 ## Step 4: Check
 
-- Pages tab: every roadmap page and every CSV page is there, plus a `/blog` index when there are blogs. Service, Sub-Service and Brand / Device URLs are under `/services/`; no URL has more than three segments.
+- Pages tab: every page is listed by its own name (Botox, not Neurotoxin > Botox), and so is every parent. Every roadmap page and every CSV page is there, plus a `/blog` index when there are blogs. Service, Sub-Service and Brand / Device URLs are under `/services/`; no URL has more than three segments.
 - Read every row marked Recommended and every row with a Notes entry (text in brackets dropped from a URL, a Brand under a Sub-Service, blog placeholders). Do not edit them: list the ones that look wrong in the reply for the SEO.
 - Main nav: Home and the blog index are Yes, individual blog posts are No, and the legal / utility pages from the CSV are No.
 - Pick 3 rows on the Internal links tab and compare them to the roadmap's Internal links tab (same pages and anchor text; only the URLs are new).
 - Warnings: each "Roadmap gap" or "No planned link" warning is a problem in the roadmap's Internal links tab. Say which pages and that the roadmap has to be fixed.
 
-Done when all five hold.
+Done when all five hold. These checks do not replace the SEO's QA: the SEO still checks both tabs line by line (Step 5).
 
 ## Step 5: Report
 
-Send the workbook. Reply in a few sentences: how many pages (and how many are blog posts), the pages added from the CSV and the `/blog` index, that URLs the client gave were used as given and the yellow URLs are our recommendations for the SEO to check, that the SEO can change any yellow cell in the "In main nav" column (Home, the blog index and blog posts are fixed), how many pages are in the main nav, that blog URLs are placeholders until the titles are chosen, each warning, and what needs fixing in the roadmap. Do not recap the steps.
+Send the workbook. Start the reply by saying the SEO must QA **both** tabs before the workbook goes to the client or the developer: on the Pages tab every page name, parent, URL, main nav cell and note; on the Internal links tab every From and To page, both URLs and the anchor text. Then, in a few sentences: how many pages (and how many are blog posts), the pages added from the CSV and the `/blog` index, that URLs the client gave were used as given and the yellow URLs are our recommendations for the SEO to check, that the SEO can change any yellow cell in the "In main nav" column (Home, the blog index and blog posts are fixed), how many pages are in the main nav, that blog URLs are placeholders until the titles are chosen, each warning, and what needs fixing in the roadmap. Do not recap the steps.
 
 ## Workbook
 
-Tabs: Pages (page name, page type, recommended parent page, recommended URL path, URL source Provided / Recommended, In main nav Yes / No with a Yes / No dropdown, content from us Yes / No, notes; yellow cells are for the SEO to check); Internal links (from page, from URL, to page, to URL, anchor text, where the link came from, and priority when the roadmap has it); Read Me (rules, counts, warnings).
+Tabs: Pages (page name: the page's own name, not the roadmap's "Parent > Page" path, page type, recommended parent page, recommended URL path, URL source Provided / Recommended, In main nav Yes / No with a Yes / No dropdown, content from us Yes / No, notes; yellow cells are for the SEO to check); Internal links (from page, from URL, to page, to URL, anchor text, where the link came from, and priority when the roadmap has it); Read Me (SEO QA of both tabs, rules, counts, warnings). On the Internal links tab, From and To pages also use each page's own name.

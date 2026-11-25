@@ -47,6 +47,11 @@ def last_segment(name):
     return name.split('>')[-1].strip()
 
 
+def page_label(name, is_blog=False):
+    """The page's own name as it appears on the site: 'Neurotoxin > Botox' becomes 'Botox'. Blog titles are kept whole."""
+    return name.strip() if is_blog else last_segment(name)
+
+
 def norm(name):
     return re.sub(r'\s+', ' ', (name or '').strip()).lower()
 
@@ -136,6 +141,20 @@ def plan(roadmap_path, csv_path):
         pages.append(d)
         by_name[norm(d['name'])] = d
 
+    # The page name shown in the workbook is the page's own name (Botox, not Neurotoxin > Botox).
+    # Two roadmap pages with the same own name keep their full roadmap names so they can be told apart.
+    for d in pages:
+        d['label'] = page_label(d['name'], d['kind'] == 'blog')
+    clash = {}
+    for d in pages:
+        clash.setdefault(norm(d['label']), []).append(d)
+    for same in clash.values():
+        if len(same) > 1:
+            for d in same:
+                d['label'] = d['name']
+            warnings.append(f"More than one roadmap page is called '{last_segment(same[0]['name'])}': "
+                            f"{', '.join(d['name'] for d in same)}. Kept their full roadmap names; rename them on the Pages tab.")
+
     for d in pages:
         if d['parent'] and norm(d['parent']) not in by_name:
             warnings.append(f"Parent '{d['parent']}' of '{d['name']}' is not on the roadmap (cut or missing). No parent used for it.")
@@ -166,20 +185,20 @@ def plan(roadmap_path, csv_path):
                 d['path'] = f"{pre}/{slugify(last_segment(top['name']))}/{slug}"
                 if norm(top['name']) != norm(d['parent']):
                     d['notes'].append(f"URL sits directly under {last_segment(top['name'])} (not under {last_segment(d['parent'])}) "
-                                      f"to keep URLs one level below the Service; the linking parent is {d['parent']}.")
+                                      f"to keep URLs one level below the Service; the linking parent is {last_segment(d['parent'])}.")
             else:
                 d['path'] = f'{pre}/{slug}'
             if '(' in last_segment(d['name']):
                 d['notes'].append('Text in brackets dropped from the URL. Confirm it.')
 
-    seen_names = set(by_name)
+    seen_names = set(by_name) | {norm(d['label']) for d in pages}
     for name, url in extra_rows:
         if norm(name) in seen_names:
             warnings.append(f"'{name}' is in the CSV and already on the roadmap. Kept the roadmap row only.")
             continue
         seen_names.add(norm(name))
         provided = clean_path(url)
-        d = dict(name=name, type='Other (no content from us)', parent='', anchors=[], kind='other', notes=[], content='No',
+        d = dict(name=name, label=name, type='Other (no content from us)', parent='', anchors=[], kind='other', notes=[], content='No',
                  url_source='Provided' if provided else 'Recommended', path=provided or f'/{slugify(name)}',
                  nav_forced='No' if any(w in norm(name) for w in NAV_NO_WORDS) else 'Yes')
         pages.append(d)
@@ -187,7 +206,7 @@ def plan(roadmap_path, csv_path):
 
     blogs = [d for d in pages if d['kind'] == 'blog']
     if blogs and norm(BLOG_INDEX_NAME) not in by_name:
-        d = dict(name=BLOG_INDEX_NAME, type='Blog index (added by this skill)', parent='', anchors=[], kind='blog_index',
+        d = dict(name=BLOG_INDEX_NAME, label=BLOG_INDEX_NAME, type='Blog index (added by this skill)', parent='', anchors=[], kind='blog_index',
                  notes=['Added by the IA skill: the blog posts need an index page. Remove it if the client has no blog section.'],
                  content='No', url_source='Recommended', path=BLOG_PREFIX)
         pages.append(d)
@@ -198,7 +217,7 @@ def plan(roadmap_path, csv_path):
 
     paths = {}
     for d in pages:
-        paths.setdefault(d['path'], []).append(d['name'])
+        paths.setdefault(d['path'], []).append(d['label'])
     for p, names in paths.items():
         if len(names) > 1:
             warnings.append(f"URL {p} is used by more than one page: {', '.join(names)}.")
@@ -212,19 +231,19 @@ def plan(roadmap_path, csv_path):
             warnings.append(f"Roadmap link {l['src']} -> {l['tgt']} skipped: a page is not on the Pages tab.")
             continue
         if not l['anchor']:
-            warnings.append(f"Link {l['src']} -> {l['tgt']} has no anchor text in the roadmap. SEO to add one.")
-        links.append((src['name'], src['path'], tgt['name'], tgt['path'], l['anchor'], l['where'], l['prio']))
+            warnings.append(f"Link {src['label']} -> {tgt['label']} has no anchor text in the roadmap. SEO to add one.")
+        links.append((src['label'], src['path'], tgt['label'], tgt['path'], l['anchor'], l['where'], l['prio']))
         inbound.setdefault(id(tgt), []).append(l['anchor'])
     for d in pages:
         if d['kind'] in SERVICE_KINDS + ('Concern',) and not inbound.get(id(d)):
-            warnings.append(f"No planned link points at '{d['name']}'. Fix it in the roadmap's Internal links tab.")
+            warnings.append(f"No planned link points at '{d['label']}'. Fix it in the roadmap's Internal links tab.")
         if d['anchors']:
             got = {norm(x) for x in inbound.get(id(d), [])}
             missed = [t for t in d['anchors'] if norm(t) not in got]
             if missed:
-                warnings.append(f"Roadmap gap: '{d['name']}' must carry these terms because they are anchor text for links to it, "
+                warnings.append(f"Roadmap gap: '{d['label']}' must carry these terms because they are anchor text for links to it, "
                                 f"but no link in the roadmap's Internal links tab uses them: {'; '.join(missed)}. Add a link in the roadmap.")
-    return dict(client=client, pages=pages, blogs=blogs, links=links, warnings=warnings, cut=cut_count,
+    return dict(clash=any(len(v) > 1 for v in clash.values()), client=client, pages=pages, blogs=blogs, links=links, warnings=warnings, cut=cut_count,
                 rlinks=rlinks, rpages=rmap, n_nav=n_nav)
 
 
@@ -236,9 +255,11 @@ def write_workbook(res, out_path, client=''):
     ws.title = 'Pages'
     ws.append(['Page name', 'Page type', 'Recommended parent page', 'Recommended URL path', 'URL source (Provided / Recommended)',
                'In main nav (Yes / No). SEO: change any yellow cell if needed', 'Content from us (Yes / No)', 'Notes'])
+    by_label = {norm(d['name']): d['label'] for d in pages}
     order = [d for d in pages if d['kind'] not in ('blog', 'blog_index')] + [d for d in pages if d['kind'] == 'blog_index'] + blogs
     for d in order:
-        ws.append([d['name'], d['type'], d['parent'], d['path'], d['url_source'], d['nav'], d['content'], ' '.join(d['notes'])])
+        parent = by_label.get(norm(d['parent']), d['parent']) if d['parent'] else ''
+        ws.append([d['label'], d['type'], parent, d['path'], d['url_source'], d['nav'], d['content'], ' '.join(d['notes'])])
         if d['url_source'] == 'Recommended':
             ws.cell(ws.max_row, 4).fill = YELLOW
         if d['kind'] not in NAV_FIXED_KINDS:
@@ -259,8 +280,12 @@ def write_workbook(res, out_path, client=''):
     ws3.append(['Item', 'Detail'])
     rows = [
         ('New site information architecture', client or res['client'] or ''),
+        ('SEO QA (required)', 'The SEO checks BOTH tabs before this goes to the client or the developer. Pages tab: every page name, page type, '
+                              'parent, URL (yellow URLs are our recommendations), main nav cell and note. Internal links tab: every From page and To page, '
+                              'both URLs and the anchor text, and every warning below. Fix page and URL problems on the Pages tab; fix link problems in the '
+                              "roadmap's Internal links tab and rebuild."),
         ('Built from', "The content roadmap (Roadmap and Internal links tabs) and the CSV of other pages. Nothing was looked up live."),
-        ('What this is', f"Every page that goes on the new site with its parent, URL path and whether it is in the main nav: {len(order)} pages "
+        ('What this is', f"Every page that goes on the new site, by its own name (Botox, not Neurotoxin > Botox), with its parent, URL path and whether it is in the main nav: {len(order)} pages "
                          f"({len(blogs)} blog posts). {res['cut']} pages and blogs the roadmap cut for the 50-page cap are not here."),
         ('URL rules', 'Lowercase, hyphens, no accents, no trailing slash, text in brackets dropped. Service, Sub-Service and Brand / Device pages '
                       'sit under /services/ so performance can be tracked for all of them with one path filter. A Sub-Service or Brand / Device sits '
@@ -308,16 +333,18 @@ def run_checks(res, order, out_path):
     pg = [r for r in wb['Pages'].iter_rows(min_row=2, values_only=True)]
     ln = [r for r in wb['Internal links'].iter_rows(min_row=2, values_only=True)]
     names = {r[0] for r in pg}
+    label = {norm(d['name']): d['label'] for d in res['pages']}
     paths = [r[3] for r in pg]
     checks = [
-        ('every roadmap page is on the Pages tab', all(p['name'] in names for p in res['rpages'])),
+        ('every roadmap page is on the Pages tab', all(label[norm(p['name'])] in names for p in res['rpages'])),
+        ("page names are the page's own name (no 'Parent > Page')", all('>' not in str(n) for n in names) or res['clash']),
         ('every roadmap link is on the Internal links tab', len(ln) + sum(1 for w in res['warnings'] if w.startswith('Roadmap link')) == len(res['rlinks'])),
         ('every URL starts with / and is unique', all(p.startswith('/') for p in paths) and len(set(paths)) == len(paths)),
         (f'no URL has more than {MAX_SEGMENTS} segments', all(p.count('/') <= MAX_SEGMENTS for p in paths)),
         ('Home and the blog index are Yes, blog posts are No',
          all((r[5] == 'Yes') for r in pg if r[1] == 'Home' or str(r[1]).startswith('Blog index')) and all(r[5] == 'No' for r in pg if r[1] == 'Blog')),
         ('links on the Internal links tab match the roadmap (page, anchor)',
-         [(l['src'], l['tgt'], l['anchor']) for l in res['rlinks'] if norm(l['src']) in {norm(n) for n in names} and norm(l['tgt']) in {norm(n) for n in names}]
+         [(label[norm(l['src'])], label[norm(l['tgt'])], l['anchor']) for l in res['rlinks'] if norm(l['src']) in label and norm(l['tgt']) in label]
          == [(r[0], r[2], r[4] or '') for r in ln]),
     ]
     ok = True
