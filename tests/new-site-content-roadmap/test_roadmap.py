@@ -18,6 +18,7 @@ SCRIPT = SKILL / 'scripts/roadmap.py'
 REAL_BLOG = SKILL / 'references/blog-taxonomy.xlsx'
 REAL_TAX = SKILL / 'references/service-taxonomy.xlsx'
 CUT_TAB = 'Cut for the 50-page cap'
+NOTE = 'Check the Internal links tab for the anchor text needed on this page.'
 LINK_ANCHOR = 'Anchor text (SEO: add the anchor text you want used for this link)'
 
 PAGES_HEAD = ['Level', 'Service / sub-service', 'Category', 'Recommendation', 'Why', 'Parent page', 'Primary keyword',
@@ -124,6 +125,11 @@ class Base(unittest.TestCase):
                 columns=['Page', 'Page type', 'Why it is over the 50-page cap'])
         self.out = out
         return p
+
+    @staticmethod
+    def anchors(cell):
+        """A Must appear on page cell without the note every cell ends with."""
+        return str(cell).replace(NOTE, '').strip()
 
     def col(self, prefix):
         """A Roadmap column by the start of its header (the headers carry instructions for the SEO)."""
@@ -237,13 +243,16 @@ class Small(Base):
         make_gap(self.g, [['Skin tightening', 'Yes', 1, 0]])
         self.build(extras='Bridal packages|Package')
         col = self.col('Must appear on page')
-        by = dict(zip(self.road['Page'], self.road[col]))
+        by = {k: self.anchors(v) for k, v in zip(self.road['Page'], self.road[col])}
         self.assertEqual(by['Filler'], 'facial fillers; cheek filler')          # the section's anchor lands on its parent page
         self.assertEqual(by['Filler > Lip Filler'], 'lip fillers near me')
         self.assertEqual(by['Facials'], '')
         for blank in ('Home', 'About Us', 'Bridal packages', 'Skin tightening'):
             self.assertEqual(by[blank], '')
-        self.assertTrue(all(v == '' for v in self.road[self.road['Page type'] == 'Blog'][col]))
+        self.assertTrue(all(self.anchors(v) == '' for v in self.road[self.road['Page type'] == 'Blog'][col]))
+        # every cell, with or without anchor text, tells the content team to check the Internal links tab
+        self.assertTrue(all(str(v).endswith(NOTE) for v in self.road[col]))
+        self.assertEqual(len(self.road[col]), len(self.road))
         self.assertIn('Must appear on page', ' '.join(pd.read_excel(self.out, 'Read Me')['Item']))
 
     def test_preflight_warns_when_anchor_text_is_missing(self):
@@ -286,7 +295,7 @@ class Small(Base):
         self.assertFalse(any('Cheek Filler' in x or 'Chin Filler' in x for pr in page_pairs for x in pr))
         # the anchor is the linked page's own anchor text, not the section anchor text added to it for "Must appear on page"
         self.assertEqual(l[(l['From page'] == 'Filler > Lip Filler') & (l['To page'] == 'Filler')].iloc[0]['Anchor text'], 'facial fillers')
-        self.assertEqual(self.road[self.road['Page'] == 'Filler'].iloc[0][self.col('Must appear on page')], 'facial fillers; cheek filler')
+        self.assertEqual(self.anchors(self.road[self.road['Page'] == 'Filler'].iloc[0][self.col('Must appear on page')]), 'facial fillers; cheek filler')
         # the section's phrase has a link of its own (its own row), and the existing links keep the first phrase
         own = l[(l['To page'] == 'Filler') & (l['Anchor text'] == 'cheek filler')]
         self.assertEqual(list(zip(own['From page'], own['Where this link came from'])), [('Home', 'Added so every phrase has a link')])
@@ -549,6 +558,10 @@ class SeoFields(Base):
         text = self.wb[CUT_TAB]['A1'].value
         self.assertIn('exactly like the Roadmap', text)
         self.assertIn('H1', text)
+
+    def test_the_cut_tab_must_appear_cells_carry_the_note_too(self):
+        col = next(c for c in self.notin.columns if c.startswith('Must appear on page'))
+        self.assertTrue(len(self.notin) and all(str(v).endswith(NOTE) for v in self.notin[col]))
 
     def test_must_appear_on_page_header_sends_the_content_team_to_the_internal_links_tab(self):
         header = self.col('Must appear on page')

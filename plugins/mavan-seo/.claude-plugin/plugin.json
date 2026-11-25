@@ -1,7 +1,7 @@
 {
   "name": "mavan-seo",
   "description": "Mavan SEO audits: information architecture, internal linking, content prune & merge, service gaps, site diagnosis (Search Console triage), backlinks, prospect audit, new-site keyword gap (competitor gap for a business with no website), new site keyword research (pages and keywords for a new site from the service taxonomy), new site content roadmap (the 50 pages and blogs to write, from the keyword research, keyword gap and blog taxonomy), new site IA (every page with its parent, URL and main nav, plus the planned links, from the content roadmap and a CSV of other pages), GBP setup (GBP categories from competitor local search exports, the services and products to add from the content roadmap, a checklist to finish the profile, and a services and products sheet with titles and descriptions), schema markup templates (a tested JSON-LD template per page type from the content roadmap and one real page of each type), prospect diagnosis (authority vs content vs architecture), client diagnosis (same, with Search Console and a 6-month comparison), prospect sales report (also for clients), service page title & H1 review, client report from any audit, migration sheet (merges the prune, IA and service gap audits into one migration workbook), E-E-A-T & YMYL audit (Claude in Chrome finds the extraction selectors and checks sample pages; a crawl gives author, reviewer, credentials, citations and link health for every concern, service and blog page, plus an accuracy review queue)",
-  "version": "1.55.0",
+  "version": "1.56.0",
   "author": {
     "name": "Mavan"
   }

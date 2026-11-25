@@ -66,6 +66,11 @@ def clean_path(p):
     return p if p == '/' else p.rstrip('/')
 
 
+def anchor_text(cell):
+    """A roadmap 'Must appear on page' cell without the note the roadmap puts in every cell ('Check the Internal links tab for ...')."""
+    return '\n'.join(ln for ln in str(cell or '').split('\n') if not ln.strip().startswith('Check the Internal links tab'))
+
+
 def read_roadmap(path):
     wb = load_workbook(path, data_only=True)
     for tab in ('Roadmap', 'Internal links'):
@@ -92,7 +97,7 @@ def read_roadmap(path):
         if r[c_page]:
             pages.append(dict(name=str(r[c_page]).strip(), type=str(r[c_type] or '').strip(),
                               parent=str(r[c_parent] or '').strip(),
-                              anchors=[a.strip() for a in str(r[c_anchor] or '').split(';') if a.strip()]))
+                              anchors=[a.strip() for a in anchor_text(r[c_anchor]).split(';') if a.strip()]))
     cut = 0
     if 'Cut for the 50-page cap' in wb.sheetnames:
         crow = list(wb['Cut for the 50-page cap'].iter_rows(values_only=True))
