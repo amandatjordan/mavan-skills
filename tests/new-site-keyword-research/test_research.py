@@ -294,9 +294,10 @@ class ResearchTest(unittest.TestCase):
 
 class RealTaxonomySmoke(unittest.TestCase):
     def test_both_skills_bundle_the_same_taxonomy(self):
-        other = SKILL.parent / 'service-gap-audit/references/service-taxonomy.xlsx'
-        self.assertEqual(other.read_bytes(), REAL_TAXONOMY.read_bytes(),
-                         'service-taxonomy.xlsx differs between service-gap-audit and new-site-keyword-research: copy the updated file to both')
+        for skill in ('service-gap-audit', 'new-site-content-roadmap'):
+            other = SKILL.parent / skill / 'references/service-taxonomy.xlsx'
+            self.assertEqual(other.read_bytes(), REAL_TAXONOMY.read_bytes(),
+                             f'service-taxonomy.xlsx differs between {skill} and new-site-keyword-research: copy the updated file to all three skills')
 
     def test_every_concern_has_keywords(self):
         tax = pd.read_excel(REAL_TAXONOMY, sheet_name='Taxonomy')
