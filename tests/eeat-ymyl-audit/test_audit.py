@@ -284,6 +284,15 @@ class PageTypeLabels(unittest.TestCase):
         self.assertIn("No shared words", by["https://best-supplements.example/blood-sugar-support"][8] or "")
         self.assertIn("Dead link", by["https://health-agency.example/high-blood-pressure"][8])
 
+    def test_url_helpers(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import audit
+        self.assertEqual(audit.url_words("https://pubmed.ncbi.nlm.nih.gov/18462427/", path_only=True), "")
+        self.assertIn("compounding", audit.url_words("https://www.fda.gov/drugs/human-drug-compounding/q-and-a"))
+        self.assertEqual(audit.schema_types("{'@type':'Organization'} {'@type':'FAQPage','mainEntity':[{'@type':'Question'}]}"),
+                         "Organization, FAQPage")
+        self.assertIn(405, audit.BLOCKED)
+
     def test_page_type_without_paths_needs_a_source(self):
         cfg = json.loads(json.dumps(fixture.CONFIG))
         cfg["page_types"].append({"name": "Area"})

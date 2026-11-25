@@ -3,7 +3,7 @@
 
   python audit.py preflight --config config.json --crawl crawl.csv --outlinks outlinks.csv --out work [--external external.csv] [--chrome work/chrome.tsv]
   python audit.py queue     --config config.json --crawl crawl.csv --outlinks outlinks.csv --external external.csv --out work
-                            [--types Condition,Service] [--max N]
+                            [--types Condition,Service] [--max N] [--max-per-type N]
   python audit.py build     --config config.json --crawl crawl.csv --outlinks outlinks.csv --external external.csv
                             --chrome work/chrome.tsv [--claims work/claims.tsv] [--types ...] [--max N] --out audit.xlsx
 
@@ -44,7 +44,7 @@ EXT_TITLE = ["title 1", "title", "page title"]
 EXT_H1 = ["h1-1", "h1", "h1 1"]
 
 DEFAULT_CREDENTIALS = ["MD", "DO", "DDS", "DMD", "NP", "PA", "PA-C", "RN", "PhD", "FACS", "FAAD", "board-certified", "board certified"]
-BLOCKED = {401, 403, 429, 999}
+BLOCKED = {401, 403, 405, 429, 999}
 STOP_WORDS = set("a an and or the of in on for to with by at as is are be from vs near me your you our we it its this that these those into".split())
 GENERIC_WORDS = set("click here read more link article source sources page website site learn see visit via official research study studies shows show according report info information".split())
 FLAGGED = ["Dead link", "No response", "No shared words"]
@@ -232,13 +232,24 @@ def experience_hits(text, cfg):
     return out[:3]
 
 
-URL_NOISE = set("http https www com org net gov edu io co us uk html htm php aspx asp cfm index default amp".split())
+URL_NOISE = set("http https www com org net gov edu io co us uk html htm php aspx asp cfm index default amp articles article "
+                "pages page content en go scripts".split())
+SCHEMA_SKIP = {"ListItem", "Question", "Answer", "EntryPoint", "SearchAction"}
 
 
-def url_words(u):
-    """Words in a destination's host and path (no query string), for when the crawler cannot give its title or H1."""
+def url_words(u, path_only=False):
+    """Words in a destination's host and path (no query string, no ids), for when the crawler cannot give its title or H1."""
     p = urlsplit(str(u).strip())
-    return " ".join(w for w in words(unquote(p.netloc + " " + p.path)) if w not in URL_NOISE and not w.isdigit())
+    text = p.path if path_only else p.netloc + " " + p.path
+    return " ".join(w for w in words(unquote(text)) if w not in URL_NOISE and not any(ch.isdigit() for ch in w))
+
+
+def schema_types(v):
+    """When the schema extraction holds the JSON-LD itself (Sitebulb), keep only the @type names, in order, once each."""
+    if v is None or "@type" not in v:
+        return v
+    found = re.findall(r"""["']@type["']\s*:\s*\[?\s*["']([^"']+)["']""", v)
+    return ", ".join(dict.fromkeys(t for t in found if t not in SCHEMA_SKIP)) or v
 
 
 def anchor_match(anchor, dest_text):
@@ -326,7 +337,7 @@ def analyze(args, need_external):
         author, reviewer = val("author"), val("reviewer")
         cred_text = " ".join([body, author or "", reviewer or ""])
         p = dict(url=url, key=norm_url(url), ptype=ptype, body=body, words=len(body.split()),
-                 author=author, reviewer=reviewer, published=val("published"), updated=val("updated"), schema=val("schema"),
+                 author=author, reviewer=reviewer, published=val("published"), updated=val("updated"), schema=schema_types(val("schema")),
                  testimonials=val("testimonials"), before_after=val("before_after"), rating=val("rating"),
                  creds=term_hits(cred_text, credential_terms), exp=experience_hits(body, cfg), links=[])
         pages[p["key"]] = p
@@ -364,8 +375,10 @@ def analyze(args, need_external):
         title, h1 = (e["title"], e["h1"]) if e else ("", "")
         if title or h1:
             compared, match = "Title and H1", anchor_match(r[oanc], title + " " + h1)
-        else:  # Sitebulb and most crawlers only status-check external URLs: infer from the destination URL path
+        elif url_words(dst, path_only=True):  # Sitebulb only status-checks external URLs: infer from the destination URL
             compared, match = "URL", anchor_match(r[oanc], url_words(dst))
+        else:  # the URL is only a host and an id (pubmed.ncbi.nlm.nih.gov/18462427): nothing to compare
+            compared, match = "URL", "Not checked"
         flags = []
         if status >= 400 and status not in BLOCKED:
             flags.append("Dead link")
@@ -480,9 +493,18 @@ def cmd_preflight(args):
         sys.exit(1)
 
 
-def scoped(res, types=None, max_pages=None):
+def scoped(res, types=None, max_pages=None, per_type=None):
+    """Queued pages in crawl order: optionally some page types, the first N of each type, and N in all."""
     names = {t.strip().lower() for t in types.split(",")} if types else None
-    out = [res["pages"][k] for k in res["order"] if not names or res["pages"][k]["ptype"].lower() in names]
+    out, seen = [], Counter()
+    for k in res["order"]:
+        p = res["pages"][k]
+        if names and p["ptype"].lower() not in names:
+            continue
+        if per_type and seen[p["ptype"]] >= per_type:
+            continue
+        seen[p["ptype"]] += 1
+        out.append(p)
     return out[:max_pages] if max_pages else out
 
 
@@ -492,7 +514,7 @@ def cmd_queue(args):
     for t in dict.fromkeys(res["pages"][k]["ptype"] for k in res["order"]):
         q = scoped(res, t)
         print(f"{t}: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
-    q = scoped(res, args.types, args.max)
+    q = scoped(res, args.types, args.max, args.max_per_type)
     print(f"Queue: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
     tdir = os.path.join(args.out, "text")
     os.makedirs(tdir, exist_ok=True)
@@ -570,7 +592,7 @@ def cmd_build(args):
     res = analyze(args, need_external=True)
     stop_if_needed(res)
     pages, order, links = res["pages"], res["order"], res["links"]
-    queue = scoped(res, args.types, args.max)
+    queue = scoped(res, args.types, args.max, args.max_per_type)
 
     claims = {}
     if args.claims:
@@ -727,6 +749,7 @@ def main():
         if name in ("queue", "build"):
             s.add_argument("--types")
             s.add_argument("--max", type=int)
+            s.add_argument("--max-per-type", type=int, dest="max_per_type")
         if name == "build":
             s.add_argument("--claims")
             s.add_argument("--chrome", required=True)

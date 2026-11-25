@@ -29,16 +29,20 @@ The status is the destination's status code from the external URLs export (the o
 
 | Flag | When |
 | --- | --- |
-| Dead link | Status 400 or higher, except 401, 403, 429 and 999 |
+| Dead link | Status 400 or higher, except 401, 403, 405, 429 and 999 |
 | No response | Status 0 or blank |
 | No shared words | The anchor has meaningful words and none appear in the destination's title or H1, or in its URL when there is no title or H1 |
-| Check manually | Status 401, 403, 429 or 999: the site blocked the crawler. Shown, never counted as flagged |
+| Check manually | Status 401, 403, 405, 429 or 999: the site blocked the crawler or refused its request method. Shown, never counted as flagged |
 
 **Flagged external links** counts Dead link, No response and No shared words. Redirects and links to a homepage show their status and URL; they are not flagged.
 
 ## Anchor vs destination
 
-Plain word overlap, no judgement. The anchor's words are lower-cased, a trailing "s" is dropped, and stop words and generic words are removed. If nothing is left the anchor is **Generic anchor** and is not compared. Otherwise it is compared with the words of the destination's title and H1 when the export has them. When it has neither (Sitebulb only status-checks external URLs), it is compared with the words in the destination's host and path, leaving out the query string, numbers and URL noise (http, www, com, org, gov, html, php, index and similar); the External Links tab says which was used. **Match** (every anchor word appears), **Partial** (some do), **No match** (none do, flagged No shared words). A URL often names the source but not the topic (pubmed.ncbi.nlm.nih.gov/18462427), so a URL comparison flags more links for a person's look than a title would.
+Plain word overlap, no judgement. The anchor's words are lower-cased, a trailing "s" is dropped, and stop words and generic words are removed. If nothing is left the anchor is **Generic anchor** and is not compared. Otherwise it is compared with the words of the destination's title and H1 when the export has them. When it has neither (Sitebulb only status-checks external URLs), it is compared with the words in the destination's host and path, leaving out the query string, numbers and URL noise (http, www, com, org, gov, html, php, index and similar); the External Links tab says which was used. **Match** (every anchor word appears), **Partial** (some do), **No match** (none do, flagged No shared words). Words with digits (ids) are dropped. When the path has no words left (pubmed.ncbi.nlm.nih.gov/18462427, a homepage with a tracking query), the link is **Not checked**: the URL names the source, not the topic. A URL comparison is rougher than a title, so "No shared words" rows need a person's look.
+
+## Schema types
+
+When the schema extraction holds the JSON-LD itself (Sitebulb extracts the script tags), the Page Review shows only the `@type` names, in order, once each, leaving out nested ListItem, Question, Answer, EntryPoint and SearchAction. A sitewide Organization block on every page means "No schema" is rarely hit; read the types to see which pages have page-level schema.
 
 Generic words ignored: click, here, read, more, link, article, source, sources, page, website, site, learn, see, visit, via, official, research, study, studies, shows, show, according, report, info, information. Stop words ignored: a, an, and, or, the, of, in, on, for, to, with, by, at, as, is, are, be, from, vs, near, me, your, you, our, we, it, its, this, that, these, those, into.
 
