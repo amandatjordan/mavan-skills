@@ -8,7 +8,7 @@ A crawled page is audited when it returned 200, is indexable (when the export sa
 
 ## Which external links count
 
-A link counts as a citation when its destination is on a host that is not the client's own, it comes from an audited page, it is a hyperlink (not an image or script), and, when the export has a link position column, its position is one of `content_link_positions`. A page linking to the same destination twice counts once. Links in menus and footers (social profiles and so on) are left out.
+A link counts as a citation when its destination is on a host that is not the client's own, it comes from an audited page, it is a hyperlink (not an image or script), and, when the export has a link position column, its position is one of `content_link_positions`. A page linking to the same destination twice counts once. Links in menus and footers (social profiles and so on) are left out. Booking, Google, address and phone links are left out too (Links that are never citations, below).
 
 ## Requirements by page type
 
