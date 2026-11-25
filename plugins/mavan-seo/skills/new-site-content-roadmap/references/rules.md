@@ -51,7 +51,7 @@ The primary keyword is the research workbook's highest-volume search for the pag
 
 ## Must appear on page
 
-The research workbook's "Anchor text for links to this page" for each page is copied to the "Must appear on page" column, so content knows which words other pages will use to link to it and must include them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page's cell (links to that topic land on the parent). Blank where the research sheet has none. Home, About Us, extra pages, gap-only pages and blogs have none. Preflight warns when own pages have no anchor text.
+The research workbook's "Anchor text for links to this page" for each page is copied to the "Must appear on page" column, so content knows which words other pages will use to link to it and must include them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page's cell (links to that topic land on the parent). Every cell, on the Roadmap and on the Cut tab, ends with the note "Check the Internal links tab for the anchor text needed on this page." so the content team goes to the Internal links tab, which holds the anchor text the SEO chose and is the final list. Where the research sheet has no anchor text (and for Home, About Us, extra pages, gap-only pages and blogs) the cell holds only the note. `new-site-ia` ignores the note when it reads the column. Preflight warns when own pages have no anchor text.
 
 ## Internal links
 

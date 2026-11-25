@@ -163,6 +163,13 @@ class T(unittest.TestCase):
         self.assertTrue(any("cheek filler" in x and "Roadmap gap" in x for x in w))
         self.assertEqual(len(links), len(broken))
 
+    def test_the_roadmap_note_in_every_must_appear_cell_is_not_an_anchor(self):
+        note = "Check the Internal links tab for the anchor text needed on this page."
+        pages = [(n, t, p, (a + "\n" if a else "") + note) for n, t, p, a in PAGES]
+        _, links, w, _ = self.run_build(pages=pages)
+        self.assertFalse(any("Check the Internal links" in x or "Roadmap gap" in x for x in w), w)
+        self.assertEqual(len(links), len(LINKS))
+
     def test_page_with_no_inbound_link_warns(self):
         broken = [l for l in LINKS if l[1] != "Neurotoxin > Botox"]
         _, _, w, _ = self.run_build(links=broken)
