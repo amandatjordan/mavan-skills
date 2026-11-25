@@ -30,7 +30,7 @@ Treatment pages are MedicalProcedure and concern pages are MedicalCondition (Ama
 - A `@graph` of nodes, each with an `@id` where another node refers to it. Nodes point to each other by `{"@id": ...}`.
 - **Page node:** WebPage (or the primary type's page, such as AboutPage). The primary entity is its `mainEntity`. Use `publisher` or `about` to connect the page to the business: `provider` is not a property of MedicalProcedure, so the business is not put inside the procedure.
 - **Business node:** the full business block (name, url, logo, description, telephone, address, hours, geo, area served, hasMap, `sameAs`) lives on the Home template only. Every other template refers to it by the same `@id` (`{{business_id}}`).
-- **Objects come from the real page.** Look for, and include only what is there:
+- **Objects come from the real page.** The page decides which blocks the template has, not which values the paste happens to carry. Look for, and include as a block with placeholders, every object the page has (a video the paste names but gives no URL for still gets a VideoObject block):
   - BreadcrumbList when the page shows breadcrumbs or sits under a parent;
   - FAQPage with a Question and acceptedAnswer for each question and answer the page shows;
   - reviews or testimonials: Review items (author, date, text, rating) and an AggregateRating only when the page shows a rating and a count. They sit on the business node, not on a Product;
@@ -41,7 +41,11 @@ Treatment pages are MedicalProcedure and concern pages are MedicalCondition (Ama
 - **Placeholders:** `{{lowercase_with_underscores}}`, one per value that changes between pages. Descriptive names (`page_title`, `faq_1_question`, `review_1_text`). Show two of any repeating item and note that the block repeats. Types, property names and structure are never placeholders.
 - **Leave a property out rather than empty.** An empty GeoCoordinates or a blank value is removed, not kept.
 - **Optional blocks** are marked in the map file's notes ("include only if the page has it").
-- **Copy values exactly** from the page for the filled test copy. Never write a review, rating, answer or date the page does not show.
+- **Copy values exactly** from the page for the filled test copy. Never write a review, rating, answer or page text the page does not show. A value that is a technical detail the paste cannot carry (page URL, breadcrumb URLs, thumbnail, upload or publish date, meta description) is a clearly fake `example.com` test value, and the person is told which ones; the validator checks structure, not truth.
+
+## What the person is told
+
+Everything this skill sends is a schema template, not final site markup. Each time a template or filled copy goes out, the person is told that it has not been checked against schema.org, that they should test it in the validator and that they should paste any error or warning messages into the chat.
 
 ## Test and status
 
