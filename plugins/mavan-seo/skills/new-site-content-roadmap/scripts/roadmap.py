@@ -42,16 +42,31 @@ SOURCE_TEXT = {
 }
 PRIORITIES = 'High,Medium,Low'
 CUT_TAB = 'Cut for the 50-page cap'
+ALL_TABS_LABEL = 'READ THIS FIRST: the SEO must update ALL THE TABS'
+ALL_TABS_TEXT = ('The roadmap is not finished until the SEO has filled in every yellow column on EVERY tab. '
+                 'Roadmap tab: check the primary keyword (replace it or add keywords), fill in the page title, H1 and meta description for every row '
+                 '(the H1 of Home and of every Service page must include the location / city name: orange cells), and set the priority. '
+                 'Cut for the 50-page cap tab (if it exists): the same columns, filled in the same way, because any row moved onto the Roadmap needs them. '
+                 'Internal links tab: add the anchor text you want used for every link (yellow Anchor text column). '
+                 'We do not suggest any of this text: these are empty fields for the SEO.')
 KW_COL = 'Primary keyword (SEO: check it fits the page, then replace it or add keywords)'
-ANCHOR_COL = 'Must appear on page (anchor text other pages use to link here)'
+ANCHOR_COL = ('Must appear on page (anchor text other pages use to link here). Content team: also check the Internal links tab, '
+              'which lists the anchor text needed on each page')
+TITLE_COL = 'Page title (SEO fills in)'
+H1_COL = 'H1 (SEO fills in. Home and Service pages: the H1 must include the location / city name, orange cells)'
+META_COL = 'Meta description (SEO fills in)'
+LOCATION_H1_TYPES = ('Home', 'Service')          # their H1 must include the location / city name
+LINK_ANCHOR_COL = 'Anchor text (SEO: add the anchor text you want used for this link)'
+SEO_COLS = [KW_COL, TITLE_COL, H1_COL, META_COL]   # empty or to-check yellow columns; PRIORITY_COL is the last one
 ANCHOR_SRC = 'Anchor text for links to this page (SEO fills in)'
 LINKS_SRC = 'Internal links out (priority)'
 LINK_TAB = 'Internal links'
 LINK_LEVELS = ('Service', 'Sub-Service', 'Brand / Device')   # every one of these must receive at least one internal link
 PRIORITY_COL = 'SEO priority (High / Medium / Low)'
-CUT_INSTRUCTIONS = (f'These pages and blogs did not fit under the {MAX_PAGES}-page cap. The SEO makes the final list: move a row to the Roadmap tab to write it, '
-                    f'or move a Roadmap row here to drop it. The columns match the Roadmap (the reason it was cut is the last column), so a row can be cut and pasted as it is. '
-                    f'Keep the Roadmap at {MAX_PAGES} rows or fewer, and move a page\'s blogs with it.')
+CUT_INSTRUCTIONS = (f'This tab is the Roadmap for the pages and blogs that did not fit under the {MAX_PAGES}-page cap, and the SEO updates it exactly like the Roadmap: '
+                    f'check the primary keyword and fill in the page title, H1 and meta description (Home and Service page H1s must include the location / city name) and the priority. '
+                    f'The SEO makes the final list: move a row to the Roadmap tab to write it, or move a Roadmap row here to drop it. The columns match the Roadmap '
+                    f'(the reason it was cut is the last column), so a row can be cut and pasted as it is. Keep the Roadmap at {MAX_PAGES} rows or fewer, and move a page\'s blogs with it.')
 VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitors rank for, often with a city in the search). '
                 'Use it to rank pages against each other. It is not local demand and not a traffic forecast.')
 RESEARCH_COLS = ['Level', 'Service / sub-service', 'Recommendation', 'Primary keyword', 'Primary keyword volume (national)',
@@ -529,7 +544,7 @@ def cmd_build(a):
         (rows if into is None else into).append({'Page': page, 'Page type': ptype, 'Content to write': content, 'Why it is on the roadmap': why, 'Parent page / links to': parent,
                      KW_COL: kw, 'Primary keyword volume (national)': vol, ANCHOR_COL: anchor,
                      'Competitor gap keywords (2+ in top 10 or 1+ in top 3)': gapn, 'Sections to cover on this page': sect,
-                     PRIORITY_COL: ''})
+                     TITLE_COL: '', H1_COL: '', META_COL: '', PRIORITY_COL: ''})
 
     for name, why in FIXED_PAGES:
         add(name, name, 'Page', why)
@@ -608,28 +623,30 @@ def cmd_build(a):
     gap_txt = 'the new-site keyword gap workbook' if len(a.gap) == 1 else f'the {len(a.gap)} new-site keyword gap workbooks'
     read_me = [
         ('New site content roadmap', a.client or ''),
+        (ALL_TABS_LABEL, ALL_TABS_TEXT),
         ('Built from', f'The new-site keyword research workbook, {gap_txt} and the blog taxonomy ({blog_title}). Nothing was looked up live.'),
         ('Volume: read this first', VOLUME_LABEL),
         ('What this is', f'The pages and blog posts we recommend writing content for, {MAX_PAGES} at most. Home, About Us and every extra page the SEO listed always count toward the {MAX_PAGES} and are never cut.'),
         ('Order', 'Home, About Us, the SEO\'s extra pages, then Service, Sub-Service, Brand / Device, Blog and Concern pages, until the cap is reached. Inside a group: pages the client listed first, then Implied parents, then gap-only services; ties go to more competitor gap keywords, then higher volume.'),
         ('Competitor gap keywords', 'Keywords with 2+ competitors in the top 10 or 1+ in the top 3, non-local plus local, from the gap workbook service matched to the page.' + (' A service in more than one gap workbook is counted once, with the higher number.' if len(a.gap) > 1 else '') + ' A Sub-Service or Brand / Device with no gap service of its own shows its Service\'s number (marked "inherited").'),
         ('Keywords: SEO to check', 'The primary keyword column (yellow) comes from the keyword research and is only the highest-volume search for the page. Some are searches from someone looking at pictures or reading about a topic, not looking for the service (for example "face with wrinkles"). Check each one, then replace it, or add keywords to the same cell. Home, About Us and extra pages have none: add them.'),
-        ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none.'),
-        ('Internal links tab', 'Every link between pages on the roadmap: from page, to page and the anchor text (the research sheet\'s anchor text for the page being linked to). The links come from the keyword research sheet. Where a page would receive no link at all (the pages that linked to it were cut, it is not linked from the research, or it came from the gap), a link from its parent page, or from Home, is added and marked. Blogs link to their page. Every phrase in "Must appear on page" is the anchor text of at least one link to that page (a page with two phrases gets one link with each). If the SEO moves pages between the Roadmap and Cut tabs, the links to and from those pages need updating by hand.'),
-        ('SEO priority', 'The last yellow column is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
+        ('Must appear on page', 'The anchor text the keyword research sheet lists for links to this page. Content must include these words on the page, so other pages can link to it with them. A Sub-Service or Brand / Device that is only a section on a parent page adds its anchor text to the parent page. Blank where the research sheet has none; Home, About Us, extra pages and blogs have none. The content team must also check the Internal links tab for the anchor text needed on each page: that tab holds the anchor text the SEO chose for every link, and it is the final list.'),
+        ('Page title, H1, meta description', f'Three empty yellow columns on the Roadmap tab and on the Cut tab for the SEO to complete on every row. We do not suggest any text. The H1 of Home and of every Service page (Page type = Service) must include the location / city name: those H1 cells are orange.'),
+        ('Internal links tab', 'Every link between pages on the roadmap: from page, to page and the anchor text. THE SEO MUST ADD THE ANCHOR TEXT THEY WANT USED in the yellow Anchor text column for every link (it is pre-filled only where the research sheet gave anchor text for the page being linked to). The links come from the keyword research sheet. Where a page would receive no link at all (the pages that linked to it were cut, it is not linked from the research, or it came from the gap), a link from its parent page, or from Home, is added and marked. Blogs link to their page. Every phrase in "Must appear on page" is the anchor text of at least one link to that page (a page with two phrases gets one link with each). If the SEO moves pages between the Roadmap and Cut tabs, the links to and from those pages need updating by hand.'),
+        ('SEO priority', 'The last yellow column on the Roadmap and the Cut tab is for the SEO. The roadmap order is a recommendation: the SEO makes the final call and can change the priority of any page (High, Medium or Low).'),
         ('Blogs', 'Two blog posts per Service and Sub-Service page from the blog taxonomy (prep / maintenance and choosing a provider). Titles are not set: the writer picks each post\'s title and query. Blogs must not promise results: say results vary and defer to the provider\'s own instructions.'),
         ('Sections', 'Sub-Services and Brands / Devices the research workbook marked "Section on ..." are not pages. They appear in "Sections to cover on this page" on their parent page.'),
-        ('Cut tab', f'Only exists when something is over the {MAX_PAGES}-page cap: the pages and blogs that did not fit, with the same columns as the Roadmap and the reason in the last column. The SEO moves rows between the two tabs to make the final list, keeping the Roadmap at {MAX_PAGES} or fewer.'),
+        ('Cut tab', f'Only exists when something is over the {MAX_PAGES}-page cap: the pages and blogs that did not fit. It is treated exactly like the Roadmap: the same columns (the reason it was cut is the last one), the same yellow and orange cells and the same priority dropdown, and the SEO fills in the same fields. The SEO moves rows between the two tabs to make the final list, keeping the Roadmap at {MAX_PAGES} or fewer.'),
         ('Warnings', note),
     ]
     out = Path(a.out)
     with pd.ExcelWriter(out, engine='openpyxl') as xw:
         pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
         roadmap.to_excel(xw, sheet_name='Roadmap', index=False)
-        link_df.to_excel(xw, sheet_name=LINK_TAB, index=False)
+        link_df.rename(columns={'Anchor text': LINK_ANCHOR_COL}).to_excel(xw, sheet_name=LINK_TAB, index=False)
         if len(not_df):
             not_df.to_excel(xw, sheet_name=CUT_TAB, index=False, startrow=1)
-    style(out, len(roadmap))
+    style(out, len(roadmap), len(not_df))
     counts = roadmap['Page type'].value_counts().to_dict()
     print(f'Wrote {out}')
     print(f'Roadmap: {len(roadmap)} of {MAX_PAGES} rows. ' + ', '.join(f'{k}: {v}' for k, v in counts.items()))
@@ -645,9 +662,10 @@ def cmd_build(a):
         sys.exit(1)
 
 
-def style(path, n):
+def style(path, n, n_cut=0):
     wb = load_workbook(path)
     head, yellow = PatternFill('solid', fgColor='1F3864'), PatternFill('solid', fgColor='FFF2CC')
+    gold, orange = PatternFill('solid', fgColor='BF8F00'), PatternFill('solid', fgColor='F8CBAD')
     for ws in wb:
         top = 2 if ws.title == CUT_TAB else 1          # the cut tab has an instruction row above its headers
         for c in ws[top]:
@@ -666,22 +684,38 @@ def style(path, n):
         cw.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(cw.max_column, 8))
         cw['A1'].font, cw['A1'].fill = Font(bold=True), yellow
         cw['A1'].alignment = Alignment(wrap_text=True, vertical='center')
-        cw.row_dimensions[1].height = 62
+        cw.row_dimensions[1].height = 92
     rm = wb['Read Me']
     rm.column_dimensions['A'].width, rm.column_dimensions['B'].width = 28, 120
     for row in rm.iter_rows(min_row=2):
         row[0].font = Font(bold=True)
-    rm['A4'].fill = rm['B4'].fill = yellow
-    ws = wb['Roadmap']
-    heads = {c.value: c.column for c in ws[1]}
-    for name in (KW_COL, PRIORITY_COL):
-        for r in range(1, n + 2):
-            ws.cell(r, heads[name]).fill = yellow if r > 1 else PatternFill('solid', fgColor='BF8F00')
-        ws.column_dimensions[get_column_letter(heads[name])].width = 34
-    col = get_column_letter(heads[PRIORITY_COL])
-    dv = DataValidation(type='list', formula1=f'"{PRIORITIES}"', allow_blank=True)
-    ws.add_data_validation(dv)
-    dv.add(f'{col}2:{col}{n + 1}')
+        if row[0].value in (ALL_TABS_LABEL, 'Volume: read this first'):
+            row[0].fill = row[1].fill = yellow
+        if row[0].value == ALL_TABS_LABEL:
+            row[0].font = row[1].font = Font(bold=True, size=12, color='C00000')
+    # The Roadmap and the Cut tab are the same sheet: the same yellow columns for the SEO, orange H1 cells that need a location, the same dropdown.
+    for tab, rows in (('Roadmap', n), (CUT_TAB, n_cut)):
+        if tab not in wb.sheetnames:
+            continue
+        ws = wb[tab]
+        top = 2 if tab == CUT_TAB else 1
+        heads = {c.value: c.column for c in ws[top]}
+        for name in SEO_COLS + [PRIORITY_COL]:
+            for r in range(top, top + rows + 1):
+                ws.cell(r, heads[name]).fill = yellow if r > top else gold
+            ws.column_dimensions[get_column_letter(heads[name])].width = 34 if name in (KW_COL, PRIORITY_COL) else 42
+        for r in range(top + 1, top + rows + 1):
+            if ws.cell(r, heads['Page type']).value in LOCATION_H1_TYPES:
+                ws.cell(r, heads[H1_COL]).fill = orange
+        col = get_column_letter(heads[PRIORITY_COL])
+        dv = DataValidation(type='list', formula1=f'"{PRIORITIES}"', allow_blank=True)
+        ws.add_data_validation(dv)
+        dv.add(f'{col}{top + 1}:{col}{top + rows}')
+    lw = wb[LINK_TAB]
+    lheads = {c.value: c.column for c in lw[1]}
+    for r in range(1, lw.max_row + 1):
+        lw.cell(r, lheads[LINK_ANCHOR_COL]).fill = yellow if r > 1 else gold
+    lw.column_dimensions[get_column_letter(lheads[LINK_ANCHOR_COL])].width = 44
     wb.save(path)
 
 
