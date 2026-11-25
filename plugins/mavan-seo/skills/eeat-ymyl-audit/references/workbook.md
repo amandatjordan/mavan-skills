@@ -6,7 +6,7 @@
 
 What the SEO works from. No raw counts table: every line is a finding.
 
-- **Issues found, by priority:** one row per requirement and page type that has pages missing it, plus one row for the claims and one for external link issues. Columns: Priority (High / Medium / Low), Issue (a rollup sentence such as "52 of 56 service pages have no external link to a medical journal, .gov, .edu, .org or reputable medical site." or "Across the board, blog posts do not show an author (34 of 34)."), Pages / items, Where to look (the tab), Next steps (SEO / Dev / Content), Completion handoff (Dev or Content), and a yellow Status dropdown (Not started / In progress / Done). Sorted High first. Priorities, next steps and handoffs come from `rules.md`.
+- **Issues found, by priority:** one row per requirement and page type that has pages missing it, plus one row for the claims, one for external link issues, and a follow-up row per blog or condition page type whose sampled pages make 2+ claims with no credible source (`rules.md`). Columns: Priority (High / Medium / Low), Issue (a rollup sentence such as "52 of 56 service pages have no external link to a medical journal, .gov, .edu, .org or reputable medical site." or "Across the board, blog posts do not show an author (34 of 34)."), Pages / items, Where to look (the tab), Next steps (SEO / Dev / Content), Completion handoff (Dev or Content), and a yellow Status dropdown (Not started / In progress / Done). Sorted High first. Priorities, next steps and handoffs come from `rules.md`.
 - **Manual checks for the SEO:** the work only a person can do, with the tab and the number of items: choose a source and anchor per page (External Links Needed), decide each link with an issue (External Link Issues), verify each claim (Claims Needing Verification), confirm the reviewer and credentials with the client.
 - **Ownership:** the issues grouped by handoff, Dev and Content.
 - **Crawl notes:** the preflight warnings, and each empty extraction that was confirmed absent in Claude in Chrome.
@@ -25,7 +25,7 @@ One row per external link with any issue (Dead link, No response, Check manually
 
 ## 5. Claims Needing Verification (Content handoff)
 
-One row per claim, in the page's own words: URL, page type, claim, the credible sources the page cites now, yellow **Source to cite** (the SEO adds a real source for the claim), yellow **Claim status** dropdown (Accurate claim / Bad claim), yellow **Claim update** (the corrected wording to use on the site), Completion handoff (Content). A page Claude did not read has one row with "Not read".
+One row per claim on the sampled pages (5 per page type), in the page's own words: URL, page type, claim, the credible sources the page cites now, yellow **Source to cite** (the SEO adds a real source for the claim), yellow **Claim status** dropdown (Accurate claim / Bad claim), yellow **Claim update** (the corrected wording to use on the site), Completion handoff (Content). A page Claude did not read has one row with "Not read".
 
 ## 6. Sample Page Check
 

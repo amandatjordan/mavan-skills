@@ -1,6 +1,6 @@
 ---
 name: eeat-ymyl-audit
-description: Run Mavan's E-E-A-T & YMYL audit for a client site. Page types come from the client's IA or Content Prune & Merge workbook or a Page Type column in the crawl export; Claude in Chrome finds the extraction selectors on one sample page per type, and the person confirms what Claude found on those pages before the crawl and again before the workbook. A Screaming Frog or Sitebulb crawl checks every concern/condition, service and blog page against Mavan's requirements (medical reviewer, credible external source, credentials, blog author and date, MedicalCondition / MedicalProcedure / FAQPage schema, reviews, before/after photos, Google rating) and every external link's health; Claude reads every page for medical claims. Builds a workbook with a prioritised Recommendations rollup with SEO / Dev / Content next steps and handoffs, All Pages, External Links Needed, External Link Issues and Claims Needing Verification. Use for E-E-A-T audits, YMYL audits, content trust or quality reviews, AI-written or unedited content concerns, bad external linking, or "is this site's medical content credible".
+description: Run Mavan's E-E-A-T & YMYL audit for a client site. Page types come from the client's IA or Content Prune & Merge workbook or a Page Type column in the crawl export; Claude in Chrome finds the extraction selectors on one sample page per type, and the person confirms what Claude found on those pages before the crawl and again before the workbook. A Screaming Frog or Sitebulb crawl checks every concern/condition, service and blog page against Mavan's requirements (medical reviewer, credible external source, credentials, blog author and date, MedicalCondition / MedicalProcedure / FAQPage schema, reviews, before/after photos, Google rating) and every external link's health; Claude reads 5 random pages of each type for medical claims and flags content for a closer review when the sample shows unsourced claims. Builds a workbook with a prioritised Recommendations rollup with SEO / Dev / Content next steps and handoffs, All Pages, External Links Needed, External Link Issues and Claims Needing Verification. Use for E-E-A-T audits, YMYL audits, content trust or quality reviews, AI-written or unedited content concerns, bad external linking, or "is this site's medical content credible".
 ---
 
 # E-E-A-T & YMYL audit (Mavan SOP)
@@ -93,10 +93,12 @@ Done when there is no STOP, no CHECK, and the person has confirmed every sample 
 ## Step 6: Accuracy review
 
 ```
-python $SKILL/scripts/audit.py queue --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --checks work/checks.tsv --out work
+python $SKILL/scripts/audit.py queue --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --checks work/checks.tsv --sample-per-type 5 --out work
 ```
 
-It prints the pages and body word count for each page type, and writes `work/queue.tsv` and one text file per page in `work/text/`. **Read every page for medical claims** unless the person limits it (`--types`, `--max-per-type N`, `--max N`; use the same options in Step 7). Tell the person the total word count. If it is more than you can read in this conversation, ask whether to split the reading across subagents (each reads a batch of text files and returns its rows of `claims.tsv`); if they say no, read as many as fit and the rest show "Not read".
+It prints the pages and body word count for each page type, and writes `work/queue.tsv` and one text file per page in `work/text/`. **Claims are read on a sample: 5 pages of each page type**, picked at random from pages with at least 200 words of body text (hub and list pages make no claims), the same pages on every run. Issues are usually template-wide, so a sample shows whether claims are a problem without reading every page. Use the same `--sample-per-type 5` in Step 7. Read every page only if the person asks (leave the option out); if that is more than you can read in this conversation, ask whether to split the reading across subagents.
+
+When the sampled blog or condition pages make 2 or more claims on pages that cite no credible source, the workbook adds a Low priority follow-up: if the other changes do not bring improvements, the rest of that page type needs a closer review for claims.
 
 Read the text files and write `work/claims.tsv` (tab separated, header `url`, `specific_claims`, `claims_to_verify`). Do not paste page text into the chat.
 
@@ -112,7 +114,7 @@ Done when every page in `work/queue.tsv` has a row in `claims.tsv`.
 python $SKILL/scripts/audit.py build --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --checks work/checks.tsv --chrome work/chrome.tsv --claims work/claims.tsv --out DOMAIN_eeat_ymyl_audit.xlsx
 ```
 
-Add the same `--types`, `--max-per-type` and `--max` as in Step 6 if used. Read what it prints: every QA line must say PASS.
+Add the same `--sample-per-type` (and `--types`, `--max-per-type`, `--max` if used) as in Step 6. Read what it prints: every QA line must say PASS.
 
 Done when every check prints PASS and you have opened the workbook and checked: the Recommendations rollup reads as real findings (X of Y pages, by page type) with a next step and handoff on each; 5 rows of All Pages match the crawl; External Links Needed lists only pages with no credible source; External Link Issues rows have a real error (dead means 400 or higher; No shared words means none of the anchor's words appear in the destination's title or H1, or its URL when the crawler gave no title or H1); each claim is its own row.
 

@@ -63,7 +63,9 @@ This cannot say whether the destination supports the sentence it is linked from.
 
 ## Claims Needing Verification
 
-Every audited page is read for medical claims unless the person limits it (`--types`, `--max-per-type`, `--max`). Claude lists each claim in the page's own words; each claim is one row. Claude never judges whether a claim is true: the SEO adds a source, marks it Accurate claim or Bad claim, and writes the updated claim for Content. A page not read shows "Not read".
+Claims are read on a sample: `--sample-per-type 5` picks 5 pages of each type at random (seeded by page type, so the same pages on every run) from pages with at least 200 words of body text, or from all pages of the type when fewer than 5 have that many. Claude lists each claim in the page's own words; each claim is one row.
+
+**Follow-up review:** for blog and condition page types only, when the sampled pages' claims on pages that cite no credible source add up to 2 or more, and pages of that type were left out of the sample, the Recommendations tab adds a Low priority issue (Content): if the other changes do not bring improvements, the rest of that page type needs a closer review for claims. Claude never judges whether a claim is true: the SEO adds a source, marks it Accurate claim or Bad claim, and writes the updated claim for Content. A page not read shows "Not read".
 
 ## Sample page checks
 

@@ -313,6 +313,39 @@ class PageTypeLabels(unittest.TestCase):
         self.assertTrue(audit.required_for("reviewer", "condition"))
         self.assertFalse(audit.required_for("published", "service"))
 
+    def test_claims_sample_and_follow_up_review(self):
+        common = ["--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+                  "--checks", self.f["checks.tsv"], "--external", self.f["external.csv"]]
+        q1 = run("queue", *common, "--out", self.d / "s1", "--sample-per-type", "1").stdout
+        q2 = run("queue", *common, "--out", self.d / "s2", "--sample-per-type", "1").stdout
+        self.assertIn("Queue: 3 pages", q1)
+        rows = (self.d / "s1/queue.tsv").read_text().splitlines()[1:]
+        self.assertEqual(rows, (self.d / "s2/queue.tsv").read_text().splitlines()[1:])  # the same pages every run
+        sampled = [r.split("\t")[1] for r in rows]
+        claims = self.d / "claims_two.tsv"
+        with open(claims, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh, delimiter="\t")
+            w.writerow(["url", "specific_claims", "claims_to_verify"])
+            for u in sampled:
+                w.writerow([u, "Yes", "claim one | claim two"])
+        cfg = json.loads(Path(self.f["config.json"]).read_text())
+        cfg["credible_domains"] = []  # no source counts as credible, so every sampled page is unsourced
+        nocred = self.d / "cfg_nocred.json"
+        nocred.write_text(json.dumps(cfg))
+        args = ["--config", nocred] + common[2:]
+        out = self.d / "sample.xlsx"
+        run("build", *args, "--chrome", self.f["chrome.tsv"], "--claims", claims, "--sample-per-type", "1", "--out", out)
+        rec = [r for r in load_workbook(out)["Recommendations"].iter_rows(values_only=True) if r and r[0] in ("High", "Medium", "Low")]
+        follow = {r[1].split(" make ")[0]: r for r in rec if "need a closer review for claims" in (r[1] or "")}
+        self.assertEqual(set(follow), {"The sampled concern / condition pages", "The sampled blog posts"})  # never services
+        self.assertIn("the other 2 concern / condition pages need a closer review", follow["The sampled concern / condition pages"][1])
+        self.assertEqual(follow["The sampled blog posts"][5], "Content")
+        # with credible sources on the sampled pages, there is no follow-up
+        out2 = self.d / "sample2.xlsx"
+        run("build", *common, "--chrome", self.f["chrome.tsv"], "--claims", claims, "--sample-per-type", "1", "--out", out2)
+        rec2 = [r for r in load_workbook(out2)["Recommendations"].iter_rows(values_only=True) if r and r[0] == "Low"]
+        self.assertFalse(any("closer review" in (r[1] or "") for r in rec2))
+
     def test_page_type_without_paths_needs_a_source(self):
         cfg = json.loads(json.dumps(fixture.CONFIG))
         cfg["page_types"].append({"name": "Area"})
