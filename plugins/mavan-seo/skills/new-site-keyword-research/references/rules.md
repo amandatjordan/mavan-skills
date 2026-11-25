@@ -10,6 +10,7 @@ Category > Service > Sub-Service > Brand / Device. A **Concern** is a problem pe
 
 - Every item the person lists that matches a taxonomy row.
 - The **parent Service** of any listed Sub-Service or Brand / Device, marked "Implied" (the taxonomy's implication rule: a Brand / Device implies its Service). Sub-Services are not implied by a brand; unlisted ones are suggested rows with Client offers it? left blank.
+- **Custom concerns**: an unmatched concern the person chooses to keep anyway (`level` = `Custom concern` in the selection). It is an own Concern page with Client offers it? = Yes, no keywords, volume, difficulty or CPC, a note to research volume separately, and a build warning. Its links come from the selection's `treated_by` column (taxonomy Service or Sub-Service names), not from the taxonomy's Implies Offered. The build stops if `treated_by` names something that is not a Service or Sub-Service, or if the name is already a taxonomy concern.
 - Left out, with the reason on the Not in the plan tab: items whose taxonomy note says not US-approved, not FDA-approved, investigational or discontinued, and typed items with no match.
 - **Dental is included, with no minimum volume.** Every listed dental Service, Sub-Service, Brand / Device and Concern gets its own page, and every unlisted dental Sub-Service and Brand is a suggested row with Client offers it? left blank. The taxonomy has keyword data for dental concerns only, so other dental rows show no keywords and a note to research volume separately.
 

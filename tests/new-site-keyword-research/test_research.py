@@ -224,6 +224,47 @@ class ResearchTest(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('no taxonomy row', p.stdout + p.stderr)
 
+    def test_unmatched_concern_can_be_kept_as_a_custom_target(self):
+        def edit(rows):
+            for r in rows:
+                if r['input'] == 'uneven tone':
+                    r.update(level='Custom concern', concern='Uneven Tone', treated_by='Facials')
+        p, out = self.match_and_build(services='facial', concerns='uneven tone', edit=edit)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn('not in the taxonomy', p.stdout)
+        pages = pd.read_excel(out, sheet_name='Pages').set_index('Service / sub-service')
+        row = pages.loc['Uneven Tone']
+        self.assertEqual(row['Level'], 'Concern')
+        self.assertEqual(row['Recommendation'], 'Own page')
+        self.assertEqual(row[OFFERS], 'Yes')
+        self.assertEqual(row['Keywords in taxonomy'], 0)
+        self.assertTrue(pd.isna(row['Primary keyword volume (national)']))
+        self.assertIn('Not in the taxonomy', row['Notes'])
+        self.assertIn('Facials (Medium)', row[LINKS])
+        self.assertIn('Uneven Tone (Medium)', pages.loc['Facials', LINKS])
+        self.assertEqual(len(pd.read_excel(out, sheet_name='Not in the plan')), 0)
+
+    def test_match_offers_custom_concern_for_unmatched_concern(self):
+        p = run('match', '--services', 'facial', '--concerns', 'uneven tone', '--out', self.tmp / 'work', '--taxonomy', self.tax)
+        self.assertIn('Custom concern', p.stdout)
+
+    def test_custom_concern_rejects_bad_links_and_taxonomy_names(self):
+        def bad_link(rows):
+            for r in rows:
+                if r['input'] == 'uneven tone':
+                    r.update(level='Custom concern', concern='Uneven Tone', treated_by='No Such Service')
+        p, _ = self.match_and_build(services='facial', concerns='uneven tone', edit=bad_link)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('treated_by', p.stdout + p.stderr)
+
+        def taxonomy_name(rows):
+            for r in rows:
+                if r['input'] == 'uneven tone':
+                    r.update(level='Custom concern', concern='Lines')
+        p, _ = self.match_and_build(services='facial', concerns='uneven tone', edit=taxonomy_name)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('is a taxonomy concern', p.stdout + p.stderr)
+
     def test_more_than_five_concerns_warns(self):
         p, out = self.match_and_build(services='facial', concerns='wrinkles; marks; extra1; extra2; extra3; extra4')
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)

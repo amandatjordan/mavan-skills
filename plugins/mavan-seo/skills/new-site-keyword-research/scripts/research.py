@@ -48,8 +48,11 @@ OFFERS_COL = 'Client offers it? (Yes / No)'
 LINKS_COL = 'Internal links out (priority)'
 ANCHOR_COL = 'Anchor text for links to this page (SEO fills in)'
 LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
+# A concern the taxonomy does not have, which the person chose to keep as a target anyway. It gets a Concern page
+# with no keyword data, and links only to the Services / Sub-Services named in its treated_by column.
+CUSTOM_CONCERN = 'Custom concern'
 DEPTH = {'Service': 1, 'Sub-Service': 2, 'Brand / Device': 3}
-SELECTION_COLS = ['kind', 'input', 'level', 'service', 'sub_service', 'brand_device', 'concern', 'status', 'candidates']
+SELECTION_COLS = ['kind', 'input', 'level', 'service', 'sub_service', 'brand_device', 'concern', 'treated_by', 'status', 'candidates']
 
 
 def s(v):
@@ -127,6 +130,8 @@ class Taxonomy:
 
     def keywords(self, n):
         k = self.kw
+        if n.get('custom'):   # not in the taxonomy, so no keyword can belong to it
+            return k.iloc[0:0]
         if n['Level'] == 'Service':
             m = (k['Matched Level'] == 'Service') & (k['Service'] == n['Service'])
         elif n['Level'] == 'Sub-Service':
@@ -194,6 +199,7 @@ def cmd_match(a):
             'sub_service': first['Sub-Service'] if first and first['Level'] == 'Sub-Service' else '',
             'brand_device': first['Brand / Device'] if first and first['Level'] == 'Brand / Device' else '',
             'concern': first['Concern'] if first and first['Level'] == 'Concern' else '',
+            'treated_by': '',
             'status': status,
             'candidates': ' | '.join(f"{n['Level']}: {label(n)}" for n in cands)})
     with open(out / 'selection.tsv', 'w', newline='') as f:
@@ -208,6 +214,9 @@ def cmd_match(a):
         if r['status'] != 'ok':
             print(f"  [{r['status']}] {r['kind']}: {r['input']!r} -> {r['candidates'] or 'no match'}")
     print('Review every row: correct level, service, sub_service, brand_device and concern in place.')
+    if any(r['kind'] == 'concern' and r['status'] == 'none' for r in rows):
+        print(f"Unmatched concern: map it to a taxonomy concern, leave level blank to drop it, or set level to '{CUSTOM_CONCERN}' "
+              "to keep it as a target anyway (name in concern, linked pages in treated_by).")
 
 
 # --- build ---------------------------------------------------------------------------------------
@@ -244,6 +253,15 @@ def whole_service(tax, n):
     return f"{top['Keyword']} ({int(top['Volume']):,})"
 
 
+def custom_concern(tax, r):
+    """A Concern node for a concern the taxonomy does not have. Its links come from treated_by, checked against real Service / Sub-Service names."""
+    real = {n['name'] for n in tax.nodes if n['Level'] in ('Service', 'Sub-Service')}
+    treated = [x.strip() for x in r['treated_by'].split(';') if x.strip()]
+    return {'Level': 'Concern', 'Category': 'Concerns', 'Service': '', 'Sub-Service': '', 'Brand / Device': '',
+            'Concern': r['concern'], 'Practice Type': '', 'Implies Offered': '; '.join(treated), 'Status / Notes': '',
+            'Match Terms (regex)': '', 'dental': False, 'name': r['concern'], 'custom': True}, [t for t in treated if t not in real]
+
+
 def parse_selection(tax, path):
     rows = list(csv.DictReader(open(path, newline=''), delimiter='\t'))
     if not rows:
@@ -254,6 +272,19 @@ def parse_selection(tax, path):
         r = {c: s(r.get(c)) for c in SELECTION_COLS}
         if not r['level']:
             unmatched.append({'input': r['input'], 'kind': r['kind'], 'reason': 'No taxonomy match. Ask the person what it is, or leave it out of this research.'})
+            continue
+        if r['level'] == CUSTOM_CONCERN:
+            if not r['concern']:
+                problems.append(f"line {i}: {CUSTOM_CONCERN} needs a name in the concern column")
+                continue
+            if tax.find('Concern', concern=r['concern']):
+                problems.append(f"line {i}: {r['concern']!r} is a taxonomy concern: set level to Concern, not {CUSTOM_CONCERN}")
+                continue
+            n, bad = custom_concern(tax, r)
+            if bad:
+                problems.append(f"line {i}: treated_by names no taxonomy Service or Sub-Service: {bad}")
+                continue
+            listed.append((r, n))
             continue
         if r['level'] not in LEVELS:
             problems.append(f"line {i}: level {r['level']!r} is not one of {LEVELS}")
@@ -317,7 +348,8 @@ def build_plan(tax, listed):
         if n['Level'] in ('Service', 'Concern'):
             p['own'] = True
             p['why'] = ('Service the client lists' if p['listed'] else 'Parent of ' + ', '.join(p['implied_by'])) if n['Level'] == 'Service' \
-                else 'Concern the client lists (new sites get very few concern pages)'
+                else ('Concern the client lists. Not in the taxonomy: kept as a target at the person\'s request' if n.get('custom')
+                      else 'Concern the client lists (new sites get very few concern pages)')
         else:
             p['own'] = n['dental'] or p['head_vol'] >= PAGE_MIN_VOLUME
             if n['dental']:
@@ -409,6 +441,8 @@ def cmd_build(a):
     for p in concerns_listed:
         if not p.get('linked'):
             warnings.append(f"Concern '{p['node']['name']}' points to no service on this plan ({p['node']['Implies Offered'] or 'none'}): nothing links to its page.")
+        if p['node'].get('custom'):
+            warnings.append(f"Concern '{p['node']['name']}' is not in the taxonomy: no keyword data. Research its volume separately and add it to service-taxonomy.xlsx.")
 
     # order: Service groups in the order they were listed, then Concerns
     service_order = []
@@ -447,7 +481,10 @@ def cmd_build(a):
             note.append('Added because it is the parent of a listed item')
         if n['Status / Notes'] and not n['Status / Notes'].startswith(('NEW v5.1', 'Dental')) and 'Not a page gap' not in n['Status / Notes']:
             note.append('Taxonomy note: ' + n['Status / Notes'])
-        if not p['count']:
+        if n.get('custom'):
+            note.append('Not in the taxonomy: kept as a target at the person\'s request. No keyword data, so research its volume separately, '
+                        'and add it to service-taxonomy.xlsx. Its links come from the treated_by column, not the taxonomy')
+        elif not p['count']:
             note.append('No keywords in the taxonomy for this item (dental has none yet): research its volume separately')
         if n['Status / Notes'].startswith('NEW v5.1'):
             note.append('New in the taxonomy and not yet confirmed')
@@ -490,7 +527,7 @@ def cmd_build(a):
     # checks
     checks = []
     own_labels = {p['label'] for p in plan.values() if p['own']}
-    checks.append(('Every listed item resolved to a taxonomy row', True))
+    checks.append(('Every listed item resolved to a taxonomy row or a custom concern', True))
     checks.append(('Every Section row has a parent page that is an own page', all(plan[k]['own'] for p in plan.values() if not p['own'] for k in p['parents']) and all(p['parents'] for p in plan.values() if not p['own'])))
     checks.append(('Every internal link joins two own pages', all(l['From page'] in own_labels and l['To page'] in own_labels for l in links)))
     checks.append(('No page label appears twice', len(pages['Service / sub-service']) == pages['Service / sub-service'].nunique()))
@@ -516,6 +553,9 @@ def cmd_build(a):
         ('Anchor text', 'Not suggested. The SEO fills in the anchor text to use for links to each page in the yellow column.'),
         ('Sections searchers look for', 'Counts of keywords with a cost, before & after, recovery / risks, comparison, candidacy or best / top word. A simple word check that suggests sections to add to the page; it does not change any page decision.'),
         ('Dental', 'Dental is in the plan with no minimum volume: every listed dental service, sub-service, brand and concern gets its own page. The taxonomy has keyword data for dental concerns only, so other dental rows show no keywords and a note to research volume separately.'),
+        ('Custom concerns', f'A concern the taxonomy does not have can be kept as a target anyway ("{CUSTOM_CONCERN}" in the selection). It gets a Concern page '
+                            'with no keywords, volume, difficulty or CPC (research those separately), and links only to the Service or Sub-Service pages chosen for it. '
+                            'Add it to service-taxonomy.xlsx so the next plan has its keywords.'),
         ('Left out', 'Treatments the taxonomy marks as not approved, investigational or discontinued (listed on the Not in the plan tab), and local pages. City searches are not part of this workbook.'),
         ('What the client listed', '; '.join(f"{r['kind']}: {r['input']}" for r, n in listed)),
         ('Warnings', ' | '.join(warnings) if warnings else 'None'),
