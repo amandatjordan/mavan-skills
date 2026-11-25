@@ -6,6 +6,8 @@ Everything below is done by `scripts/audit.py`. There is no scoring, tiering or 
 
 A crawled page is audited when it returned 200, is indexable (when the export says so) and its page type label (from the IA or Content Prune & Merge workbook, or the crawl's label column) belongs to a page type in the config. Everything else is left out and counted in the preflight warnings (did not return 200, not indexable, no page type).
 
+An extraction (author, reviewer, dates, schema, testimonials, before/after, rating) that is empty on every page of a page type is a **CHECK**, not a finding: the queue and the workbook stop until Claude has checked the selector in Claude in Chrome and either fixed it (new crawl) or recorded it as `Confirmed absent` in `work/checks.tsv` with the pages checked.
+
 ## Which external links count
 
 A link counts as a citation when its destination is on a host that is not the client's own, it comes from an audited page, it is a hyperlink (not an image or script), and, when the export has a link position column, its position is one of `content_link_positions`. A page linking to the same destination twice counts once. Links in menus and footers (social profiles and so on) are left out.

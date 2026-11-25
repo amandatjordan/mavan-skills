@@ -131,6 +131,10 @@ CHROME = [  # url path, what a visitor sees, agrees, other opportunities (all fa
 ]
 
 
+CHECKS = [("Author 1", ["Blog"]), ("Reviewer 1", ["Blog"]), ("Updated 1", ["Blog"]), ("Testimonials 1", ["Condition", "Blog"]),
+          ("Before After 1", ["Condition", "Blog"]), ("Rating 1", ["Condition", "Blog"])]
+
+
 def write_csv(path, header, rows):
     with open(path, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
@@ -164,4 +168,10 @@ def make(d):
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["url", "visitor_sees", "agrees", "opportunities"])
         w.writerows([(SITE + p, a, b, c) for p, a, b, c in CHROME])
-    return {k: d / k for k in ("crawl.csv", "outlinks.csv", "external.csv", "config.json", "claims.tsv", "chrome.tsv")}
+    with open(d / "checks.tsv", "w", newline="", encoding="utf-8") as fh:  # extractions empty on a whole type, checked in Chrome
+        w = csv.writer(fh, delimiter="\t")
+        w.writerow(["column", "page_type", "result", "pages_checked"])
+        for col, types in CHECKS:
+            for t in types:
+                w.writerow([col, t, "Confirmed absent", "sample page and the page the selector was tested on"])
+    return {k: d / k for k in ("crawl.csv", "outlinks.csv", "external.csv", "config.json", "claims.tsv", "chrome.tsv", "checks.tsv")}

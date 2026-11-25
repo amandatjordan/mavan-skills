@@ -43,6 +43,8 @@ Load the `chrome-browser` skill and use Claude in Chrome; open a new tab. Open o
 
 On each confirmed page, find a selector for each item below (`references/crawl-setup.md` says what each should return). Test it on the page so it returns what you expect. Where an item is not on the site, record "not on this site".
 
+A selector found on a page outside the audit (a testimonials page, a gallery page) is not tested yet. Sites often show the same thing differently inside service, concern and blog templates (review cards, a before/after slider, star icons). Before writing the rule, look for that element on pages of the audited types in Claude in Chrome (fetch a few pages of each type and look for the classes, star characters, `data-` attributes or image pairs), and make the selector match every form you find. Record the audited page it matched on.
+
 Body text of the article only (not the menu or footer) · author · reviewer · published date · updated date · schema types (JSON-LD `@type`) · testimonials or reviews · before/after or results photos · rating.
 
 Also look at what a visitor sees on each page: whether the author and reviewer are visible and where, whether results photos look like real patient or customer results or stock images, whether review or rating widgets show, trust signals (badges, credentials, certifications, awards), disclaimers, calls to action and where they sit, readability and layout, and any other opportunity to build trust that stands out.
@@ -66,26 +68,27 @@ It prints READY, WARN and STOP items, how many pages matched each page type and 
 
 - **STOP** items must be fixed before going on. Tell the person exactly what to change (an extraction rule, a crawl setting) and re-run when they send a new export.
 - Check the sample body text yourself: if it includes the menu or footer, the body selector is wrong; fix it and ask for a new crawl.
+- **CHECK** items: an extraction is empty on every page of a page type. Treat each as a selector problem until proven otherwise; never report it as a finding first. In Claude in Chrome, reopen the sample page of that type and the page the selector was tested on, then look at a few other pages of that type for the element in any form. If you find it, fix the selector, give the person the corrected rule and ask for a new crawl. If it truly is not there, add a row to `work/checks.tsv` (tab separated, header `column`, `page_type`, `result`, `pages_checked`) with result `Confirmed absent` and the pages you checked, and pass `--checks work/checks.tsv` to every later command. The queue and the workbook stop while any CHECK is open.
 - **WARN** items continue. They are shown at the top of the workbook; tell the person in plain words.
 
-Done when there is no STOP and the body text is the article.
+Done when there is no STOP, no CHECK, and the body text is the article.
 
 ## Step 5: Status codes of the external destinations
 
 Use the person's own crawler; never ask them to use a different one. Tell them how to export every external URL with its HTTP status code from it (`references/crawl-setup.md` section 4): in Sitebulb, the external URLs list from the same audit; in Screaming Frog, a list-mode crawl of `work/external_urls.txt`, which also gives each destination's title and H1. Crawlers that only status-check external URLs (Sitebulb) give no title or H1; the script then compares the anchor with the words in the destination's URL. Wait for the export. Then:
 
 ```
-python $SKILL/scripts/audit.py preflight --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --chrome work/chrome.tsv --out work
+python $SKILL/scripts/audit.py preflight --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --checks work/checks.tsv --chrome work/chrome.tsv --out work
 ```
 
 It also prints what the crawl detected on each sample page. Compare it with what you saw in Chrome and set `agrees` in `work/chrome.tsv` to `Yes`, `Partly` or `No`. Where it is `Partly` or `No`, say what differs in `visitor_sees`: that is an extraction rule that needs fixing. If a sample page is "not in the crawl", the URL or its page type label is wrong.
 
-Done when there is no STOP and every sample page has `agrees` filled in.
+Done when there is no STOP, no CHECK, and every sample page has `agrees` filled in.
 
 ## Step 6: Accuracy review
 
 ```
-python $SKILL/scripts/audit.py queue --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --out work
+python $SKILL/scripts/audit.py queue --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --checks work/checks.tsv --out work
 ```
 
 It prints the pages and body word count for each page type, and writes `work/queue.tsv` and one text file per page in `work/text/`. Tell the person the counts and ask which page types Claude should read, and whether to stop at a number of pages (default: all of them). If they choose, re-run with `--types Condition,Service`, `--max-per-type N` (the first N pages of each type, for example 5 of each) and/or `--max N`, and use the same options in Step 7.
@@ -101,7 +104,7 @@ Done when every page in `work/queue.tsv` has a row in `claims.tsv`.
 ## Step 7: Build the workbook
 
 ```
-python $SKILL/scripts/audit.py build --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --chrome work/chrome.tsv --claims work/claims.tsv --out DOMAIN_eeat_ymyl_audit.xlsx
+python $SKILL/scripts/audit.py build --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --checks work/checks.tsv --chrome work/chrome.tsv --claims work/claims.tsv --out DOMAIN_eeat_ymyl_audit.xlsx
 ```
 
 Add the same `--types`, `--max-per-type` and `--max` as in Step 6 if used. Read what it prints: every QA line must say PASS.

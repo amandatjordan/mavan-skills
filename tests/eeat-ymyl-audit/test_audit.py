@@ -40,7 +40,7 @@ class Audit(unittest.TestCase):
 
     def common(self):
         f = self.f
-        return ["--config", f["config.json"], "--crawl", f["crawl.csv"], "--outlinks", f["outlinks.csv"]]
+        return ["--config", f["config.json"], "--crawl", f["crawl.csv"], "--outlinks", f["outlinks.csv"], "--checks", f["checks.tsv"]]
 
     def test_preflight_part_one_writes_external_list(self):
         out = self.d / "work1"
@@ -256,9 +256,9 @@ class PageTypeLabels(unittest.TestCase):
         cfg["columns"]["body"] = "Body *"
         path = self.d / "cfg_split.json"
         path.write_text(json.dumps(cfg))
-        a = run("queue", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+        a = run("queue", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"], "--checks", self.f["checks.tsv"],
                 "--external", self.f["external.csv"], "--out", self.d / "q1").stdout
-        b = run("queue", "--config", path, "--crawl", crawl, "--outlinks", self.f["outlinks.csv"],
+        b = run("queue", "--config", path, "--crawl", crawl, "--outlinks", self.f["outlinks.csv"], "--checks", self.f["checks.tsv"],
                 "--external", self.f["external.csv"], "--out", self.d / "q2").stdout
         self.assertEqual(a, b.replace(str(self.d / "q2"), str(self.d / "q1")))
         self.assertNotIn("Not Set", (self.d / "q2/text/001.txt").read_text())
@@ -275,7 +275,7 @@ class PageTypeLabels(unittest.TestCase):
             for r in rows:
                 w.writerow([r[ucol], r[scol]])
         out = self.d / "audit_url.xlsx"
-        p = run("build", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+        p = run("build", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"], "--checks", self.f["checks.tsv"],
                 "--external", ext, "--claims", self.f["claims.tsv"], "--chrome", self.f["chrome.tsv"], "--out", out)
         self.assertNotIn("FAIL", p.stdout)
         links = list(load_workbook(out)["External Links"].iter_rows(min_row=2, values_only=True))
@@ -292,6 +292,16 @@ class PageTypeLabels(unittest.TestCase):
         self.assertEqual(audit.schema_types("{'@type':'Organization'} {'@type':'FAQPage','mainEntity':[{'@type':'Question'}]}"),
                          "Organization, FAQPage")
         self.assertIn(405, audit.BLOCKED)
+
+    def test_build_stops_when_an_empty_extraction_is_not_checked_in_chrome(self):
+        p = run("build", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+                "--external", self.f["external.csv"], "--chrome", self.f["chrome.tsv"], "--out", self.d / "x.xlsx", check=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("CHECK: Rating 1 is empty on all 3 Condition pages", p.stdout)
+        q = run("preflight", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+                "--external", self.f["external.csv"], "--checks", self.f["checks.tsv"], "--out", self.d / "wc")
+        self.assertIn("confirmed absent in Claude in Chrome", q.stdout)
+        self.assertNotIn("CHECK:", q.stdout)
 
     def test_page_type_without_paths_needs_a_source(self):
         cfg = json.loads(json.dumps(fixture.CONFIG))

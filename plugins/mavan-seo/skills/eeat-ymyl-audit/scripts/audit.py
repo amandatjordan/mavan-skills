@@ -428,9 +428,22 @@ def analyze(args, need_external):
             empty = [pages[k]["url"] for k in order if pages[k][key] is not None and not present(pages[k][key])]
             if empty:
                 findings.append(("WARN", f"{lab} is empty on {len(empty)} of {n_pages} pages (first: {', '.join(empty[:3])}). If the pages do show it, the selector is wrong."))
-        for lab, key in (("testimonial", "testimonials"), ("before/after photo", "before_after"), ("rating", "rating")):
-            if cols[key] and not any(present(pages[k][key]) for k in order):
-                findings.append(("WARN", f"No page has a {lab} marker hit. If the site shows them, the marker is wrong."))
+        # An extraction that is empty on every page of a page type is more often a wrong selector than a site that lacks
+        # the element. It must be checked in Claude in Chrome (work/checks.tsv) before the queue and the workbook.
+        confirmed = load_checks(getattr(args, "checks", None), findings)
+        for key in ("author", "reviewer", "published", "updated", "schema", "testimonials", "before_after", "rating"):
+            if not cols[key]:
+                continue
+            for t in dict.fromkeys(pages[k]["ptype"] for k in order):
+                tp = [k for k in order if pages[k]["ptype"] == t]
+                if any(present(pages[k][key]) for k in tp):
+                    continue
+                hit = confirmed.get((cols[key].lower(), t.lower())) or confirmed.get((key, t.lower()))
+                if hit:
+                    findings.append(("OK", f"{cols[key]} is empty on all {len(tp)} {t} pages: confirmed absent in Claude in Chrome ({hit})."))
+                else:
+                    findings.append(("CHECK", f"{cols[key]} is empty on all {len(tp)} {t} pages (for example {pages[tp[0]]['url']}). "
+                                              "Check the selector in Claude in Chrome before going on, then record it in work/checks.tsv."))
         if not opos:
             findings.append(("WARN", "The outlinks export has no link position column: links in the menu and footer are counted as citations."))
         elif skipped_position:
@@ -449,15 +462,30 @@ def analyze(args, need_external):
     return dict(findings=findings, cfg=cfg, pages=pages, order=order, links=links, dest_urls=dest_urls)
 
 
+def load_checks(path, findings):
+    """work/checks.tsv: column, page_type, result, pages_checked. Only result "Confirmed absent" with the pages checked counts."""
+    out = {}
+    if not path:
+        return out
+    try:
+        with open(path, newline="", encoding="utf-8") as fh:
+            for r in csv.DictReader(fh, delimiter="\t"):
+                if str(r.get("result", "")).strip().lower() == "confirmed absent" and str(r.get("pages_checked", "")).strip():
+                    out[(str(r.get("column", "")).strip().lower(), str(r.get("page_type", "")).strip().lower())] = r["pages_checked"].strip()
+    except OSError as e:
+        findings.append(("STOP", f"Cannot read the checks file {path}: {e}"))
+    return out
+
+
 def print_findings(findings):
     for lvl, msg in findings:
         print(f"{'READY' if lvl == 'OK' else lvl}: {msg}")
 
 
 def stop_if_needed(res):
-    if any(l == "STOP" for l, _ in res["findings"]):
+    if any(l in ("STOP", "CHECK") for l, _ in res["findings"]):
         print_findings(res["findings"])
-        sys.exit("STOP: fix the items above before building.")
+        sys.exit("STOP: fix the items above before building. Every CHECK needs a Claude in Chrome check recorded in work/checks.tsv (--checks).")
 
 
 # ------------------------------------------------------------------ commands
@@ -745,6 +773,7 @@ def main():
         s.add_argument("--crawl", required=True)
         s.add_argument("--outlinks", required=True)
         s.add_argument("--external")
+        s.add_argument("--checks")
         s.add_argument("--out", required=True)
         if name in ("queue", "build"):
             s.add_argument("--types")
