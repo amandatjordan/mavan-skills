@@ -103,8 +103,10 @@ class GapTest(unittest.TestCase):
         p = run(*self.args('build', out))
         self.assertIn('All checks passed', p.stdout)
         wb = load_workbook(out)
-        self.assertEqual(wb.sheetnames, ['Read Me', 'Summary', 'Service opportunities', 'Keywords', 'Local', 'Competitor pages',
-                                         'Unassigned', 'Branded removed'])
+        self.assertEqual(wb.sheetnames, ['Read Me', 'Summary', 'Service opportunities', 'Other services', 'Keywords', 'Local',
+                                         'Competitor pages', 'Unassigned', 'Branded removed'])
+        self.assertTrue(wb['Read Me']['A2'].value.startswith('ACTION NEEDED'))
+        self.assertEqual(wb['Summary']['A2'].value, 'ACTION NEEDED')
         summ = {r[0]: r[1] for r in wb['Summary'].iter_rows(min_row=2, values_only=True) if r[0]}
         self.assertEqual(summ['Removed as branded (a competitor name)'], 2)
         self.assertEqual(summ['No competitor ranks (empty position columns)'], 1)
@@ -176,6 +178,39 @@ class GapTest(unittest.TestCase):
             write_csv(self.tmp / f'{d}.csv', rh, [['botox cost', 900, 20, 2, f'https://{d}/botox-cost/']])
         p = run(*self.args('preflight', self.tmp / 'work'))
         self.assertIn('ahrefs', p.stdout)
+
+
+    def test_review_loop(self):
+        """Yes on Other services or Unassigned becomes a service on the next build; No is not suggested again."""
+        out = self.tmp / 'out.xlsx'
+        run(*self.args('build', out))
+        wb = load_workbook(out)
+        un = wb['Unassigned']
+        head = [c.value for c in un[1]]
+        self.assertTrue(head[5].startswith('Offered by our client') and head[6].startswith('Service name'))
+        kws = [un.cell(r, 1).value for r in range(2, un.max_row + 1)]
+        self.assertIn('skin care routine', kws)
+        r = kws.index('skin care routine') + 2
+        un.cell(r, 6).value = 'Yes'
+        un.cell(r, 7).value = 'Skin care'
+        wb.save(self.tmp / 'marked.xlsx')
+        out2 = self.tmp / 'out2.xlsx'
+        p = run(*self.args('build', out2), '--review', self.tmp / 'marked.xlsx')
+        self.assertIn('1 service(s) added', p.stdout)
+        cfg = json.loads(self.cfg_path.read_text())
+        self.assertIn({'service': 'Skin care', 'terms': ['skin care routine']}, cfg['service_terms'])
+        names = [r[0] for r in load_workbook(out2)['Service opportunities'].iter_rows(min_row=2, values_only=True)]
+        self.assertIn('Skin care', names)
+        kws2 = [r[0] for r in load_workbook(out2)['Unassigned'].iter_rows(min_row=2, values_only=True)]
+        self.assertNotIn('skin care routine', kws2)
+
+    def test_review_needs_other_services_tab(self):
+        from openpyxl import Workbook
+        wb = Workbook()
+        wb.save(self.tmp / 'bad.xlsx')
+        p = run(*self.args('build', self.tmp / 'o.xlsx'), '--review', self.tmp / 'bad.xlsx', check=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('Other services', p.stdout + p.stderr)
 
 
 if __name__ == '__main__':

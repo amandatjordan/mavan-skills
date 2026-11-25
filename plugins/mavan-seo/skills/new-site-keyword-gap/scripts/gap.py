@@ -34,6 +34,27 @@ BLOG_PATTERN = re.compile(r'/(blog|blogs|news|articles?|posts?|guides?|journal|r
 STOP = {'the', 'in', 'for', 'of', 'a', 'an', 'and', 'to', 'near', 'me', 'how', 'what', 'is', 'are', 'do', 'does', 'vs',
         'with', 'on', 'at', 'my', 'i', 'can', 'you', 'your', 'best', 'cost', 'much', 'much', 'price', 'prices'}
 
+# "Other services" tab: words too generic to name a service, folders and slugs that mark a competitor service page
+CAND_MIN = 3             # a candidate service needs at least this many keywords
+CAND_MAX = 40            # at most this many candidate rows from keywords
+GENERIC = {'plastic', 'cosmetic', 'surgery', 'surgeon', 'surgeons', 'surgical', 'treatment', 'treatments', 'doctor', 'doctors',
+           'clinic', 'clinics', 'center', 'centre', 'centers', 'procedure', 'procedures', 'medical', 'aesthetic', 'aesthetics',
+           'advanced', 'advance', 'top', 'good', 'side', 'effects', 'safe', 'work', 'works', 'like', 'look', 'looks', 'last',
+           'lasts', 'need', 'time', 'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years', 'women', 'men', 'woman',
+           'man', 'many', 'long', 'get', 'rid', 'types', 'type', 'one', 'than', 'other', 'bigger', 'after', 'before', 'pictures',
+           'picture', 'photos', 'photo', 'pics', 'reviews', 'review', 'results', 'result', 'recovery', 'price', 'prices', 'cost',
+           'costs', 'much', 'units', 'unit', 'using', 'use', 'new', 'near', 'around', 'sc', 'nc', 'ga', 'south', 'carolina', 'upstate',
+           'dr', 'md', 'office', 'offices', 'care', 'health', 'skin', 'face', 'body', 'will', 'should', 'would', 'could', 'make',
+           'makes', 'without', 'about', 'from', 'that', 'this', 'when', 'where', 'who', 'why', 'which', 'there', 'their', 'put', 'different', 'sizes', 'size', 'while', 'pregnant', 'pregnancy', 'being', 'tip', 'tips'}
+SERVICE_FOLDERS = {'services', 'service', 'procedures', 'procedure', 'treatments', 'treatment', 'surgery', 'surgical',
+                   'cosmetic-procedures', 'our-services', 'what-we-do', 'aesthetics', 'aesthetic-services', 'body', 'face', 'breast', 'nonsurgical', 'non-surgical'}
+NON_SERVICE = {'about', 'contact', 'team', 'doctor', 'doctors', 'dr', 'meet', 'testimonials', 'testimonial', 'reviews', 'review', 'gallery',
+               'photo', 'photos', 'photogallery', 'before', 'after', 'financing', 'finance', 'specials', 'special', 'privacy', 'terms',
+               'blog', 'locations', 'location', 'careers', 'shop', 'product', 'products', 'faq', 'faqs', 'video', 'videos', 'staff',
+               'provider', 'providers', 'patient', 'patients', 'forms', 'form', 'appointment', 'consultation', 'cost', 'costs', 'recovery',
+               'payment', 'payments', 'sitemap', 'login', 'cart', 'checkout', 'account', 'press', 'news', 'events', 'event', 'giving', 'donate'}
+PAGE_FILLER = {'treatment', 'treatments', 'procedure', 'procedures', 'surgery', 'in', 'the', 'and', 'for', 'of'}
+
 GAP_SPEC = {
     'keyword': (['Keyword'], True),
     'volume': (['Search Volume', 'Volume'], True),
@@ -391,12 +412,207 @@ def best_page(rows, comps):
     return v[3], page_type(v[3]), d, v[0]
 
 
+# ------------------------------------------------------------------ other services (candidates the SEO may have missed)
+
+def label_of(term):
+    return ' '.join(w if w.isupper() else w.capitalize() for w in term.split())
+
+
+def slug_key(slug, skip):
+    """A service page slug as a plain name: location and filler words removed, cut at 'in' / 'near'."""
+    toks = [t for t in re.split(r'[-_]+', slug.lower()) if t]
+    cut = [i for i, t in enumerate(toks) if t in ('in', 'near')]
+    if cut and cut[0] > 0:
+        toks = toks[:cut[0]]
+    toks = [t for t in toks if t not in skip and t not in PAGE_FILLER and not t.isdigit()]
+    return ' '.join(toks)
+
+
+def service_pages(ranks, skip):
+    """Competitor pages that look like a service page, from the ranking exports. Returns {name: {competitor: set(urls)}}.
+    A service page sits under a service folder (/services/liposuction/) or is a short top-level page (/mommy-makeover/).
+    Blog paths, the home page and about / contact / gallery style slugs are left out. A guess from the URL, like 'Looks like'."""
+    out = defaultdict(lambda: defaultdict(set))
+    for d, r in ranks.items():
+        for u in set(r['url']):
+            path = path_of(u).strip('/').lower()
+            if not path or BLOG_PATTERN.search('/' + path):
+                continue
+            segs = path.split('/')
+            slug = segs[-1]
+            toks = re.split(r'[-_]+', slug)
+            folder_toks = [t for sg in segs[:-1] for t in re.split(r'[-_]+', sg)]
+            if any(t in NON_SERVICE for t in toks + folder_toks) or any(t.startswith(('product', 'shop')) for t in folder_toks):
+                continue
+            if segs[0] in SERVICE_FOLDERS and len(segs) >= 2:
+                pass
+            elif len(segs) == 1 and len(toks) <= 4:
+                pass
+            else:
+                continue
+            key = slug_key(slug, skip)
+            if len(key) >= 4 and key not in SERVICE_FOLDERS:
+                out[key][d].add(u)
+    return out
+
+
+def candidate_terms(pool, skip):
+    """Greedy, non-overlapping candidate services from keywords that match no service: two-word phrases first, then single words."""
+    grams = {}
+    for i, kw in zip(pool.index, pool['kw_lower']):
+        toks = re.findall(r"[a-z0-9']+", kw)
+        ok = lambda t: t not in STOP and not t.isdigit() and len(t) > 2 and t not in skip
+        bi = {f'{a} {b}' for a, b in zip(toks, toks[1:]) if ok(a) and ok(b) and not (a in GENERIC and b in GENERIC)}
+        uni = {t for t in toks if ok(t) and t not in GENERIC and len(t) > 3}
+        grams[i] = (bi, uni)
+    remaining, cands = set(grams), []
+    for level in (0, 1):
+        while len(cands) < CAND_MAX:
+            cnt = Counter(g for i in remaining for g in grams[i][level])
+            if not cnt:
+                break
+            term, c = max(cnt.items(), key=lambda kv: (kv[1], kv[0]))
+            if c < CAND_MIN:
+                break
+            members = [i for i in remaining if term in grams[i][level]]
+            cands.append((term, members))
+            remaining -= set(members)
+    return cands
+
+
+def other_services_rows(kept, comps, ranks, services, cities, brand_tokens, ignored):
+    """Rows for the Other services tab: candidates from unmatched keywords, plus service pages competitors built that no
+    service or candidate covers. Returns (rows, counts)."""
+    skip = set(brand_tokens) | {t for c in cities for t in re.findall(r'[a-z0-9]+', c.lower())}
+    ign_rx = [term_re(t) for t in ignored]
+    covered_rx = [term_re(t) for _, terms in services for t in terms]
+    pool = kept[kept['services'].map(len) == 0]
+    if ign_rx:
+        pool = pool[~pool['kw_lower'].map(lambda k: any(rx.search(k) for rx in ign_rx))]
+    cands = candidate_terms(pool, skip)
+    pages = service_pages(ranks, skip)
+    pages = {k: v for k, v in pages.items() if not any(rx.search(k) for rx in covered_rx) and not any(rx.search(k) for rx in ign_rx)}
+    used = set()
+
+    def stats(rows, label, source, urls_by_comp):
+        page, page_kind, page_comp, page_n = best_page(rows, comps) if len(rows) else ('', '', '', '')
+        best = Counter(c for b in rows['best_competitor'] for c in b.split(', ') if c) if len(rows) else Counter()
+        top = rows.sort_values('est_volume', ascending=False).head(3) if len(rows) else rows
+        sp = '; '.join(f'{d}: {u}' for d, us in sorted(urls_by_comp.items()) for u in sorted(us)[:2])
+        return [label_of(label), source, '', label, len(rows), int(rows['top10_multi'].sum()) if len(rows) else 0,
+                int(rows['top3_any'].sum()) if len(rows) else 0, int(rows['opportunity'].sum()) if len(rows) else 0,
+                best.most_common(1)[0][0] if best else '', page, page_kind, len(urls_by_comp), sp,
+                '; '.join(f'{k} (est. {int(v):,})' if pd.notna(v) else k for k, v in zip(top['keyword'], top['est_volume']))]
+    out = []
+    for term, members in cands:
+        rows = kept.loc[members]
+        rx = term_re(term)
+        match = {k: v for k, v in pages.items() if rx.search(k)}
+        used |= set(match)
+        by = defaultdict(set)
+        for v in match.values():
+            for d, us in v.items():
+                by[d] |= us
+        out.append(stats(rows, term, 'Both' if match else 'Keywords', by))
+    for key, byc in pages.items():
+        if key in used:
+            continue
+        urls = {d: us for d, us in byc.items()}
+        idx = set()
+        for d, us in urls.items():
+            idx |= set(kept.index[kept[f'url_{d}'].isin(us)])
+        rows = kept.loc[sorted(idx)] if idx else kept.iloc[0:0]
+        out.append(stats(rows, key, 'Competitor service page', urls))
+    # keep rows with some evidence: a keyword meeting a rule, 2+ competitors with a page, or at least CAND_MIN keywords
+    out = [r for r in out if r[7] >= 1 or r[11] >= 2 or r[4] >= CAND_MIN]
+    out.sort(key=lambda r: (-r[7], -r[4], -r[11], r[0]))
+    return out
+
+
+OTHER_HEAD = ['Candidate service', 'Source', 'Offered by our client (SEO fills in: Yes or No)', 'Terms to match (edit; separate with commas)',
+              'Keywords', 'Keywords with 2+ competitors in top 10', 'Keywords with 1+ competitor in top 3', 'Keywords with 2+ in top 10 or 1+ in top 3',
+              'Competitor best on most keywords', 'Best-performing competitor page', 'Looks like', 'Competitors with a service page',
+              'Service pages competitors have', "Highest estimated-volume keywords (each volume is the tool's estimate)"]
+
+
+def apply_review(path, cfg, cfg_path):
+    """Read a filled workbook from an earlier build. A Yes on the Other services tab adds that service to service_terms;
+    a No is remembered in not_services so it is not suggested again. Returns (added, ignored, answers_by_service)."""
+    df = pd.read_excel(path, sheet_name=None, dtype=str, keep_default_na=False)
+    if 'Other services' not in df:
+        raise SystemExit(f'--review: no "Other services" tab in {path}. Pass the workbook from an earlier build of this skill.')
+    o = df['Other services']
+    ycol = next((c for c in o.columns if c.startswith('Offered by our client')), None)
+    if ycol is None or 'Candidate service' not in o.columns or not any(c.startswith('Terms to match') for c in o.columns):
+        raise SystemExit('--review: the Other services tab is missing its Candidate service, Offered by our client or Terms to match column.')
+    tcol = next(c for c in o.columns if c.startswith('Terms to match'))
+    have = {n.lower() for n, _ in service_list(cfg)}
+    cfg.setdefault('service_terms', [])
+    ignored = list(cfg.get('not_services') or [])
+    added, newly_ignored = [], []
+    for _, r in o.iterrows():
+        ans, name = r[ycol].strip().lower(), r['Candidate service'].strip()
+        terms = [t.strip().lower() for t in re.split(r'[,;]', r[tcol]) if t.strip()] or [name.lower()]
+        if ans == 'yes' and name.lower() not in have:
+            cfg['service_terms'].append({'service': name, 'terms': terms})
+            have.add(name.lower())
+            added.append(name)
+        elif ans == 'no':
+            for t in terms:
+                if t not in ignored:
+                    ignored.append(t)
+                    newly_ignored.append(t)
+    # Unassigned tab: a Yes adds the keyword as a term (to the service named in the next column, or as a service of its own);
+    # a No hides that keyword from the suggestions
+    if 'Unassigned' in df:
+        u = df['Unassigned']
+        ucol = next((c for c in u.columns if c.startswith('Offered by our client')), None)
+        ncol = next((c for c in u.columns if c.startswith('Service name')), None)
+        if ucol and ncol:
+            entries = cfg['service_terms']
+            for i, e in enumerate(entries):
+                if isinstance(e, str):
+                    entries[i] = {'service': e, 'terms': [e]}
+            by_name = {e['service'].lower(): e for e in entries}
+            for _, r in u.iterrows():
+                ans, kw = r[ucol].strip().lower(), r['Keyword'].strip().lower()
+                name = r[ncol].strip() or label_of(kw)
+                if ans == 'yes' and kw:
+                    e = by_name.get(name.lower())
+                    if e is None:
+                        e = {'service': name, 'terms': []}
+                        entries.append(e)
+                        by_name[name.lower()] = e
+                        added.append(name)
+                    if kw not in [t.lower() for t in e.get('terms') or []]:
+                        e['terms'] = list(e.get('terms') or []) + [kw]
+                elif ans == 'no' and kw and kw not in ignored:
+                    ignored.append(kw)
+                    newly_ignored.append(kw)
+    cfg['not_services'] = ignored
+    import json
+    with open(cfg_path, 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, indent=1)
+    answers = {}
+    if 'Service opportunities' in df:
+        so = df['Service opportunities']
+        sc = next((c for c in so.columns if c.startswith('Offered by our client')), None)
+        if sc:
+            answers = {r['Service']: r[sc] for _, r in so.iterrows() if r[sc].strip()}
+    return added, newly_ignored, answers
+
+
 def cmd_build(a):
     print('Reading inputs')
     fails, warns, ctx = check_inputs(a)
     if fails:
         raise SystemExit('Preflight problems, fix these first:\n' + '\n'.join(f'- {m}' for m in fails))
     g, comps, ranks, cfg = ctx['g'], ctx['doms'], ctx['ranks'], ctx['cfg']
+    answers = {}
+    if getattr(a, 'review', None):
+        added, newly_ignored, answers = apply_review(a.review, cfg, a.config)
+        print(f'  Review: {len(added)} service(s) added from the Other services tab' + (f' ({", ".join(added)})' if added else '')
+              + f'; {len(newly_ignored)} term(s) marked No will not be suggested again. Config updated: {a.config}')
     services = service_list(cfg)
     cities = [str(c) for c in cfg.get('cities') or []]
     removed = g[g['brand_term'] != ''].copy()
@@ -439,12 +655,12 @@ def cmd_build(a):
         page, page_kind, page_comp, page_n = best_page(both, comps)
         loc_cells = [len(lc), int(lc['opportunity'].sum())]
         if s.empty:
-            srows.append([name, '', 0, 0, 0, 0, *loc_cells, page, page_kind, page_comp, page_n, '', *[0] * len(comps),
+            srows.append([name, answers.get(name, ''), 0, 0, 0, 0, *loc_cells, page, page_kind, page_comp, page_n, '', *[0] * len(comps),
                           'No non-local competitor keywords matched. Not the same as no demand: check the term.'])
             continue
         best_counts = Counter(c for b in s['best_competitor'] for c in b.split(', ') if c)
         top = s.sort_values('est_volume', ascending=False).head(3)
-        srows.append([name, '', len(s), int(s['top10_multi'].sum()), int(s['top3_any'].sum()), int(s['opportunity'].sum()), *loc_cells,
+        srows.append([name, answers.get(name, ''), len(s), int(s['top10_multi'].sum()), int(s['top3_any'].sum()), int(s['opportunity'].sum()), *loc_cells,
                       page, page_kind, page_comp, page_n, best_counts.most_common(1)[0][0], *[int((s[d] <= TOP_N).sum()) for d in comps],
                       '; '.join(f'{k} (est. {int(v):,})' if pd.notna(v) else k for k, v in zip(top['keyword'], top['est_volume']))])
     # most keywords with the 2+ or 1+ rule met (non-local plus local), then most keywords
@@ -464,21 +680,27 @@ def cmd_build(a):
     page_head = ['Competitor', 'Page', 'Looks like', 'Non-branded keywords it ranks for', 'Of those, top 10', 'Of those, with 2+ in top 10 or 1+ in top 3',
                  'Service it matches most', 'Best position']
 
+    un = kept[kept['group'] == 'Unassigned']
+    # other services: candidates the confirmed service list may have missed
+    brand_tokens = {t for pats in ctx['comp_brands'].values() for term in pats for t in re.findall(r'[a-z0-9]+', term)}
+    orows = other_services_rows(kept, comps, ranks, services, cities, brand_tokens, [str(x).lower() for x in cfg.get('not_services') or []])
+
     # summary
     grp_counts = kept['group'].value_counts()
     sumrows = [
+        ['ACTION NEEDED', f'SEO must check the Other services tab ({len(orows)} candidates) and the Unassigned tab ({len(un):,} keywords) for services the client offers that are missing from the service list. Mark Yes or No on both.'],
         ['Tool detected', ctx['tool']], ['Competitors', ', '.join(comps)],
         ['Gap keywords in the export', len(g)], ['Removed as branded (a competitor name)', len(removed)],
         ['No competitor ranks (empty position columns)', no_rank], ['Non-branded keywords analysed', len(kept)],
         ['In a service group', int(grp_counts.get('Service', 0))], ['In the Local group (city or near me)', int(grp_counts.get('Local', 0))],
         ['Unassigned (no service or city term matched)', int(grp_counts.get('Unassigned', 0))],
+        ['Candidate services on the Other services tab', len(orows)],
         ['Keywords with 2+ competitors in the top 10', int(kept['top10_multi'].sum())],
         ['Keywords with 1+ competitor in the top 3', int(kept['top3_any'].sum())],
         ['Keywords with 2+ in the top 10 or 1+ in the top 3', int(kept['opportunity'].sum())], [],
         ['Per competitor', 'Keywords in top 10 / top 3 / total ranking']]
     for d in comps:
         sumrows.append([d, f'{int((kept[d] <= TOP_N).sum())} / {int((kept[d] <= TOP_BEST).sum())} / {int(kept[d].notna().sum())}'])
-    un = kept[kept['group'] == 'Unassigned']
     uw = Counter()
     for kw in un['kw_lower']:
         uw.update({t for t in re.findall(r"[a-z0-9']+", kw) if t not in STOP and len(t) > 2})
@@ -486,6 +708,10 @@ def cmd_build(a):
     sumrows += [[], ['Most common words in Unassigned (add a service term or a competitor name for any that belongs)', ''],
                 *[[w, c] for w, c in top_un]]
     readme = [
+        ['ACTION NEEDED: SEO must check the Other services and Unassigned tabs',
+         f'The service list this workbook was built from may be incomplete. {len(orows)} candidate services are on the Other services tab and {len(un):,} keywords matched no service or city (Unassigned tab). '
+         'Open both tabs before relying on the service counts. Mark Yes for anything the client offers and No for anything it does not (Unassigned: optionally type the service name for a Yes). '
+         'Then run the next build with --review pointing at this workbook: every Yes is added to the services and the counts update.'],
         ['What this is', 'Non-branded searches that competitors rank for, grouped by service, to choose what a new site should target. There is no site to crawl, so nothing here compares against an existing site.'],
         ['Opportunity rules', f'A keyword has 2+ competitors in the top {TOP_N} when at least {MULTI_MIN} competitors rank {TOP_N} or better, and 1+ competitor in the top {TOP_BEST} when at least one ranks {TOP_BEST} or better. Best-ranking competitor, position and page are shown for every keyword.'],
         ['Best-performing page', 'For each service: the competitor page with the most keywords in the top 10 among that service\'s keywords (non-local and local). Home pages are skipped. Ties go to the page with more keywords at any position. It is a count of keywords, not traffic.'],
@@ -495,6 +721,8 @@ def cmd_build(a):
         ['Groups', 'A keyword that matches a city or "near me" is in the Local group only. Other keywords are in every service group whose term they contain, so service rows can overlap. Keywords that match nothing are in Unassigned for review.'],
         ['Branded searches', 'Searches containing a competitor\'s name (or its domain name) were removed. See the Branded removed tab.'],
         ['Competitor pages', '"Looks like" is a guess from the URL path (blog folders and the home page). Check the page before relying on it.'],
+        ['Other services', 'Services competitors rank or have a page for that are not in the confirmed service list: groups of keywords that matched no service (grouped by their most common phrase) and service pages competitors have built (a guess from the URL). Mark Yes for what the client offers and No for what it does not, then pass this workbook back with --review on the next build: Yes rows become services, No rows are not suggested again. Edit "Terms to match" to add other names people search.'],
+        ['Unassigned', 'Every keyword that matched no service or city. Mark Yes on a keyword the client offers (type a service name in the next column to add it to a service, or leave it blank and the keyword becomes a service of its own) or No to hide it. Applied on the next build with --review.'],
         ['Competitors', 'Every domain column in the gap export is treated as a competitor, including the one used as the base domain. Competitors that overlap on only some services show up in those services only.'],
     ]
     wb = Workbook()
@@ -508,12 +736,33 @@ def cmd_build(a):
         dv.add(f'B2:B{len(srows) + 1}')
         for r in range(2, len(srows) + 2):
             ws.cell(r, 2).fill = INPUT_FILL
+    ws2 = sheet(wb, 'Other services', OTHER_HEAD, orows, {'Candidate service': 28, OTHER_HEAD[2]: 22, OTHER_HEAD[3]: 30, 'Best-performing competitor page': 60,
+                                                          'Service pages competitors have': 60, OTHER_HEAD[-1]: 70, 'Competitor best on most keywords': 28})
+    if orows:
+        dv2 = DataValidation(type='list', formula1='"Yes,No"', allow_blank=True)
+        ws2.add_data_validation(dv2)
+        dv2.add(f'C2:C{len(orows) + 1}')
+        for r in range(2, len(orows) + 2):
+            ws2.cell(r, 3).fill = INPUT_FILL
+            ws2.cell(r, 4).fill = INPUT_FILL
     sheet(wb, 'Keywords', kw_head, [row(r) for _, r in kept[kept['group'] != 'Local'].iterrows()], widths)
     sheet(wb, 'Local', kw_head, [row(r) for _, r in kept[kept['group'] == 'Local'].iterrows()], widths)
     sheet(wb, 'Competitor pages', page_head, long, {'Page': 70, 'Service it matches most': 28})
-    sheet(wb, 'Unassigned', ['Keyword', 'Estimated volume', 'Competitors in top 10', 'Best-ranking competitor', 'Best position'],
-          [[r['keyword'], val(r['est_volume']), int(r['top10_count']), r['best_competitor'], val(r['best_position'])]
-           for _, r in un.sort_values('est_volume', ascending=False).iterrows()], {'Keyword': 48})
+    un_head = ['Keyword', 'Estimated volume', 'Competitors in top 10', 'Best-ranking competitor', 'Best position',
+               'Offered by our client (SEO fills in: Yes or No)', 'Service name for a Yes (optional; blank = the keyword is its own service)']
+    ws3 = sheet(wb, 'Unassigned', un_head,
+                [[r['keyword'], val(r['est_volume']), int(r['top10_count']), r['best_competitor'], val(r['best_position']), '', '']
+                 for _, r in un.sort_values('est_volume', ascending=False).iterrows()],
+                {'Keyword': 48, un_head[5]: 22, un_head[6]: 36})
+    if len(un):
+        dv3 = DataValidation(type='list', formula1='"Yes,No"', allow_blank=True)
+        ws3.add_data_validation(dv3)
+        dv3.add(f'F2:F{len(un) + 1}')
+        for r in range(2, len(un) + 2):
+            ws3.cell(r, 6).fill = INPUT_FILL
+            ws3.cell(r, 7).fill = INPUT_FILL
+    for w in (ws2, ws3):
+        w.sheet_properties.tabColor = 'F4B183'
     sheet(wb, 'Branded removed', ['Keyword', 'Term matched'], [[r['keyword'], r['brand_term']] for _, r in removed.iterrows()], {'Keyword': 48})
     wb.save(a.out)
 
@@ -554,6 +803,8 @@ def main():
         p.add_argument('--tool', choices=['semrush', 'ahrefs'])
         p.add_argument('--map', action='append', help='field override, e.g. gap.volume="Vol" or gapcol.x.com="Col"')
         p.add_argument('--out', required=(name == 'build'), default='work')
+        if name == 'build':
+            p.add_argument('--review', help='workbook from an earlier build with the Other services tab filled in (Yes / No); Yes rows are added to the config as services')
     a = ap.parse_args()
     (cmd_preflight if a.cmd == 'preflight' else cmd_build)(a)
 
