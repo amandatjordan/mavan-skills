@@ -88,7 +88,7 @@ Done when there is no STOP and every sample page has `agrees` filled in.
 python $SKILL/scripts/audit.py queue --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --out work
 ```
 
-It prints the pages and body word count for each page type, and writes `work/queue.tsv` and one text file per page in `work/text/`. Tell the person the counts and ask which page types Claude should read, and whether to stop at a number of pages (default: all of them). If they choose, re-run with `--types Condition,Service` and/or `--max N`, and use the same options in Step 7.
+It prints the pages and body word count for each page type, and writes `work/queue.tsv` and one text file per page in `work/text/`. Tell the person the counts and ask which page types Claude should read, and whether to stop at a number of pages (default: all of them). If they choose, re-run with `--types Condition,Service`, `--max-per-type N` (the first N pages of each type, for example 5 of each) and/or `--max N`, and use the same options in Step 7.
 
 Read the text files one at a time and write `work/claims.tsv` (tab separated, header `url`, `specific_claims`, `claims_to_verify`). Do not paste page text into the chat.
 
@@ -104,7 +104,7 @@ Done when every page in `work/queue.tsv` has a row in `claims.tsv`.
 python $SKILL/scripts/audit.py build --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --chrome work/chrome.tsv --claims work/claims.tsv --out DOMAIN_eeat_ymyl_audit.xlsx
 ```
 
-Add the same `--types` and `--max` as in Step 6 if used. Read what it prints: every QA line must say PASS.
+Add the same `--types`, `--max-per-type` and `--max` as in Step 6 if used. Read what it prints: every QA line must say PASS.
 
 Done when every check prints PASS and you have opened 5 rows of Page Review and their External Links rows and agree they are right: dead means the status is 400 or higher, No shared words means none of the anchor's words appear in the destination's title or H1 (or its URL, when the crawler gave no title or H1).
 
