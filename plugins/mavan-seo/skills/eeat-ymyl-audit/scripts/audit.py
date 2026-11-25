@@ -19,6 +19,7 @@ import argparse
 import csv
 import json
 import os
+import random
 import re
 import sys
 import unicodedata
@@ -649,11 +650,24 @@ def cmd_preflight(args):
         sys.exit(1)
 
 
-def scoped(res, types=None, max_pages=None, per_type=None):
-    """Queued pages in crawl order: optionally some page types, the first N of each type, and N in all."""
+SAMPLE_MIN_WORDS = 200
+
+
+def scoped(res, types=None, max_pages=None, per_type=None, sample=None):
+    """Queued pages in crawl order: optionally some page types, N random pages of each type (the same pages on every run),
+    the first N of each type, and N in all."""
     names = {t.strip().lower() for t in types.split(",")} if types else None
+    order = res["order"]
+    if sample:
+        picked = set()
+        for t in dict.fromkeys(res["pages"][k]["ptype"] for k in order):
+            tp = [k for k in order if res["pages"][k]["ptype"] == t]
+            full = [k for k in tp if res["pages"][k]["words"] >= SAMPLE_MIN_WORDS]  # hub and list pages make no claims
+            pool = full if len(full) >= sample else tp
+            picked |= set(random.Random(f"eeat-{t}").sample(pool, min(sample, len(pool))))
+        order = [k for k in order if k in picked]
     out, seen = [], Counter()
-    for k in res["order"]:
+    for k in order:
         p = res["pages"][k]
         if names and p["ptype"].lower() not in names:
             continue
@@ -670,7 +684,7 @@ def cmd_queue(args):
     for t in dict.fromkeys(res["pages"][k]["ptype"] for k in res["order"]):
         q = scoped(res, t)
         print(f"{t}: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
-    q = scoped(res, args.types, args.max, args.max_per_type)
+    q = scoped(res, args.types, args.max, args.max_per_type, args.sample_per_type)
     print(f"Queue: {len(q)} pages, {sum(p['words'] for p in q)} words of body text")
     tdir = os.path.join(args.out, "text")
     os.makedirs(tdir, exist_ok=True)
@@ -755,7 +769,7 @@ def cmd_build(args):
     res = analyze(args, need_external=True)
     stop_if_needed(res)
     pages, order, links, cfg = res["pages"], res["order"], res["links"], res["cfg"]
-    queue = scoped(res, args.types, args.max, args.max_per_type)
+    queue = scoped(res, args.types, args.max, args.max_per_type, args.sample_per_type)
 
     claims = {}
     if args.claims:
@@ -840,6 +854,22 @@ def cmd_build(args):
                            n=str(len(claim_rows) - nread), tab="Claims Needing Verification",
                            next="SEO: verify each claim, mark it Accurate claim or Bad claim, add the source to cite and write the updated claim. Content: update the pages.",
                            handoff="Content"))
+    # Claims are read on a sample. Where sampled blog or condition pages make 2+ claims while citing no credible source, the
+    # rest of that content needs a closer claims review if the other changes do not bring improvements.
+    for t in types:
+        if role_of(t, cfg) not in ("blog", "condition"):
+            continue
+        tq = [p for p in queue if p["ptype"] == t and claims.get(p["key"])]
+        unsourced = [(p, len(split_claims(claims[p["key"]]["claims_to_verify"]))) for p in tq
+                     if not p["credible"] and claims[p["key"]]["specific_claims"] == "Yes"]
+        n = sum(c for _, c in unsourced)
+        total = sum(1 for k in order if pages[k]["ptype"] == t)
+        if n >= 2 and len(tq) < total:
+            issues.append(dict(priority="Low", text=f"The sampled {plural(t, cfg)} make {n} claims on {len(unsourced)} of {len(tq)} pages that cite no credible source. "
+                                                     f"If the other changes do not bring improvements, the other {total - len(tq)} {plural(t, cfg)} need a closer review for claims.",
+                               n=f"{len(unsourced)} of {len(tq)} sampled", tab="Claims Needing Verification",
+                               next=f"SEO: after the other changes, check performance; if there is no improvement, have every {t.lower()} page read for claims and verified.",
+                               handoff="Content"))
     dead = [l for l in issue_links if "Dead link" in l["flags"] or "No response" in l["flags"]]
     if issue_links:
         fl = Counter(f for l in issue_links for f in l["flags"])
@@ -959,7 +989,7 @@ def qa(path, pages, order, links, need_links, issue_links, claim_rows, chrome, t
     check("Claims Needing Verification has one row per claim", len(cl) == len(claim_rows))
     rec = [r for r in wb["Recommendations"].iter_rows(values_only=True) if r and r[0] in ("High", "Medium", "Low")]
     miss = sum(1 for r in ap for v in r[2:2 + len(REQS)] if v == "Missing")
-    nums = [re.match(r"(\d+) of (\d+)", str(r[2])) for r in rec]
+    nums = [re.match(r"(\d+) of (\d+)", str(r[2])) for r in rec if r[3] in ("All Pages", "External Links Needed")]
     check("Recommendations counts add up to the Missing cells in All Pages", sum(int(m.group(1)) for m in nums if m) == miss)
     cc = list(wb["Sample Page Check"].iter_rows(min_row=2, values_only=True))
     check("every page type has a sample page the person checked", set(types) <= {r[0] for r in cc} and all(r[4] == "Yes" for r in cc))
@@ -984,6 +1014,7 @@ def main():
             s.add_argument("--types")
             s.add_argument("--max", type=int)
             s.add_argument("--max-per-type", type=int, dest="max_per_type")
+            s.add_argument("--sample-per-type", type=int, dest="sample_per_type")
         if name == "build":
             s.add_argument("--claims")
             s.add_argument("--chrome", required=True)
