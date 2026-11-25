@@ -27,7 +27,7 @@ DEFAULT_TAXONOMY = SKILL_DIR / 'references' / 'service-taxonomy.xlsx'
 # A Sub-Service or Brand / Device gets its own page when its highest-volume keyword is at least this.
 # Below it, the item is a section on its parent page. Services and listed concerns always get a page.
 PAGE_MIN_VOLUME = 1000
-RELATED_KEYWORDS_SHOWN = 10          # keywords shown on the Pages tab (all of them are on the Keywords tab)
+RELATED_KEYWORDS_SHOWN = 10          # keywords shown on the Pages tab (all of them are on the SEO Please Check Keywords tab)
 MAX_CONCERNS = 5                     # "very limited concern pages" for a new site; more only warns
 CONFIRM_MIN_VOLUME = PAGE_MIN_VOLUME  # unlisted Sub-Services / Brands are offered for confirmation at this volume
 # Treatments the taxonomy marks as not approved, investigational or discontinued are never recommended.
@@ -47,6 +47,18 @@ VOLUME_LABEL = ('National volume from the taxonomy keyword list (what competitor
 OFFERS_COL = 'Client offers it? (Yes / No)'
 LINKS_COL = 'Internal links out (priority)'
 ANCHOR_COL = 'Anchor text for links to this page (SEO fills in)'
+KW_TAB = 'SEO Please Check Keywords'
+# Shown in row 1 of the keywords tab (the table header is row 2), and repeated in the Read Me.
+KW_INSTRUCTIONS = (
+    'SEO: please check and update this tab before the keywords are used.\n'
+    '1. CHANGE a keyword: edit the Keyword cell. To move it to another page, edit its Target page cell.\n'
+    '2. REMOVE a keyword: delete its row if it is off topic, a name or spelling nobody searches, or for a page the client does not offer '
+    '(Client offers it? = No on the Pages tab).\n'
+    '3. ADD a keyword: add a row at the bottom with the Keyword and the Target page, copied exactly as it is named on the Pages tab. '
+    'Add the volume if you have it. Pages with no keywords (dental items, and concerns the taxonomy does not have) need yours.\n'
+    '4. The content roadmap reads the Primary keyword on the Pages tab, not this tab. If you change the best keyword for a page, update its Primary keyword on the Pages tab too.\n'
+    'Volumes are national, from the taxonomy. Use them to compare keywords, not as local demand.')
+KW_HEADER_ROW = 2
 LEVELS = ('Service', 'Sub-Service', 'Brand / Device', 'Concern')
 # A concern the taxonomy does not have, which the person chose to keep as a target anyway. It gets a Concern page
 # with no keyword data, and links only to the Services / Sub-Services named in its treated_by column.
@@ -531,7 +543,7 @@ def cmd_build(a):
     checks.append(('Every Section row has a parent page that is an own page', all(plan[k]['own'] for p in plan.values() if not p['own'] for k in p['parents']) and all(p['parents'] for p in plan.values() if not p['own'])))
     checks.append(('Every internal link joins two own pages', all(l['From page'] in own_labels and l['To page'] in own_labels for l in links)))
     checks.append(('No page label appears twice', len(pages['Service / sub-service']) == pages['Service / sub-service'].nunique()))
-    checks.append(('Keywords tab rows equal the Pages tab keyword counts', len(keywords) == int(pages['Keywords in taxonomy'].sum())))
+    checks.append((f'{KW_TAB} tab rows equal the Pages tab keyword counts', len(keywords) == int(pages['Keywords in taxonomy'].sum())))
     checks.append(('No not-recommended item is in the plan', all(not NOT_RECOMMENDED.search(p['node']['Status / Notes']) for p in plan.values())))
 
     read_me = [
@@ -546,7 +558,8 @@ def cmd_build(a):
         ('Page or section rule', f'A Sub-Service or Brand / Device gets its own page when its highest-volume keyword is {PAGE_MIN_VOLUME:,} or more. '
                                  'Services, concerns and dental items the client lists always get a page (no minimum volume for dental). Highest keyword is used, not a sum, because many keywords are the same search worded differently.'),
         ('Service rows', 'A Service row counts only searches that name the service itself. Searches for its brands and devices (for example Botox under Neurotoxin) sit on their own rows, so the Service row also shows the highest keyword anywhere under the service to compare services fairly.'),
-        ('Related keywords', f'Top {RELATED_KEYWORDS_SHOWN} by volume on the Pages tab. All of them are on the Keywords tab. City-modified searches (a city name in the keyword) are left out of every figure and only counted.'),
+        (KW_TAB + ' tab', 'SEO: check this tab before the keywords are used. ' + KW_INSTRUCTIONS.split('\n', 1)[1].replace('\n', ' ')),
+        ('Related keywords', f'Top {RELATED_KEYWORDS_SHOWN} by volume on the Pages tab. All of them are on the {KW_TAB} tab. City-modified searches (a city name in the keyword) are left out of every figure and only counted.'),
         ('Internal links', 'The "Internal links out" column lists the pages each page should link to, with a priority. Built from the taxonomy hierarchy: Service and Sub-Service pages link both ways, '
                            'Brand / Device pages link both ways to the Sub-Service (or Service) pages above them, Sub-Services under one Service link to each other (low priority), '
                            'and each Concern page links both ways to the Service or Sub-Service pages that treat it. Sections have no link of their own.'),
@@ -563,7 +576,7 @@ def cmd_build(a):
     out = Path(a.out)
     with pd.ExcelWriter(out, engine='openpyxl') as xw:
         pages.to_excel(xw, sheet_name='Pages', index=False)
-        keywords.to_excel(xw, sheet_name='Keywords', index=False)
+        keywords.to_excel(xw, sheet_name=KW_TAB, index=False, startrow=KW_HEADER_ROW - 1)
         skipped.to_excel(xw, sheet_name='Not in the plan', index=False)
         pd.DataFrame(read_me, columns=['Item', 'Detail']).to_excel(xw, sheet_name='Read Me', index=False)
     style(out)
@@ -574,6 +587,8 @@ def cmd_build(a):
           f"Internal links: {len(links)}. Keywords: {len(keywords)}. Not in the plan: {len(skipped)}.")
     for w in warnings:
         print('WARNING:', w)
+    print(f"NEXT: tell the person to open the '{KW_TAB}' tab and check and update it as needed (change, remove or add keywords), "
+          'and to update Primary keyword on the Pages tab if they change a page\'s best keyword.')
     ok = True
     for name, passed in checks:
         print(('PASS ' if passed else 'FAIL ') + name)
@@ -587,19 +602,29 @@ def style(path):
     head_fill = PatternFill('solid', fgColor='1F3864')
     yellow = PatternFill('solid', fgColor='FFF2CC')
     for ws in wb:
-        for c in ws[1]:
+        h = KW_HEADER_ROW if ws.title == KW_TAB else 1   # the keywords tab has an instruction row above its header
+        for c in ws[h]:
             c.font = Font(bold=True, color='FFFFFF')
             c.fill = head_fill
             c.alignment = Alignment(wrap_text=True, vertical='center')
-        ws.freeze_panes = 'A2'
+        ws.freeze_panes = f'A{h + 1}'
         for col in ws.columns:
             letter = get_column_letter(col[0].column)
-            longest = max((len(str(c.value)) for c in col[:200] if c.value is not None), default=10)
+            longest = max((len(str(c.value)) for c in col[h - 1:200] if c.value is not None), default=10)
             ws.column_dimensions[letter].width = min(max(12, longest + 2), 60)
-            for c in col[1:]:
+            for c in col[h:]:
                 c.alignment = Alignment(wrap_text=True, vertical='top')
         if ws.title != 'Read Me':
-            ws.auto_filter.ref = ws.dimensions
+            ws.auto_filter.ref = f'A{h}:{get_column_letter(ws.max_column)}{ws.max_row}'
+        if ws.title == KW_TAB:
+            ws.sheet_properties.tabColor = 'BF9000'
+            ws['A1'] = KW_INSTRUCTIONS
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(ws.max_column, 9))
+            ws['A1'].fill = yellow
+            ws['A1'].font = Font(bold=True)
+            ws['A1'].alignment = Alignment(wrap_text=True, vertical='top')
+            width = sum(ws.column_dimensions[get_column_letter(i)].width for i in range(1, min(ws.max_column, 9) + 1))
+            ws.row_dimensions[1].height = 16 * sum(max(1, -(-len(line) // int(width * 0.9))) for line in KW_INSTRUCTIONS.split('\n')) + 6
     rm = wb['Read Me']
     rm.column_dimensions['A'].width = 28
     rm.column_dimensions['B'].width = 120

@@ -73,10 +73,12 @@ Done when all four hold.
 
 Send the workbook and reply in a few sentences: how many own pages and how many sections, the services with the highest keyword volume, anything on Not in the plan and why, how many rows have a blank Client offers it? for the client to answer (the SEO asks the client; a No drops the row), any warning, and the volume caveat (national, taxonomy-level, relative not absolute). Name any typed item the taxonomy does not have, custom concerns included, for the `service-taxonomy.xlsx` pull request. Practice-specific package or program names never go in the taxonomy.
 
+**End the reply by telling the person to open the SEO Please Check Keywords tab and check and update it as needed**: change a keyword, remove one (off topic, a spelling nobody searches, or a page the client does not offer) or add one (every page with no keywords needs theirs). Say that the content roadmap reads the Primary keyword on the Pages tab, so a change to a page's best keyword also goes there. This reminder is always part of the final reply.
+
 ## Workbook
 
-Tabs, in this order: **Pages**, Keywords, Not in the plan, Read Me. Everything a person works from is on Pages, so nothing that needs human input hides on a later tab.
+Tabs, in this order: **Pages**, SEO Please Check Keywords, Not in the plan, Read Me. Everything a person works from is on Pages, so nothing that needs human input hides on a later tab.
 - **Pages**: one row per service, sub-service, brand / device and concern. Columns: Own page or Section on a named parent page, why, **Client offers it? (Yes / No)**, where the row came from (listed by the client, parent of a listed item, or suggested from the taxonomy), primary keyword with volume, difficulty and CPC, related keywords, sections searchers look for, what to mention as a section, **Internal links out (priority)**, and **Anchor text (SEO fills in)**. Client offers it? is filled with Yes for listed items and parents of listed items, and left blank (yellow) for the sub-services and brands the client did not list but that have real volume; the SEO asks the client and fills in Yes or No. Anchor text is left blank on purpose; this skill never suggests it.
-- **Keywords**: every keyword with its target page and modifier.
+- **SEO Please Check Keywords**: every keyword with its target page and modifier. Row 1 holds the instructions for the SEO to change, remove or add keywords as needed (repeated in the Read Me). The tab is orange so it is not missed. Nothing downstream reads it: the content roadmap reads the Pages tab, so a changed best keyword is also updated there.
 - **Not in the plan**: not-approved or discontinued items, and items with no match.
 - **Read Me**: how to read the workbook, the rules, and the volume caveat.
