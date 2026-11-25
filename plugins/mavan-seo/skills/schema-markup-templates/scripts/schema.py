@@ -204,7 +204,7 @@ def build(args):
     rm.append(['Yellow cells', 'A type the skill has no fixed rule for (extra pages and unknown page types). The SEO confirms it after the real page is read.'])
     rm.append(['Templates', f'{len(groups)} templates will be written, one per distinct schema structure: ' +
                '; '.join(f"{g['label']} ({len(g['pages'])})" for g in groups) + '.'])
-    rm.append(['Next', 'Paste one real, finished page of each type. The template for that type is written from it, tested in the schema.org validator and confirmed by the SEO.'])
+    rm.append(['Next', 'Paste one real, finished page of each type. The template for that type is written from it. These are schema templates, not final markup: test each one in the schema.org validator, paste any error messages back into the chat, and the SEO confirms the result.'])
     rm.append(['Other tabs', 'The roadmap\'s Internal links and Cut tabs are not copied here.'])
     for c in rm[1]:
         c.font = Font(bold=True)
@@ -426,7 +426,7 @@ def doc(args):
              'One JSON-LD template per page type. Every `{{placeholder}}` is a value the WordPress schema plugin fills '
              'from the page; the table under each template says what it maps to. A block marked "repeat" is repeated once '
              'per item on the page (each question, review or breadcrumb level). Each template was filled with one real '
-             'page and passed the schema.org validator; the page is listed with it.', '']
+             'page and passed the schema.org validator; the page is listed with it. These are templates, not final markup: if the plugin\'s output shows an error or warning on a live page, test that page in the validator at validator.schema.org and paste the messages back to the SEO.', '']
     for g in plan['groups']:
         tpath, mpath = paths(g['slug'], args.work)
         tpl = jload(tpath)
