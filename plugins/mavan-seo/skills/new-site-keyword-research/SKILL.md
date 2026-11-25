@@ -46,6 +46,7 @@ Read `work/selection.tsv`. Correct `level`, `service`, `sub_service`, `brand_dev
 - A product or device is a **Brand / Device** row; a treatment is a **Service** or **Sub-Service** row; a problem is a **Concern** row. Name each for what it is (Botox is a Brand / Device under Neurotoxin, never "Neurotoxin").
 - One typed item that names two things ("Juvéderm lip filler") becomes two rows.
 - A row with no match stays with `level` blank. Ask the person what it is in **one** message for all such rows, or leave it out. Never invent a taxonomy name.
+- For an **unmatched concern**, the options in that message are: map it to the closest taxonomy concern (name it), leave it out, or **add it as a keyword target anyway**. For the last, set `level` to `Custom concern`, put the name the person wants in `concern`, and put the exact taxonomy Service or Sub-Service names whose pages should link to it in `treated_by` (semicolon-separated, only services on this plan; ask if it is not obvious). The build gives it a Concern page with no keyword data, a note to research its volume separately, and a warning. Name it in the reply for the `service-taxonomy.xlsx` pull request.
 
 Done when every row is either a valid taxonomy item or deliberately blank.
 
@@ -70,7 +71,7 @@ Done when all four hold.
 
 ## Step 6: Report
 
-Send the workbook and reply in a few sentences: how many own pages and how many sections, the services with the highest keyword volume, anything on Not in the plan and why, how many rows have a blank Client offers it? for the client to answer (the SEO asks the client; a No drops the row), any warning, and the volume caveat (national, taxonomy-level, relative not absolute). Name any typed item the taxonomy does not have, for the `service-taxonomy.xlsx` pull request. Practice-specific package or program names never go in the taxonomy.
+Send the workbook and reply in a few sentences: how many own pages and how many sections, the services with the highest keyword volume, anything on Not in the plan and why, how many rows have a blank Client offers it? for the client to answer (the SEO asks the client; a No drops the row), any warning, and the volume caveat (national, taxonomy-level, relative not absolute). Name any typed item the taxonomy does not have, custom concerns included, for the `service-taxonomy.xlsx` pull request. Practice-specific package or program names never go in the taxonomy.
 
 ## Workbook
 
