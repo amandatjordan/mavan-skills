@@ -34,10 +34,10 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 URL_NAMES = ["address", "url", "page url"]
 STATUS_NAMES = ["status code", "http status code", "status"]
 INDEX_NAMES = ["indexability", "indexable status", "indexable"]
-OL_SOURCE = ["source", "from", "source url", "source page"]
+OL_SOURCE = ["source", "from", "source url", "source page", "referring url", "linking url", "page url"]
 OL_DEST = ["destination", "to", "destination url", "link url", "target url", "link destination"]
 OL_ANCHOR = ["anchor", "anchor text", "link text"]
-OL_POS = ["link position", "position"]
+OL_POS = ["link position", "position", "link location", "location"]
 OL_TYPE = ["type", "link type"]
 OL_STATUS = ["status code", "http status code"]
 EXT_TITLE = ["title 1", "title", "page title"]
@@ -173,6 +173,20 @@ def is_blank(name):
     return not name or str(name).strip().lower() in {"", "none", "n/a", "not present"}
 
 
+def join_numbered(df):
+    """Sitebulb's "all matched items" writes one column per match (Body 1, Body 2, ...). Add a joined column per base name
+    ("Body *") holding the matches in order, so a config can name "Body *"."""
+    groups = {}
+    for c in df.columns:
+        m = re.fullmatch(r"(.+?)\s+(\d+)", c)
+        if m:
+            groups.setdefault(m.group(1), []).append((int(m.group(2)), c))
+    for base, cols in groups.items():
+        cols = [c for _, c in sorted(cols)]
+        df[base + " *"] = df[cols].apply(lambda r: " ".join(v for v in r if str(v).strip()), axis=1)
+    return df
+
+
 def resolve(df, name, label, findings):
     """Return the real column for a config column name; None when the site does not have it."""
     if is_blank(name):
@@ -236,8 +250,9 @@ def analyze(args, need_external):
     cfg = load_config(args.config, findings)
     try:
         crawl = read_table(args.crawl)
-        # Sitebulb writes "Not Found" when an extraction rule finds nothing: treat it as empty.
-        crawl = crawl.apply(lambda col: col.where(~col.str.strip().str.lower().isin({"not found", "not present"}), ""))
+        # Sitebulb writes "Not Found" when a rule finds nothing and "Not Set" in unused match columns: treat both as empty.
+        crawl = crawl.apply(lambda col: col.where(~col.str.strip().str.lower().isin({"not found", "not present", "not set"}), ""))
+        crawl = join_numbered(crawl)
         outl = read_table(args.outlinks)
     except Exception as e:  # unreadable export
         sys.exit(f"STOP: cannot read an export: {e}")

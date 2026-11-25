@@ -245,6 +245,23 @@ class PageTypeLabels(unittest.TestCase):
                 "--external", self.f["external.csv"], "--out", self.d / "w3")
         self.assertIn("Author is empty on 4 of 8 pages", p.stdout)
 
+    def test_sitebulb_numbered_match_columns_are_joined(self):
+        def split(r):
+            words = r["Body 1"].split()
+            half = len(words) // 2
+            r["Body 1"], r["Body 2"], r["Body 3"] = " ".join(words[:half]), " ".join(words[half:]), "Not Set"
+        crawl = self.write_crawl("crawl_split.csv", change=split)
+        cfg = json.loads(self.f["config.json"].read_text() if hasattr(self.f["config.json"], "read_text") else open(self.f["config.json"]).read())
+        cfg["columns"]["body"] = "Body *"
+        path = self.d / "cfg_split.json"
+        path.write_text(json.dumps(cfg))
+        a = run("queue", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+                "--external", self.f["external.csv"], "--out", self.d / "q1").stdout
+        b = run("queue", "--config", path, "--crawl", crawl, "--outlinks", self.f["outlinks.csv"],
+                "--external", self.f["external.csv"], "--out", self.d / "q2").stdout
+        self.assertEqual(a, b.replace(str(self.d / "q2"), str(self.d / "q1")))
+        self.assertNotIn("Not Set", (self.d / "q2/text/001.txt").read_text())
+
     def test_page_type_without_paths_needs_a_source(self):
         cfg = json.loads(json.dumps(fixture.CONFIG))
         cfg["page_types"].append({"name": "Area"})
