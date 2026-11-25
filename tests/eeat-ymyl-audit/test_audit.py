@@ -2,6 +2,7 @@
 
 Run from the repo root:  python3 -m unittest discover -s tests/eeat-ymyl-audit -v
 """
+import csv
 import json
 import shutil
 import subprocess
@@ -172,6 +173,85 @@ class Audit(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("external link crawling was off", p.stdout + p.stderr)
 
+
+
+class PageTypeLabels(unittest.TestCase):
+    """Page types from a label column in the crawl export or from an IA / prune workbook, and Sitebulb's "Not Found"."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.d = Path(cls.tmp.name)
+        cls.f = fixture.make(cls.d)
+        with open(cls.f["crawl.csv"], newline="", encoding="utf-8") as fh:
+            cls.rows = list(csv.DictReader(fh))
+        cls.labels = {"/conditions/": "Concern", "/services/": "Service Page", "/blog/": "Blog Post"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def label(self, url):
+        return next((v for k, v in self.labels.items() if k in url), "Other")
+
+    def config(self, name, source, labels=True):
+        cfg = json.loads(json.dumps(fixture.CONFIG))
+        cfg["page_type_source"] = source
+        cfg["page_types"] = [{"name": "Condition", "labels": ["Concern"]}, {"name": "Service", "labels": ["Service Page"]},
+                             {"name": "Blog", "labels": ["Blog Post"]}]
+        path = self.d / name
+        path.write_text(json.dumps(cfg))
+        return path
+
+    def write_crawl(self, name, extra=None, change=None):
+        rows = [dict(r) for r in self.rows]
+        for r in rows:
+            if extra:
+                r["Page Type"] = self.label(r["Address"])
+            if change:
+                change(r)
+        path = self.d / name
+        with open(path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        return path
+
+    def test_label_column_in_crawl_export(self):
+        crawl = self.write_crawl("crawl_labels.csv", extra=True)
+        cfg = self.config("cfg_col.json", {"column": "Page Type"})
+        p = run("preflight", "--config", cfg, "--crawl", crawl, "--outlinks", self.f["outlinks.csv"], "--out", self.d / "w1")
+        self.assertIn("Pages per page type: Condition 3, Service 3, Blog 2", p.stdout)
+        self.assertIn("Page type labels not in the audit (left out): Other", p.stdout)
+
+    def test_labels_from_workbook_file_without_scheme(self):
+        types = self.d / "ia.csv"
+        with open(types, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["URL", "Page Type"])
+            for r in self.rows:
+                w.writerow([r["Address"].split("://", 1)[1].replace("www.", "").rstrip("/"), self.label(r["Address"])])
+        cfg = self.config("cfg_file.json", {"file": str(types), "url_column": "URL", "type_column": "Page Type"})
+        p = run("preflight", "--config", cfg, "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"], "--out", self.d / "w2")
+        self.assertIn("Pages per page type: Condition 3, Service 3, Blog 2", p.stdout)
+
+    def test_sitebulb_not_found_counts_as_empty(self):
+        def nf(r):
+            for c in ("Author 1", "Reviewer 1"):
+                if not r[c].strip():
+                    r[c] = "Not Found"
+        crawl = self.write_crawl("crawl_nf.csv", change=nf)
+        p = run("preflight", "--config", self.f["config.json"], "--crawl", crawl, "--outlinks", self.f["outlinks.csv"],
+                "--external", self.f["external.csv"], "--out", self.d / "w3")
+        self.assertIn("Author is empty on 4 of 8 pages", p.stdout)
+
+    def test_page_type_without_paths_needs_a_source(self):
+        cfg = json.loads(json.dumps(fixture.CONFIG))
+        cfg["page_types"].append({"name": "Area"})
+        path = self.d / "cfg_bad.json"
+        path.write_text(json.dumps(cfg))
+        p = run("preflight", "--config", path, "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"], "--out", self.d / "w4", check=False)
+        self.assertIn("needs a name, and paths unless page_type_source labels the pages", p.stdout)
 
 if __name__ == "__main__":
     unittest.main()

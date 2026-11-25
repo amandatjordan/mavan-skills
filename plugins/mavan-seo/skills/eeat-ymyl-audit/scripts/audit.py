@@ -79,13 +79,14 @@ def host_of(u):
 
 def norm_url(u):
     u = str(u).strip()
+    host = host_of(u)
     if not re.match(r"^[a-z][a-z0-9+.-]*://", u, re.I):
         u = "//" + u
     p = urlsplit(u)
     path = unquote(p.path or "/")
     if len(path) > 1:
         path = path.rstrip("/")
-    return (host_of(u) + path + ("?" + p.query if p.query else "")).lower()
+    return (host + path + ("?" + p.query if p.query else "")).lower()
 
 
 def path_of(u):
@@ -130,11 +131,42 @@ def load_config(path, findings):
         findings.append(("STOP", "Config has no columns.body: the crawl column that holds each page's body text."))
     rules = cfg.get("page_types") or []
     if not rules:
-        findings.append(("STOP", "Config has no page_types: which URL paths are conditions, services, blogs and so on."))
+        findings.append(("STOP", "Config has no page_types: which pages are conditions, services, blogs and so on."))
+    src = cfg.get("page_type_source") or {}
+    if src and not (src.get("column") or (src.get("file") and src.get("url_column") and src.get("type_column"))):
+        findings.append(("STOP", "page_type_source needs either column, or file with url_column and type_column."))
     for r in rules:
-        if not r.get("name") or not r.get("paths"):
-            findings.append(("STOP", f"Page type {r.get('name', '?')} needs a name and paths."))
+        r.setdefault("paths", [])
+        r.setdefault("labels", [])
+        if not r.get("name") or not (r["paths"] or src):
+            findings.append(("STOP", f"Page type {r.get('name', '?')} needs a name, and paths unless page_type_source labels the pages."))
     return cfg
+
+
+def load_labels(cfg, crawl, ucol, findings):
+    """URL -> page type label from the IA / prune workbook or a label column in the crawl. None when not configured."""
+    src = cfg.get("page_type_source") or {}
+    if not src:
+        return None
+    if src.get("column"):
+        col = resolve(crawl, src["column"], "page type label", findings)
+        if not col:
+            return {}
+        return {norm_url(u): clean_text(t) for u, t in zip(crawl[ucol], crawl[col]) if str(u).strip() and clean_text(t)}
+    try:
+        if src["file"].lower().endswith((".xlsx", ".xlsm")):
+            df = pd.read_excel(src["file"], sheet_name=src.get("sheet") or 0, dtype=str).fillna("")
+            df.columns = [str(c).strip() for c in df.columns]
+        else:
+            df = read_table(src["file"])
+    except Exception as e:
+        findings.append(("STOP", f"Cannot read the page type file {src['file']}: {e}"))
+        return {}
+    uc = resolve(df, src["url_column"], "page type file URL", findings)
+    tc = resolve(df, src["type_column"], "page type file type", findings)
+    if not (uc and tc):
+        return {}
+    return {norm_url(u): clean_text(t) for u, t in zip(df[uc], df[tc]) if str(u).strip() and clean_text(t)}
 
 
 def is_blank(name):
@@ -152,7 +184,16 @@ def resolve(df, name, label, findings):
     return None
 
 
-def page_type(path, rules):
+def page_type(url, rules, labels=None):
+    """A label from page_type_source wins (matched to a page type's name or labels); otherwise the URL path rules."""
+    if labels is not None:
+        lab = labels.get(norm_url(url), "").lower()
+        if lab:
+            for r in rules:
+                if lab == r["name"].lower() or lab in {x.lower() for x in r["labels"]}:
+                    return r["name"]
+            return None
+    path = path_of(url)
     for r in rules:
         if any(p.lower() in path for p in r["paths"]):
             return r["name"]
@@ -195,6 +236,8 @@ def analyze(args, need_external):
     cfg = load_config(args.config, findings)
     try:
         crawl = read_table(args.crawl)
+        # Sitebulb writes "Not Found" when an extraction rule finds nothing: treat it as empty.
+        crawl = crawl.apply(lambda col: col.where(~col.str.strip().str.lower().isin({"not found", "not present"}), ""))
         outl = read_table(args.outlinks)
     except Exception as e:  # unreadable export
         sys.exit(f"STOP: cannot read an export: {e}")
@@ -226,6 +269,14 @@ def analyze(args, need_external):
         return dict(findings=findings, cfg=cfg)
 
     # ---- pages
+    labels = load_labels(cfg, crawl, ucol, findings)
+    if any(l == "STOP" for l, _ in findings):
+        return dict(findings=findings, cfg=cfg)
+    if labels is not None:
+        known = {r["name"].lower() for r in cfg["page_types"]} | {x.lower() for r in cfg["page_types"] for x in r["labels"]}
+        other = Counter(v for v in labels.values() if v.lower() not in known)
+        if other:
+            findings.append(("WARN", "Page type labels not in the audit (left out): " + ", ".join(f"{k} ({n})" for k, n in other.most_common())))
     own_hosts = {host_of(u) for u in crawl[ucol] if u} | {h.lower().lstrip(".") for h in cfg["own_domains"]}
     credential_terms = DEFAULT_CREDENTIALS + cfg["credential_terms"]
     pages, order = {}, []
@@ -242,7 +293,7 @@ def analyze(args, need_external):
         if icol and not str(r[icol]).strip().lower().startswith("indexable"):
             excluded["not indexable"] += 1
             continue
-        ptype = page_type(path_of(url), cfg["page_types"])
+        ptype = page_type(url, cfg["page_types"], labels)
         if not ptype:
             unmatched.append(url)
             continue
@@ -379,6 +430,8 @@ def cmd_preflight(args):
             fh.write("\n".join(res["dest_urls"].values()) + "\n")
         print(f"READY: {len(res['order'])} pages matched {len({res['pages'][k]['ptype'] for k in res['order']})} page types; "
               f"{len(res['links'])} external links to {len(res['dest_urls'])} destinations. Destinations written to {args.out}/external_urls.txt")
+        per = Counter(res["pages"][k]["ptype"] for k in res["order"])
+        print("Pages per page type: " + ", ".join(f"{r['name']} {per.get(r['name'], 0)}" for r in res["cfg"]["page_types"]))
         seen = set()
         print("\nSample body text, one page per page type (check it is the article text, not the menu or footer):")
         for k in res["order"]:

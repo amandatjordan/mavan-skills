@@ -4,7 +4,7 @@ Everything below is done by `scripts/audit.py`. There is no scoring, tiering or 
 
 ## Which pages are audited
 
-A crawled page is audited when it returned 200, is indexable (when the export says so) and its URL path matches a page type in the config. Everything else is left out and counted in the preflight warnings (did not return 200, not indexable, no page type).
+A crawled page is audited when it returned 200, is indexable (when the export says so) and its page type label (from the IA or Content Prune & Merge workbook, or the crawl's label column) belongs to a page type in the config. Everything else is left out and counted in the preflight warnings (did not return 200, not indexable, no page type).
 
 ## Which external links count
 

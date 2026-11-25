@@ -9,7 +9,7 @@ This skill carries the whole process and does not need the written SOP; a copy i
 
 It answers: which pages are missing experience, expertise, authority and trust signals, which external links are dead or do not match the page they are linked from, and which pages a person must read for accuracy. A crawl shows what is on a page and where its links go. **It cannot say whether a claim is true.** That is the Accuracy Review Queue: Claude lists the specific claims, a person verifies them.
 
-**Claude in Chrome is required.** It finds the selectors the crawler needs and checks one page per page type. If it is not available, stop and tell the person to open Chrome with the Claude extension on this computer; do not look for another way.
+**Claude in Chrome is required.** It finds the selectors the crawler needs and checks one sample page per page type. It is never used to work out which pages belong to which page type: that comes from the person's IA or Content Prune & Merge workbook, or from labels the person adds in the crawl (Step 2). If it is not available, stop and tell the person to open Chrome with the Claude extension on this computer; do not look for another way.
 
 Do not use Composio, DataForSEO or any other data tool. Use no tool, dependency, fallback or extra step beyond those named here without asking the person first and explaining why it is needed. If a step is unreliable, expensive or needs workarounds, stop and tell the person. Assume nothing about the site (industry, URL structure, platform, column names). Every count and join is done by `scripts/audit.py`; never type or estimate a number.
 
@@ -18,22 +18,28 @@ Do not use Composio, DataForSEO or any other data tool. Use no tool, dependency,
 ## What the person gives you
 
 - The client's **website address**, and which crawler they will use: Screaming Frog (paid licence) or Sitebulb (Pro, for content extraction).
+- **Page types:** a completed IA audit or Content Prune & Merge workbook for the client, if there is one. If not, the person adds a Page Type column to the site crawl export (the one with the extraction columns) and labels each page's type: service, blog, condition/concern and any other they want.
 - Three **exports** from the crawler, after you give them the setup (Steps 4 and 5): the site crawl with the extraction columns, the outlinks export, and the list-mode crawl of the external destinations.
-- A **yes** on the sample pages and page types you propose (Step 2). They can give their own sample pages instead of letting you choose.
+- **One sample page per page type** (Step 2), or a yes on the ones you pick from the page type list.
 
-Everything else you work out yourself: the selectors, URL patterns and markers from the site in Claude in Chrome, and the credential terms from the built-in list plus any you see on the sample pages. Do not ask the person for selectors, domain rules, scoring or anything else.
+Everything else you work out yourself: the selectors and markers from the sample pages in Claude in Chrome, and the credential terms from the built-in list plus any you see on the sample pages. Do not ask the person for selectors, domain rules, scoring or anything else.
 
 ## Step 1: Start
 
-Send one message saying what is about to happen and what you need: the website address and the crawler, and whether they want to name a sample page for each page type or have you choose (you will show them for a yes either way). Say Claude in Chrome is needed. The page types are concerns/conditions, services and blogs, plus any other type the person names. Wait for the answer.
+Send one message saying what is about to happen and what you need: the website address, the crawler, one sample page per page type, and whether there is a completed IA audit or Content Prune & Merge workbook for this client. Say Claude in Chrome is needed. The page types are concerns/conditions, services and blogs, plus any other type the person names. Wait for the answer.
 
-## Step 2: Find the page types and sample pages
+## Step 2: Page types and sample pages
 
-Load the `chrome-browser` skill and use Claude in Chrome; open a new tab for the site. **Read only: do not log in, submit a form, click a call, book or buy button, or accept anything.**
+Do not use Claude in Chrome, the site's menu or its URL structure to decide page types.
 
-Find where each page type lives from the site's menu and list pages, note the URL path they share, and pick one typical page of each type (or use the person's). Show the person the pages and the paths, and ask: "Is each of these a good example of its page type, and are these the right URL paths?" Do not go on until they confirm; if not, pick again or use the page they name.
+- **IA or Content Prune & Merge workbook:** ask the person to attach it. Read only the header row of the tab that lists each URL with its page type, note the sheet, URL column and page type column, and the labels it uses. Set `page_type_source` to that file (`references/config.md`). Map each label for conditions/concerns, services and blogs (and any type the person named) to a page type, and show the person the labels and which page type each goes to; labels not mapped are left out. Have the script count the pages: they are printed by preflight in Step 4.
+- **No workbook:** the person adds a Page Type column to the site crawl export, the same file as the extraction columns, and labels every page of each type in it (Step 4, `references/crawl-setup.md` section 2). Do not ask for a separate file of labels. Set `page_type_source` to `{"column": "Page Type"}` once the export arrives.
+
+If the person did not give a sample page per page type, pick one from the workbook's list (or ask for one when there is no workbook). Ask: "Is each of these a good example of its page type?" Do not go on until they confirm.
 
 ## Step 3: Find the selectors and check the pages
+
+Load the `chrome-browser` skill and use Claude in Chrome; open a new tab. Open only the confirmed sample pages. **Read only: do not log in, submit a form, click a call, book or buy button, or accept anything.**
 
 On each confirmed page, find a selector for each item below (`references/crawl-setup.md` says what each should return). Test it on the page so it returns what you expect. Where an item is not on the site, record "not on this site".
 
@@ -43,20 +49,20 @@ Also look at what a visitor sees on each page: whether the author and reviewer a
 
 Write two files:
 
-- `work/extraction_setup.md`: one row per item with the column name to use (Body, Author, Reviewer, Published, Updated, Schema, Testimonials, Before After, Rating), an XPath and a CSS selector, how to extract it (text, or function value for counts), and the page it was tested on; plus the URL path of each page type. Section 3 of `references/crawl-setup.md` says how to write the marker rules so they are empty when the page lacks the element.
+- `work/extraction_setup.md`: one row per item with the column name to use (Body, Author, Reviewer, Published, Updated, Schema, Testimonials, Before After, Rating), an XPath and a CSS selector, how to extract it (text, or function value for counts; for Sitebulb, the exact Extract Data using, Type of Data and Operation settings, with Operation set to all matched items wherever the selector matches more than one element), and the page it was tested on; plus every crawl setting the person must change (external link checking, export columns), spelled out with where it is. Look up anything you are unsure of in the crawler's documentation before handing it over; never tell the person to go and find a setting. When there is no workbook, add the page type step: before sending the site crawl export, add a Page Type column to that same export (next to the extraction columns) and label every service, blog and condition/concern page (and any other type named).
 - `work/chrome.tsv` (tab separated, header `url`, `visitor_sees`, `agrees`, `opportunities`), one row per sample page. Leave `agrees` empty for now. `opportunities` is what you would improve beyond what a crawl captures. No tabs or line breaks in the text.
 
 ## Step 4: The person runs the crawl
 
-Give the person `work/extraction_setup.md` and the crawler instructions in `references/crawl-setup.md` (site crawl with the extraction rules and external link checking on; the outlinks export). Wait for the exports. Never read an export into the chat; the script reads them.
+Give the person `work/extraction_setup.md` and the crawler instructions in `references/crawl-setup.md` (site crawl with the extraction rules and external link checking on, plus page type labels when there is no workbook; the outlinks export). Wait for the exports. Never read an export into the chat; the script reads them.
 
-When they arrive, read only the header row of the site crawl export and write `work/config.json` from it and from Step 2 (`references/config.md`). Then:
+When they arrive, read only the header row of the site crawl export and write `work/config.json` from it and from Step 2 (`references/config.md`): `page_type_source` is the workbook or the crawl's label column. Then:
 
 ```
 python $SKILL/scripts/audit.py preflight --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --out work
 ```
 
-It prints READY, WARN and STOP items, the start and end of the body text of one page per page type, and writes `work/external_urls.txt`.
+It prints READY, WARN and STOP items, how many pages matched each page type and which labels were left out, the start and end of the body text of one page per page type, and writes `work/external_urls.txt`.
 
 - **STOP** items must be fixed before going on. Tell the person exactly what to change (an extraction rule, a crawl setting) and re-run when they send a new export.
 - Check the sample body text yourself: if it includes the menu or footer, the body selector is wrong; fix it and ask for a new crawl.
@@ -72,7 +78,7 @@ Give the person `work/external_urls.txt` and tell them to crawl it in list mode 
 python $SKILL/scripts/audit.py preflight --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --chrome work/chrome.tsv --out work
 ```
 
-It also prints what the crawl detected on each sample page. Compare it with what you saw in Chrome and set `agrees` in `work/chrome.tsv` to `Yes`, `Partly` or `No`. Where it is `Partly` or `No`, say what differs in `visitor_sees`: that is an extraction rule that needs fixing. If a sample page is "not in the crawl", the URL or the page type path is wrong.
+It also prints what the crawl detected on each sample page. Compare it with what you saw in Chrome and set `agrees` in `work/chrome.tsv` to `Yes`, `Partly` or `No`. Where it is `Partly` or `No`, say what differs in `visitor_sees`: that is an extraction rule that needs fixing. If a sample page is "not in the crawl", the URL or its page type label is wrong.
 
 Done when there is no STOP and every sample page has `agrees` filled in.
 
