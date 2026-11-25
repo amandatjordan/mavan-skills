@@ -62,11 +62,22 @@ Read the printed column mappings (fix a wrong one with `--map gap.volume="Vol"`,
 
 - Read the **Branded removed** tab: every row should contain a competitor name. If a service word was removed, take it out of that competitor's names and rebuild.
 - Read the **Unassigned** tab (sorted by estimated volume) and the common words the build prints and the Summary lists. A product, device or treatment name belongs in `service_terms`; a competitor's short name belongs in its names. Rebuild after each change. A large Unassigned tab means the service list is incomplete.
+- Read the **Other services** tab: services competitors rank for or have built a page for that are not in the confirmed service list (the list the person gave may be incomplete). Rows come from keywords that matched no service (grouped by their most common phrase) and from competitor service pages (a guess from the URL, so staff and product pages can slip in; the SEO answers No).
 - Read the **Local** tab: each keyword should carry a confirmed city or "near me". Add a missing city and rebuild.
 - Open the Keywords tab and confirm 3 keywords against the raw gap export: positions, the 2+ in top 10 and 1+ in top 3 columns, and the best-ranking competitor.
 - Look at the Service opportunities tab: the first columns count non-local keywords and the Local columns count that service's local searches, so read both. A service with zero keywords means its term did not match anything, not that there is no demand.
 
 Say you did these checks.
+
+## Step 3b: The SEO checks Other services and Unassigned (required)
+
+The service list the SEO gave may be incomplete, so the SEO must check both tabs before the counts are relied on. In each, they mark **Offered by our client** Yes or No (Other services: edit "Terms to match" to add other names people search; Unassigned: for a Yes, optionally type a service name, otherwise the keyword becomes a service of its own). Then rebuild with the filled workbook:
+
+```
+python $SKILL/scripts/gap.py build --config work/config.json --gap GAP.csv --ranking ... --review "work/BUSINESS Keyword Gap Month YYYY.xlsx" --out "work/BUSINESS Keyword Gap Month YYYY v2.xlsx"
+```
+
+Every Yes is added to `service_terms` in the config (the config file is updated, so the build can be repeated), every No is remembered in `not_services` and not suggested again, and Yes/No answers on the Service opportunities tab are carried over. Repeat until Unassigned and Other services hold nothing relevant. Never mark Yes yourself unless the person told you to; a Yes is the SEO's answer.
 
 ## Step 4: Reply
 
@@ -78,6 +89,7 @@ Plain language, in this order:
 4. **Pages competitors win with**: what the Competitor pages tab shows (service pages, blog articles, the home page), and that "looks like" is a guess from the URL.
 5. **Gaps in the data**: services with no matching keywords, the size of Unassigned, and any warning from preflight.
 6. **Limits**, one line each: volumes are the tool's estimates, rankings are a snapshot of tracked keywords, every competitor's own branded searches were removed, and competitors that overlap on only some services appear in those services only.
-7. **Next step**: tell the SEO to fill in the "Offered by our client" column (Yes or No) on the Service opportunities tab, then the services to plan pages for first. Offer it; do not build it.
+7. **Check two tabs first**: say plainly, near the top of the reply and again at the end, that the SEO must check the **Other services** and **Unassigned** tabs, because the service list may be incomplete, and mark Yes or No on each. Give the counts (candidates and unassigned keywords) and the 3-5 candidates with the most keywords meeting a rule. The workbook says the same on its Read Me and Summary tabs.
+8. **Next step**: tell the SEO to fill in the "Offered by our client" column (Yes or No) on the Service opportunities tab, then the services to plan pages for first. Offer it; do not build it.
 
 Never promise a result. Send the workbook.
