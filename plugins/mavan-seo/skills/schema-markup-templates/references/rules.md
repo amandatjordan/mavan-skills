@@ -40,6 +40,7 @@ Treatment pages are MedicalProcedure and concern pages are MedicalCondition (Ama
   - anything else that the page clearly contains and schema.org has a type for.
 - **Placeholders:** `{{lowercase_with_underscores}}`, one per value that changes between pages. Descriptive names (`page_title`, `faq_1_question`, `review_1_text`). Show two of any repeating item and note that the block repeats. Types, property names and structure are never placeholders.
 - **Leave a property out rather than empty.** An empty GeoCoordinates or a blank value is removed, not kept.
+- **procedureType:** the schema.org validator accepts only `https://schema.org/NoninvasiveProcedure` and `https://schema.org/PercutaneousProcedure` as its value and rejects `SurgicalProcedure`. The treatment template leaves `procedureType` out, so a surgical page has none. A non-surgical page adds it with one of those two values.
 - **Optional blocks** are marked in the map file's notes ("include only if the page has it").
 - **Copy values exactly** from the page for the filled test copy. Never write a review, rating, answer or page text the page does not show. A value that is a technical detail the paste cannot carry (page URL, breadcrumb URLs, thumbnail, upload or publish date, meta description) is a clearly fake `example.com` test value, and the person is told which ones; the validator checks structure, not truth.
 
