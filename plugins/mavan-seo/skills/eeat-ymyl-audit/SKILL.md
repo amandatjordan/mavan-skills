@@ -70,9 +70,9 @@ It prints READY, WARN and STOP items, how many pages matched each page type and 
 
 Done when there is no STOP and the body text is the article.
 
-## Step 5: List crawl of the external destinations
+## Step 5: Status codes of the external destinations
 
-Give the person `work/external_urls.txt` and tell them to crawl it in list mode and export address, status code, title and H1 (`references/crawl-setup.md`). Wait for the export. Then:
+Use the person's own crawler; never ask them to use a different one. Tell them how to export every external URL with its HTTP status code from it (`references/crawl-setup.md` section 4): in Sitebulb, the external URLs list from the same audit; in Screaming Frog, a list-mode crawl of `work/external_urls.txt`, which also gives each destination's title and H1. Crawlers that only status-check external URLs (Sitebulb) give no title or H1; the script then compares the anchor with the words in the destination's URL. Wait for the export. Then:
 
 ```
 python $SKILL/scripts/audit.py preflight --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --external EXTERNAL.csv --chrome work/chrome.tsv --out work
@@ -106,7 +106,7 @@ python $SKILL/scripts/audit.py build --config work/config.json --crawl CRAWL.csv
 
 Add the same `--types` and `--max` as in Step 6 if used. Read what it prints: every QA line must say PASS.
 
-Done when every check prints PASS and you have opened 5 rows of Page Review and their External Links rows and agree they are right: dead means the status is 400 or higher, No shared words means none of the anchor's words appear in the destination's title or H1.
+Done when every check prints PASS and you have opened 5 rows of Page Review and their External Links rows and agree they are right: dead means the status is 400 or higher, No shared words means none of the anchor's words appear in the destination's title or H1 (or its URL, when the crawler gave no title or H1).
 
 ## Step 8: Report
 

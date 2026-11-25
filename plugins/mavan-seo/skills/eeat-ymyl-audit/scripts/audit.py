@@ -232,6 +232,15 @@ def experience_hits(text, cfg):
     return out[:3]
 
 
+URL_NOISE = set("http https www com org net gov edu io co us uk html htm php aspx asp cfm index default amp".split())
+
+
+def url_words(u):
+    """Words in a destination's host and path (no query string), for when the crawler cannot give its title or H1."""
+    p = urlsplit(str(u).strip())
+    return " ".join(w for w in words(unquote(p.netloc + " " + p.path)) if w not in URL_NOISE and not w.isdigit())
+
+
 def anchor_match(anchor, dest_text):
     """Match / Partial / No match / Generic anchor / Not checked. Plain word overlap, no judgement."""
     aw = {stem(w) for w in words(anchor) if w not in STOP_WORDS | GENERIC_WORDS}
@@ -263,7 +272,7 @@ def analyze(args, need_external):
         except Exception as e:
             sys.exit(f"STOP: cannot read the external list crawl export: {e}")
     elif need_external:
-        findings.append(("STOP", "The list crawl export of the external destinations is missing (--external)."))
+        findings.append(("STOP", "The export of the external destinations' status codes is missing (--external)."))
 
     c = cfg["columns"]
     ucol = resolve(crawl, c.get("url"), "url", findings) if c.get("url") else find_col(crawl, URL_NAMES)
@@ -353,7 +362,10 @@ def analyze(args, need_external):
         e = ext_map.get(dkey)
         status = e["status"] if e and e["status"] else (to_int(r[ostat]) if ostat else 0)
         title, h1 = (e["title"], e["h1"]) if e else ("", "")
-        match = anchor_match(r[oanc], title + " " + h1) if e else "Not checked"
+        if title or h1:
+            compared, match = "Title and H1", anchor_match(r[oanc], title + " " + h1)
+        else:  # Sitebulb and most crawlers only status-check external URLs: infer from the destination URL path
+            compared, match = "URL", anchor_match(r[oanc], url_words(dst))
         flags = []
         if status >= 400 and status not in BLOCKED:
             flags.append("Dead link")
@@ -364,7 +376,7 @@ def analyze(args, need_external):
         if status in BLOCKED:
             flags.append("Check manually")
         row = dict(src=pages[src]["url"], pkey=src, anchor=clean_text(r[oanc]), dest=dst, status=status, title=title, h1=h1,
-                   match=match, flags=flags, flagged=[f for f in flags if f in FLAGGED])
+                   compared=compared, match=match, flags=flags, flagged=[f for f in flags if f in FLAGGED])
         pages[src]["links"].append(row)
         links.append(row)
 
@@ -397,7 +409,7 @@ def analyze(args, need_external):
     if not dest_urls and not any(l == "STOP" for l, _ in findings):
         findings.append(("STOP", "The outlinks export has no external links from these pages: external link crawling was off, or the link position setting excludes them all."))
     if ext is None and not need_external:
-        findings.append(("WARN", "The list crawl of the external destinations is not done yet: crawl work/external_urls.txt in list mode, then re-run preflight with --external."))
+        findings.append(("WARN", "The external destinations' status codes are not in yet: export the external URLs with their HTTP status (Sitebulb: the external URLs export; Screaming Frog: a list-mode crawl of work/external_urls.txt), then re-run preflight with --external."))
     if n_pages:
         for lab, key in (("Body text", "body"), ("Author", "author"), ("Reviewer", "reviewer"), ("Published date", "published")):
             empty = [pages[k]["url"] for k in order if pages[k][key] is not None and not present(pages[k][key])]
@@ -417,7 +429,7 @@ def analyze(args, need_external):
     if ext is not None:
         missing = [u for k, u in dest_urls.items() if k not in ext_map]
         if missing:
-            findings.append(("WARN", f"{len(missing)} external destinations are not in the list crawl (shown as Not checked; first: {', '.join(missing[:3])})."))
+            findings.append(("WARN", f"{len(missing)} external destinations are not in the external URLs export (no status: shown as No response; first: {', '.join(missing[:3])})."))
         manual = sorted({l["dest"] for l in links if l["status"] in BLOCKED})
         if manual:
             findings.append(("WARN", f"{len(manual)} external destinations blocked the crawler (401, 403, 429 or 999) and need a manual check."))
@@ -649,10 +661,10 @@ def cmd_build(args):
 
     # ---- External Links
     head = ["Source page", "Anchor text", "Destination URL", "Destination status", "Destination title", "Destination H1",
-            "Anchor vs destination", "Flag", "Reviewer note"]
-    rows = [[l["src"], l["anchor"], l["dest"], l["status"] or "No response", l["title"], l["h1"], l["match"], "; ".join(l["flags"]), None]
+            "Anchor compared with", "Anchor vs destination", "Flag", "Reviewer note"]
+    rows = [[l["src"], l["anchor"], l["dest"], l["status"] or "No response", l["title"], l["h1"], l["compared"], l["match"], "; ".join(l["flags"]), None]
             for l in links]
-    write_sheet(wb, "External Links", head, rows, [40, 28, 46, 12, 34, 28, 14, 28, 30], yellow=(9,), name="ExternalLinks")
+    write_sheet(wb, "External Links", head, rows, [40, 28, 46, 12, 34, 28, 14, 14, 28, 30], yellow=(10,), name="ExternalLinks")
 
     # ---- Accuracy Review Queue
     head = ["URL", "Page type", "What the page lacks", "External citations", "Specific claims found", "Claims to verify", "Cited sources",
@@ -691,7 +703,7 @@ def qa(path, pages, order, links, queue, chrome, types):
     el = list(wb["External Links"].iter_rows(min_row=2, values_only=True))
     check("External Links has one row per source page and destination", len(el) == len(links) == len({(l["pkey"], norm_url(l["dest"])) for l in links}))
     check("page citation counts add up to the External Links rows", sum(r[9] for r in pr) == len(el))
-    check("flagged counts match the External Links flags", sum(r[10] for r in pr) == sum(1 for r in el if any(f in (r[7] or "") for f in FLAGGED)))
+    check("flagged counts match the External Links flags", sum(r[10] for r in pr) == sum(1 for r in el if any(f in (r[8] or "") for f in FLAGGED)))
     aq = list(wb["Accuracy Review Queue"].iter_rows(min_row=2, values_only=True))
     check("the accuracy queue has one row per queued page", [r[0] for r in aq] == [p["url"] for p in queue])
     cc = list(wb["Chrome Page Check"].iter_rows(min_row=2, values_only=True))

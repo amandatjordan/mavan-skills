@@ -29,7 +29,7 @@ One row per audited page, in crawl order.
 
 ## 3. External Links
 
-One row per audited page and destination: source page, anchor text, destination URL, status, destination title, destination H1, anchor vs destination, flag, and a yellow Reviewer note column.
+One row per audited page and destination: source page, anchor text, destination URL, status, destination title, destination H1 (empty when the crawler only status-checks external URLs), what the anchor was compared with (Title and H1, or URL), anchor vs destination, flag, and a yellow Reviewer note column.
 
 ## 4. Accuracy Review Queue
 

@@ -48,7 +48,7 @@ class Audit(unittest.TestCase):
         urls = (out / "external_urls.txt").read_text().split()
         self.assertEqual(len(urls), len(fixture.LINKS))
         self.assertFalse(any("social.example" in u for u in urls), "footer links must not be listed")
-        self.assertIn("list crawl", p.stdout)
+        self.assertIn("status codes are not in yet", p.stdout)
         self.assertIn("[Condition]", p.stdout)
         self.assertIn("START:", p.stdout)
 
@@ -99,13 +99,14 @@ class Audit(unittest.TestCase):
         self.assertEqual(rows[SITE + "/services/botox/"][14], "Yes")
         links = list(wb["External Links"].iter_rows(min_row=2, values_only=True))
         self.assertEqual(len(links), len(fixture.LINKS))
-        flags = {r[2]: r[7] for r in links}
+        flags = {r[2]: r[8] for r in links}
         self.assertIn("Dead link", flags["https://health-agency.example/high-blood-pressure"])
         self.assertIn("No shared words", flags["https://best-supplements.example/blood-sugar-support"])
         self.assertIn("Check manually", flags["https://blocked-journal.example/paper"])
         self.assertNotIn("Dead link", flags["https://blocked-journal.example/paper"])
         self.assertFalse(flags["https://health-agency.example/"])  # a homepage link or redirect is not flagged
-        match = {r[2]: r[6] for r in links}
+        match = {r[2]: r[7] for r in links}
+        self.assertEqual({r[2]: r[6] for r in links}["https://diabetes-assoc.example/standards-of-care"], "Title and H1")
         self.assertEqual(match["https://health-agency.example/"], "Generic anchor")
         self.assertEqual(match["https://diabetes-assoc.example/standards-of-care"], "Partial")
         queue = list(wb["Accuracy Review Queue"].iter_rows(min_row=2, values_only=True))
@@ -136,7 +137,7 @@ class Audit(unittest.TestCase):
     def test_build_stops_without_external_export(self):
         p = run("build", *self.common(), "--chrome", self.f["chrome.tsv"], "--out", self.d / "x.xlsx", check=False)
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("list crawl export", p.stdout + p.stderr)
+        self.assertIn("status codes is missing", p.stdout + p.stderr)
 
     def test_stops_on_wrong_body_column(self):
         cfg = json.loads(self.f["config.json"].read_text())
@@ -261,6 +262,27 @@ class PageTypeLabels(unittest.TestCase):
                 "--external", self.f["external.csv"], "--out", self.d / "q2").stdout
         self.assertEqual(a, b.replace(str(self.d / "q2"), str(self.d / "q1")))
         self.assertNotIn("Not Set", (self.d / "q2/text/001.txt").read_text())
+
+    def test_anchor_compared_with_url_when_no_title_or_h1(self):
+        ext = self.d / "ext_status_only.csv"
+        with open(self.f["external.csv"], newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        ucol = next(c for c in rows[0] if c.lower() in ("address", "url"))
+        scol = next(c for c in rows[0] if "status" in c.lower() and "code" in c.lower())
+        with open(ext, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["URL", "HTTP Status Code"])
+            for r in rows:
+                w.writerow([r[ucol], r[scol]])
+        out = self.d / "audit_url.xlsx"
+        p = run("build", "--config", self.f["config.json"], "--crawl", self.f["crawl.csv"], "--outlinks", self.f["outlinks.csv"],
+                "--external", ext, "--claims", self.f["claims.tsv"], "--chrome", self.f["chrome.tsv"], "--out", out)
+        self.assertNotIn("FAIL", p.stdout)
+        links = list(load_workbook(out)["External Links"].iter_rows(min_row=2, values_only=True))
+        self.assertTrue(all(r[6] == "URL" for r in links))
+        by = {r[2]: r for r in links}
+        self.assertIn("No shared words", by["https://best-supplements.example/blood-sugar-support"][8] or "")
+        self.assertIn("Dead link", by["https://health-agency.example/high-blood-pressure"][8])
 
     def test_page_type_without_paths_needs_a_source(self):
         cfg = json.loads(json.dumps(fixture.CONFIG))

@@ -31,9 +31,13 @@ The outlinks export needs the source page, destination, anchor text and status c
 
 A marker must be empty or 0 when the page lacks the element. In Screaming Frog, "Function Value" with an XPath such as `count(//section[contains(@class,'testimonials')]//article)` returns 0 or a number. For photos, count the images in the results gallery, not just the section. If a count cannot be written, extract the text of the element and check an obvious page that has it and one that lacks it.
 
-## 4. List crawl of the external destinations
+## 4. Status codes of the external destinations
 
-The script writes `work/external_urls.txt`: every external destination once. In the crawler, switch to list mode, upload that file and crawl it. In list mode the listed pages are crawled as the pages themselves, so the export has each one's status code, title and H1. Export that tab (address, status code, title, H1).
+Always the person's own crawler.
+
+- **Sitebulb:** external URLs are status-checked in the same audit (External URL HTTP Status on), so no second crawl is needed and none is possible (Sitebulb's list mode only crawls the start URL's subdomain). Export the external URLs from the audit's URL list with URL and HTTP Status Code. There is no title or H1; the script compares anchors with the destination URL.
+- **Screaming Frog:** the script writes `work/external_urls.txt` (every external destination once). Switch to list mode, upload that file and crawl it; export address, status code, title and H1.
+- **The links export (`--outlinks`) in Sitebulb:** Link Explorer → External → All Links (not Unique Links, which keep one example page per link) → Export. It has Linking URL, Target URL, Anchor Text and Location; the script reads these names.
 
 - Some sites block crawlers and return 403 or similar. Those are listed for a manual check, not counted as dead links.
 - Crawl at the crawler's default speed. A long list can take a while.
