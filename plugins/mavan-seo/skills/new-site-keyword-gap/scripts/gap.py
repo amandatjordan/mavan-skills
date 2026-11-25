@@ -764,6 +764,9 @@ def cmd_build(a):
     for w in (ws2, ws3):
         w.sheet_properties.tabColor = 'F4B183'
     sheet(wb, 'Branded removed', ['Keyword', 'Term matched'], [[r['keyword'], r['brand_term']] for _, r in removed.iterrows()], {'Keyword': 48})
+    order = ['Summary', 'Service opportunities', 'Other services', 'Unassigned', 'Keywords', 'Local', 'Competitor pages', 'Branded removed', 'Read Me']
+    wb._sheets = [wb[n] for n in order]
+    wb.active = 0
     wb.save(a.out)
 
     # self-check: recompute from the raw positions

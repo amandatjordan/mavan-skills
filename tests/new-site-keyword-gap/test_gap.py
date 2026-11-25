@@ -103,8 +103,8 @@ class GapTest(unittest.TestCase):
         p = run(*self.args('build', out))
         self.assertIn('All checks passed', p.stdout)
         wb = load_workbook(out)
-        self.assertEqual(wb.sheetnames, ['Read Me', 'Summary', 'Service opportunities', 'Other services', 'Keywords', 'Local',
-                                         'Competitor pages', 'Unassigned', 'Branded removed'])
+        self.assertEqual(wb.sheetnames, ['Summary', 'Service opportunities', 'Other services', 'Unassigned', 'Keywords', 'Local',
+                                         'Competitor pages', 'Branded removed', 'Read Me'])
         self.assertTrue(wb['Read Me']['A2'].value.startswith('ACTION NEEDED'))
         self.assertEqual(wb['Summary']['A2'].value, 'ACTION NEEDED')
         summ = {r[0]: r[1] for r in wb['Summary'].iter_rows(min_row=2, values_only=True) if r[0]}
