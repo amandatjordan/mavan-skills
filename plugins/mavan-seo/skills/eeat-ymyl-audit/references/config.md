@@ -30,7 +30,8 @@ Written by Claude (SKILL.md Step 4) from the page type source (Step 2) and the h
   "credential_terms": [],
   "experience_terms": [],
   "content_link_positions": ["Content"],
-  "own_domains": []
+  "own_domains": [],
+  "non_citation_hosts": []
 }
 ```
 
@@ -42,6 +43,7 @@ Written by Claude (SKILL.md Step 4) from the page type source (Step 2) and the h
 - **credential_terms** are added to the built-in list: MD, DO, DDS, DMD, NP, PA, PA-C, RN, PhD, FACS, FAAD, board-certified, board certified. Add terms you see on the sample pages (for example FNP or FACOG). Terms of five letters or fewer written in capitals match capitals only, so "md" in ordinary text does not count. Credentials are looked for in the body, author and reviewer text.
 - **experience_terms** are extra phrases to count as years of experience. A number of years followed by "experience" or "practice" is always recognised ("18 years of experience").
 - **content_link_positions** are the Link Position values that count as citations. Menus and footers are left out. Ignored when the outlinks export has no link position column (preflight warns).
+- **non_citation_hosts** are extra hosts whose links are never citations and are left out of every link check, on top of booking platforms, Google, and address or phone anchors (`rules.md`). Add a host only after checking in Claude in Chrome that its links are booking, map or contact links (for example a booking platform not in the built-in list).
 - **own_domains** are extra hosts that count as the client's own site (for example a booking subdomain), so links to them are not citations. Hosts in the crawl are already counted.
 - **role** on a page type says which requirements apply (`rules.md`): `condition`, `service` or `blog`. Left out, it comes from the name (concern / condition, service, blog / post / article); any other type gets only the requirements for every page.
 - **columns.faq** is the FAQ extraction (the first FAQ question). It decides which pages need FAQPage schema.

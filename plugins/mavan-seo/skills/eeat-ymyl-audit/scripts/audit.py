@@ -50,6 +50,16 @@ BLOCKED = {401, 403, 405, 429, 999}
 STOP_WORDS = set("a an and or the of in on for to with by at as is are be from vs near me your you our we it its this that these those into".split())
 GENERIC_WORDS = set("click here read more link article source sources page website site learn see visit via official research study studies shows show according report info information".split())
 FLAGGED = ["Dead link", "No response", "No shared words"]
+# Links that are never citations and are left out of every link check (references/rules.md): booking platforms, Google (maps,
+# reviews, search), and links whose anchor is a booking call to action, a street address or a phone number.
+BOOKING_HOSTS = ("podium.com", "vagaro.com", "joinblvd.com", "blvd.co", "mindbodyonline.com", "zenoti.com", "acuityscheduling.com",
+                 "calendly.com", "squareup.com", "square.site", "janeapp.com", "jane.app", "aestheticrecord.com", "mangomint.com",
+                 "patientnow.com", "nexhealth.com", "zocdoc.com", "schedulicity.com", "setmore.com", "booksy.com", "fresha.com")
+GOOGLE_HOST = re.compile(r"(^|\.)(google\.[a-z.]+|goo\.gl|g\.page|g\.co)$")
+BOOKING_ANCHOR = re.compile(r"^\s*(book|schedule|request (an|a|your) (appointment|consultation)|make an appointment|reserve)\b", re.I)
+ADDRESS_ANCHOR = re.compile(r"\b\d{1,6}\s+(?:[A-Za-z0-9.'-]+\s+){1,5}(?:drive|dr|street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|way|"
+                            r"court|ct|parkway|pkwy|highway|hwy|place|pl|circle|cir|suite|ste|plaza|terrace|trail|square|sq)\b\.?", re.I)
+PHONE_ANCHOR = re.compile(r"(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}")
 NO_VALUES = {"", "0", "false", "no", "none", "nan"}
 
 
@@ -127,7 +137,7 @@ def load_config(path, findings):
         sys.exit(f"STOP: cannot read config {path}: {e}")
     cfg.setdefault("columns", {})
     cfg.setdefault("content_link_positions", ["Content"])
-    for k in ("experience_terms", "own_domains", "credential_terms"):
+    for k in ("experience_terms", "own_domains", "credential_terms", "non_citation_hosts"):
         cfg.setdefault(k, [])
     if not cfg["columns"].get("body"):
         findings.append(("STOP", "Config has no columns.body: the crawl column that holds each page's body text."))
@@ -271,6 +281,21 @@ def is_credible(url, cfg):
     if any(h == x or h.endswith("." + x) for x in CREDIBLE_HOSTS | extra):
         return True
     return h.endswith(CREDIBLE_TLDS)
+
+
+def not_a_citation(url, anchor, cfg):
+    """Booking, Google, address and phone links: never a citation, so left out of the link checks. Returns the reason or None."""
+    h = host_of(url)
+    extra = {x.lower().lstrip(".") for x in cfg.get("non_citation_hosts", [])}
+    if any(h == x or h.endswith("." + x) for x in BOOKING_HOSTS) or BOOKING_ANCHOR.search(anchor or ""):
+        return "booking"
+    if GOOGLE_HOST.search(h):
+        return "Google"
+    if ADDRESS_ANCHOR.search(anchor or "") or PHONE_ANCHOR.search(anchor or ""):
+        return "address or phone"
+    if any(h == x or h.endswith("." + x) for x in extra):
+        return "excluded host"
+    return None
 
 
 def anchor_match(anchor, dest_text):
@@ -493,6 +518,7 @@ def analyze(args, need_external):
             ext_map[norm_url(r[eu])] = dict(status=to_int(r[es]) if es else 0, title=clean_text(r[et]) if et else "", h1=clean_text(r[eh]) if eh else "")
     seen, links, dest_urls = set(), [], {}
     skipped_position = 0
+    skipped_kind = Counter()
     for _, r in outl.iterrows():
         if otype and str(r[otype]).strip().lower() not in {"hyperlink", "link", "a", "anchor"}:
             continue
@@ -501,6 +527,10 @@ def analyze(args, need_external):
             continue
         if opos and str(r[opos]).strip().lower() not in positions:
             skipped_position += 1
+            continue
+        why = not_a_citation(dst, clean_text(r[oanc]), cfg)
+        if why:
+            skipped_kind[why] += 1
             continue
         dkey = norm_url(dst)
         if (src, dkey) in seen:
@@ -577,6 +607,9 @@ def analyze(args, need_external):
             findings.append(("WARN", "The outlinks export has no link position column: links in the menu and footer are counted as citations."))
         elif skipped_position:
             findings.append(("OK", f"{skipped_position} external links outside the content area (menu, footer) were left out."))
+        if skipped_kind:
+            findings.append(("OK", f"{sum(skipped_kind.values())} external content links left out because they are not citations: " +
+                             ", ".join(f"{k} ({n})" for k, n in skipped_kind.most_common()) + "."))
     if unmatched:
         findings.append(("WARN", f"{len(unmatched)} crawled page(s) match no page type and are left out (first: {', '.join(unmatched[:3])})."))
     for why, n in excluded.items():
@@ -932,14 +965,10 @@ def cmd_build(args):
     write_sheet(wb, "All Pages", head, rows, [44, 12] + [13] * len(REQS) + [10, 30, 22, 16, 10, 10, 10], name="AllPages")
 
     # ---- External Links Needed (dev handoff)
-    head = ["URL", "Page type", "External links on the page now (not credible)", "Claims on the page", "Source to link to",
+    head = ["URL", "Page type", "External links on the page now (not credible)", "Source to link to",
             "Anchor text on the page", "Notes", "Completion handoff"]
-    rows = []
-    for p in need_links:
-        cl = claims.get(p["key"])
-        rows.append([p["url"], p["ptype"], "\n".join(l["dest"] for l in p["links"]) or "None",
-                     " | ".join(split_claims(cl["claims_to_verify"]))[:500] if cl else "Not read", None, None, None, "Dev"])
-    write_sheet(wb, "External Links Needed", head, rows, [44, 12, 40, 50, 40, 30, 30, 12], yellow=(5, 6, 7), name="LinksNeeded")
+    rows = [[p["url"], p["ptype"], "\n".join(l["dest"] for l in p["links"]) or "None", None, None, None, "Dev"] for p in need_links]
+    write_sheet(wb, "External Links Needed", head, rows, [44, 12, 40, 40, 30, 30, 12], yellow=(4, 5, 6), name="LinksNeeded")
 
     # ---- External Link Issues (dev handoff)
     head = ["Source page", "Anchor text", "Destination URL", "Status", "Issue", "Anchor compared with", "Credible source",

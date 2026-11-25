@@ -69,7 +69,7 @@ When they arrive, read only the header row of the site crawl export and write `w
 python $SKILL/scripts/audit.py preflight --config work/config.json --crawl CRAWL.csv --outlinks OUTLINKS.csv --out work
 ```
 
-It prints READY, WARN and STOP items, how many pages matched each page type and which labels were left out, the start and end of the body text of one page per page type, and writes `work/external_urls.txt`.
+It prints READY, WARN and STOP items, how many pages matched each page type and which labels were left out, how many booking, Google, address and phone links were left out of the link checks (never citations, `references/rules.md`), the start and end of the body text of one page per page type, and writes `work/external_urls.txt`.
 
 - **STOP** items must be fixed before going on. Tell the person exactly what to change (an extraction rule, a crawl setting) and re-run when they send a new export.
 - Check the sample body text yourself: if it includes the menu or footer, the body selector is wrong; fix it and ask for a new crawl.
@@ -104,6 +104,7 @@ Read the text files and write `work/claims.tsv` (tab separated, header `url`, `s
 
 - `specific_claims` is `Yes` when the page makes specific medical or factual claims: statistics, timeframes, how long results last, session counts, downtime, safety or effectiveness statements, FDA approval or clearance, dosages, guarantees, "clinically proven", "studies show", what a treatment cures or treats. Otherwise `No`.
 - `claims_to_verify` lists each claim in the page's own words, short, separated by ` | `; each becomes one row on the Claims Needing Verification tab. No tabs or line breaks.
+- Leave out pricing and cost, the provider's credentials and years of experience: they are not claims to verify (`references/rules.md`).
 - Do not say whether a claim is true, search for sources, or judge the writing. The SEO does that on the Claims Needing Verification tab.
 
 Done when every page in `work/queue.tsv` has a row in `claims.tsv`.
@@ -116,7 +117,7 @@ python $SKILL/scripts/audit.py build --config work/config.json --crawl CRAWL.csv
 
 Add the same `--sample-per-type` (and `--types`, `--max-per-type`, `--max` if used) as in Step 6. Read what it prints: every QA line must say PASS.
 
-Done when every check prints PASS and you have opened the workbook and checked: the Recommendations rollup reads as real findings (X of Y pages, by page type) with a next step and handoff on each; 5 rows of All Pages match the crawl; External Links Needed lists only pages with no credible source; External Link Issues rows have a real error (dead means 400 or higher; No shared words means none of the anchor's words appear in the destination's title or H1, or its URL when the crawler gave no title or H1); each claim is its own row.
+Done when every check prints PASS and you have opened the workbook and checked: the Recommendations rollup reads as real findings (X of Y pages, by page type) with a next step and handoff on each; 5 rows of All Pages match the crawl; External Links Needed lists only pages with no credible source; no booking, Google, address or phone link appears on either link tab; External Link Issues rows have a real error (dead means 400 or higher; No shared words means none of the anchor's words appear in the destination's title or H1, or its URL when the crawler gave no title or H1); each claim is its own row.
 
 ## Step 8: Report
 
