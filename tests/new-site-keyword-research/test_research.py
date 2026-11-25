@@ -50,7 +50,13 @@ KW = [  # keyword, volume, level, service, sub, brand, concern, near me, geo
 OFFERS = 'Client offers it? (Yes / No)'
 LINKS = 'Internal links out (priority)'
 ANCHOR = 'Anchor text for links to this page (SEO fills in)'
+KW_TAB = 'SEO Please Check Keywords'
 BLANK_KD = {'wrinkles'}  # concern keywords added from a Google Ads check have no difficulty or CPC
+
+
+def read_kw(path):
+    """The keywords tab: instructions in row 1, table header in row 2."""
+    return pd.read_excel(path, sheet_name=KW_TAB, header=1)
 
 
 def make_taxonomy(path):
@@ -124,7 +130,7 @@ class ResearchTest(unittest.TestCase):
         self.assertEqual(row['Primary keyword volume (national)'], 500)      # not 9,000 (city) and not 800 (sum)
         self.assertEqual(row['Keywords in taxonomy'], 2)
         self.assertEqual(row['City-modified searches (not listed)'], 1)
-        kw = pd.read_excel(out, sheet_name='Keywords')
+        kw = read_kw(out)
         self.assertNotIn('filler in miami', set(kw['Keyword']))
         self.assertIn('Highest keyword in the whole service', ' '.join(pages.columns))
         self.assertIn('lip filler (2,000)', row['Highest keyword in the whole service (national)'])
@@ -179,7 +185,7 @@ class ResearchTest(unittest.TestCase):
 
     def test_no_internal_links_tab_and_no_suggested_anchor(self):
         p, out = self.match_and_build(services='lip filler')
-        self.assertEqual(pd.ExcelFile(out).sheet_names, ['Pages', 'Keywords', 'Not in the plan', 'Read Me'])   # Read Me last, no Confirm / Internal links tabs
+        self.assertEqual(pd.ExcelFile(out).sheet_names, ['Pages', KW_TAB, 'Not in the plan', 'Read Me'])   # Read Me last, no Confirm / Internal links tabs
         pages = pd.read_excel(out, sheet_name='Pages')
         self.assertTrue(pages[ANCHOR].isna().all())          # left blank for the SEO
 
@@ -194,7 +200,7 @@ class ResearchTest(unittest.TestCase):
         self.assertNotIn('Filler > Chin Filler', pages.index)                # 400 is under the cutoff
         self.assertNotIn('Filler > Oldy', pages.index)                       # not recommended
         self.assertIn('only if the client offers it', pages.loc['Filler', LINKS])
-        self.assertIn('Filler > Brandy', set(pd.read_excel(out, sheet_name='Keywords')['Target page']))
+        self.assertIn('Filler > Brandy', set(read_kw(out)['Target page']))
 
     def test_a_suggested_page_is_never_the_parent_of_a_section(self):
         p, out = self.match_and_build(services='filler', products='brandz')   # Lip Filler is unlisted, so brandz sits on Filler
@@ -264,6 +270,19 @@ class ResearchTest(unittest.TestCase):
         p, _ = self.match_and_build(services='facial', concerns='uneven tone', edit=taxonomy_name)
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('is a taxonomy concern', p.stdout + p.stderr)
+
+    def test_keywords_tab_has_instructions_and_the_reply_reminder(self):
+        from openpyxl import load_workbook
+        p, out = self.match_and_build(services='filler')
+        wb = load_workbook(out)
+        self.assertNotIn('Keywords', wb.sheetnames)                          # renamed
+        ws = wb[KW_TAB]
+        for word in ('CHANGE', 'REMOVE', 'ADD', 'Primary keyword on the Pages tab'):
+            self.assertIn(word, ws['A1'].value)
+        self.assertEqual([c.value for c in ws[2]][:5], ['Target page', 'Topic', 'Level', 'Keyword', 'Volume (national)'])
+        self.assertEqual(len(read_kw(out)), 6)                               # filler 2, lip filler 2, brandy 1, famy 1; city term and sub-cutoff items left out
+        self.assertIn(KW_TAB, ' '.join(pd.read_excel(out, 'Read Me')['Item']))
+        self.assertIn(f"NEXT: tell the person to open the '{KW_TAB}' tab", p.stdout)   # the build prints the reminder Claude relays
 
     def test_more_than_five_concerns_warns(self):
         p, out = self.match_and_build(services='facial', concerns='wrinkles; marks; extra1; extra2; extra3; extra4')

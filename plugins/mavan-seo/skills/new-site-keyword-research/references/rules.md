@@ -67,6 +67,10 @@ A word check on each keyword. It suggests which sections a page needs and never 
 | Candidacy | candidate, who is / should, am i a, good for, right for, eligible |
 | Best / Top | best, top |
 
+## The SEO Please Check Keywords tab
+
+Every keyword on the plan, with its target page. It is a working tab for the SEO, not a record: row 1 tells them to change a keyword (edit the keyword or its target page), remove one (off topic, a spelling nobody searches, or a page the client does not offer) or add one (a row with the keyword and its exact page name; every page with no keywords needs theirs). The content roadmap reads only the Pages tab, so a change to a page's best keyword is also made in Primary keyword on the Pages tab. When the build finishes, Claude always ends its reply by telling the person to check and update this tab.
+
 ## Not covered
 
 Location pages and city terms, competitor analysis, the client's own rankings, and the content roadmap (a later skill that combines this plan with the blog taxonomy).
