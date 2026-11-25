@@ -96,10 +96,10 @@ class T(unittest.TestCase):
     def test_services_prefix_and_depth(self):
         pg, *_ = self.run_build()
         self.assertEqual(pg["Neurotoxin"][3], "/services/neurotoxin")
-        self.assertEqual(pg["Neurotoxin > Botox"][3], "/services/neurotoxin/botox")
+        self.assertEqual(pg["Botox"][3], "/services/neurotoxin/botox")
         # brand whose parent is a sub-service stays at most one level under the Service
-        self.assertEqual(pg["Dermal Filler > Juvéderm Volbella XC"][3], "/services/dermal-filler/juvederm-volbella-xc")
-        self.assertEqual(pg["Dermal Filler > Juvéderm Volbella XC"][2], "Dermal Filler > Lip Filler")
+        self.assertEqual(pg["Juvéderm Volbella XC"][3], "/services/dermal-filler/juvederm-volbella-xc")
+        self.assertEqual(pg["Juvéderm Volbella XC"][2], "Lip Filler")
         for row in pg.values():
             self.assertLessEqual(row[3].count("/"), 3)
 
@@ -115,7 +115,7 @@ class T(unittest.TestCase):
         self.assertEqual(pg["Contact"][5], "Yes")
         self.assertEqual(pg["Privacy Policy"][5], "No")
         self.assertEqual(pg["Neurotoxin"][5], "Yes")
-        self.assertEqual(pg["Neurotoxin > Botox"][5], "No")
+        self.assertEqual(pg["Botox"][5], "No")
         for name, row in pg.items():
             if row[1] == "Blog":
                 self.assertEqual(row[5], "No")
@@ -152,7 +152,8 @@ class T(unittest.TestCase):
     def test_links_copied_unchanged_with_urls(self):
         _, links, _, _ = self.run_build()
         self.assertEqual(len(links), len(LINKS))
-        self.assertEqual([(l[0], l[2], l[4]) for l in links], [(a, b, c) for a, b, c, _ in LINKS])
+        own = lambda n: n if n.startswith("Blog") else n.split(">")[-1].strip()
+        self.assertEqual([(l[0], l[2], l[4]) for l in links], [(own(a), own(b), c) for a, b, c, _ in LINKS])
         self.assertEqual(links[1][1], "/services/neurotoxin")
         self.assertEqual(links[1][3], "/services/neurotoxin/botox")
 
@@ -165,7 +166,38 @@ class T(unittest.TestCase):
     def test_page_with_no_inbound_link_warns(self):
         broken = [l for l in LINKS if l[1] != "Neurotoxin > Botox"]
         _, _, w, _ = self.run_build(links=broken)
-        self.assertTrue(any("No planned link points at 'Neurotoxin > Botox'" in x for x in w))
+        self.assertTrue(any("No planned link points at 'Botox'" in x for x in w))
+
+    def test_page_name_is_the_pages_own_name(self):
+        pg, links, _, wb = self.run_build()
+        self.assertIn("Botox", pg)
+        self.assertIn("Lip Filler", pg)
+        self.assertNotIn("Neurotoxin > Botox", pg)
+        self.assertEqual(pg["Botox"][2], "Neurotoxin")
+        for row in pg.values():
+            self.assertNotIn(">", row[0])
+            self.assertNotIn(">", row[2] or "")
+        for l in links:
+            self.assertNotIn(">", l[0])
+            self.assertNotIn(">", l[2])
+
+    def test_same_own_name_keeps_full_names_and_warns(self):
+        pages = PAGES + [("Laser > Botox", "Brand / Device", "", "")]
+        pg, _, w, _ = self.run_build(pages=pages)
+        self.assertIn("Neurotoxin > Botox", pg)
+        self.assertIn("Laser > Botox", pg)
+        self.assertTrue(any("More than one roadmap page is called 'Botox'" in x for x in w))
+
+    def test_csv_page_matching_own_name_skipped(self):
+        pg, _, w, _ = self.run_build(csv_rows=(("Botox", ""),))
+        self.assertEqual(list(pg).count("Botox"), 1)
+        self.assertTrue(any("already on the roadmap" in x for x in w))
+
+    def test_read_me_says_seo_qas_both_tabs(self):
+        *_, wb = self.run_build()
+        qa = [r[1] for r in wb["Read Me"].iter_rows(values_only=True) if r[0] == "SEO QA (required)"][0]
+        self.assertIn("Pages tab", qa)
+        self.assertIn("Internal links tab", qa)
 
     def test_missing_links_tab_stops(self):
         with self.assertRaises(SystemExit):
@@ -192,7 +224,7 @@ class T(unittest.TestCase):
         p = subprocess.run([sys.executable, str(SCRIPT), "build", "--roadmap", r, "--csv", c, "--out", o], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertNotIn("FAIL", p.stdout)
-        self.assertEqual(p.stdout.count("PASS"), 6)
+        self.assertEqual(p.stdout.count("PASS"), 7)
 
     def test_preflight_needs_the_csv(self):
         d = tempfile.mkdtemp()

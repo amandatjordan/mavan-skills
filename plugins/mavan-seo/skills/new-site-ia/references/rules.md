@@ -4,6 +4,8 @@ Constants are at the top of `scripts/ia.py`. Change them there and update this f
 
 ## Pages
 
+**Page names** are each page's own name: the last part of the roadmap's name, so "Neurotoxin > Botox" is "Botox". The Parent column and the Internal links tab use the same names. Blog titles are kept whole. When two roadmap pages share an own name (Neurotoxin > Botox and Laser > Botox), both keep their full roadmap names and a warning asks the SEO to rename them. A CSV page whose name matches a roadmap page's own name is skipped.
+
 One row per roadmap page (blogs included), one per CSV page, and a `/blog` index when any blog is on the roadmap. Pages the roadmap cut for the 50-page cap are not here. Sections are not pages and never appear. A CSV page with the same name as a roadmap page is skipped with a warning.
 
 Order: roadmap order (without blogs), CSV pages, the blog index, then the blogs.
@@ -35,4 +37,8 @@ The roadmap's Internal links tab, copied as it is with the From and To URLs adde
 - a link with no anchor text;
 - a link that names a page that is not on the Pages tab.
 
-All of these are fixed in the roadmap. Links not planned anywhere: service pages to the booking page, the blog index to each post, menu and footer links.
+All of these are fixed in the roadmap.
+
+## SEO QA
+
+The Read Me's first row after the client name tells the SEO to QA both tabs before the workbook goes anywhere: the Pages tab (names, types, parents, URLs, main nav, notes) and the Internal links tab (From and To pages, URLs, anchor text) plus every warning. The script's checks do not replace this. Links not planned anywhere: service pages to the booking page, the blog index to each post, menu and footer links.
