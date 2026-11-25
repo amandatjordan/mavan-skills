@@ -8,7 +8,7 @@ A crawled page is audited when it returned 200, is indexable (when the export sa
 
 ## Which external links count
 
-A link counts as a citation when its destination is on a host that is not the client's own, it comes from an audited page, it is a hyperlink (not an image or script), and, when the export has a link position column, its position is one of `content_link_positions`. A page linking to the same destination twice counts once. Links in menus and footers (social profiles and so on) are left out.
+A link counts as a citation when its destination is on a host that is not the client's own, it comes from an audited page, it is a hyperlink (not an image or script), and, when the export has a link position column, its position is one of `content_link_positions`. A page linking to the same destination twice counts once. Links in menus and footers (social profiles and so on) are left out. Booking, Google, address and phone links are left out too (Links that are never citations, below).
 
 ## Requirements by page type
 
@@ -34,7 +34,18 @@ Updated date is extracted and shown when the site has it, but it is not a requir
 
 ## Credible external sources
 
-A content link counts as a credible source when its host ends in .gov, .edu or .org (or .gov.uk, .nhs.uk, .ac.uk, .gc.ca), or is a medical journal, database or reputable medical site in the built-in list (NEJM, JAMA, The Lancet, BMJ, Nature, ScienceDirect, Springer, Wiley, LWW, Oxford Academic, Cochrane, Frontiers, MDPI, Karger, Taylor & Francis, SAGE, Cell, JAAD, WebMD, Medical News Today, Healthline, Verywell Health, Merck Manuals, UpToDate, Drugs.com), or a host in the config's `credible_domains`. Shop, booking, financing, social and press links are not credible sources; they still appear on External Link Issues when they have an error.
+A content link counts as a credible source when its host ends in .gov, .edu or .org (or .gov.uk, .nhs.uk, .ac.uk, .gc.ca), or is a medical journal, database or reputable medical site in the built-in list (NEJM, JAMA, The Lancet, BMJ, Nature, ScienceDirect, Springer, Wiley, LWW, Oxford Academic, Cochrane, Frontiers, MDPI, Karger, Taylor & Francis, SAGE, Cell, JAAD, WebMD, Medical News Today, Healthline, Verywell Health, Merck Manuals, UpToDate, Drugs.com), or a host in the config's `credible_domains`. Shop, financing, social and press links are not credible sources; they still appear on External Link Issues when they have an error.
+
+## Links that are never citations
+
+Some content links are left out of every link check: they are not counted as a page's external links, are not listed on External Links Needed or External Link Issues, and are not in `work/external_urls.txt`. Preflight says how many were left out and why.
+
+- **Booking:** the destination is a booking platform (Podium, Vagaro, Boulevard, Mindbody, Zenoti, Acuity, Calendly, Square, Jane, Aesthetic Record, Mangomint, PatientNow, NexHealth, Zocdoc, Schedulicity, Setmore, Booksy, Fresha), or the anchor starts with Book, Schedule, Reserve, Make an appointment or Request an appointment / consultation.
+- **Google:** the destination is on Google (maps, reviews, search, goo.gl, g.page).
+- **Address or phone:** the anchor is a street address ("1138 Nikki View Drive") or a phone number.
+- **Excluded host:** a host in the config's `non_citation_hosts`.
+
+A link to Google reviews is left out here; the Google rating requirement is checked from the rating extraction, not from links.
 
 ## External link status and flags
 
@@ -63,7 +74,7 @@ This cannot say whether the destination supports the sentence it is linked from.
 
 ## Claims Needing Verification
 
-Claims are read on a sample: `--sample-per-type 5` picks 5 pages of each type at random (seeded by page type, so the same pages on every run) from pages with at least 200 words of body text, or from all pages of the type when fewer than 5 have that many. Claude lists each claim in the page's own words; each claim is one row.
+Claims are read on a sample: `--sample-per-type 5` picks 5 pages of each type at random (seeded by page type, so the same pages on every run) from pages with at least 200 words of body text, or from all pages of the type when fewer than 5 have that many. Claude lists each claim in the page's own words; each claim is one row. Pricing and cost ("$250–$500 per session", "averages $800 to $1,000"), the provider's credentials ("board-certified nurse practitioner", "APRN") and years of experience ("over 15 years of experience") are not claims to verify: credentials and experience are checked by the requirements above, and prices are the client's to confirm.
 
 **Follow-up review:** for blog and condition page types only, when the sampled pages' claims on pages that cite no credible source add up to 2 or more, and pages of that type were left out of the sample, the Recommendations tab adds a Low priority issue (Content): if the other changes do not bring improvements, the rest of that page type needs a closer review for claims. Claude never judges whether a claim is true: the SEO adds a source, marks it Accurate claim or Bad claim, and writes the updated claim for Content. A page not read shows "Not read".
 

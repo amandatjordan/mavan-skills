@@ -46,8 +46,10 @@ class Audit(unittest.TestCase):
         out = self.d / "work1"
         p = run("preflight", *self.common(), "--out", out)
         urls = (out / "external_urls.txt").read_text().split()
-        self.assertEqual(len(urls), len(fixture.LINKS))
+        self.assertEqual(len(urls), len(fixture.LINKS) - 4)  # the booking, Google, address and phone links are not listed
         self.assertFalse(any("social.example" in u for u in urls), "footer links must not be listed")
+        self.assertFalse(any("podium.com" in u or "goo.gl" in u for u in urls))
+        self.assertIn("4 external content links left out because they are not citations", p.stdout)
         self.assertIn("status codes are not in yet", p.stdout)
         self.assertIn("[Condition]", p.stdout)
         self.assertIn("START:", p.stdout)
@@ -100,12 +102,19 @@ class Audit(unittest.TestCase):
         self.assertEqual(rows[SITE + "/services/botox/"]["Before/after photos"], "Yes")
         needed = [r[0] for r in wb["External Links Needed"].iter_rows(min_row=2, values_only=True)]
         self.assertEqual(needed, [SITE + "/blog/is-intermittent-fasting-safe/"])
-        self.assertEqual(wb["External Links Needed"].cell(2, 8).value, "Dev")
+        self.assertEqual([c.value for c in wb["External Links Needed"][1]],
+                         ["URL", "Page type", "External links on the page now (not credible)", "Source to link to",
+                          "Anchor text on the page", "Notes", "Completion handoff"])  # no claims column
+        self.assertEqual(wb["External Links Needed"].cell(2, 7).value, "Dev")
+        self.assertNotIn("booking.podium.com", wb["External Links Needed"].cell(2, 3).value)
         issues = {r[2]: r for r in wb["External Link Issues"].iter_rows(min_row=2, values_only=True)}
         self.assertIn("Dead link", issues["https://health-agency.example/high-blood-pressure"][4])
         self.assertIn("No shared words", issues["https://best-supplements.example/blood-sugar-support"][4])
         self.assertIn("Check manually", issues["https://blocked-journal.example/paper"][4])
         self.assertNotIn("https://health-agency.example/", issues)  # a homepage link with a generic anchor is not an issue
+        for dest in ("https://booking.podium.com/clinic/123", "https://maps.app.goo.gl/abc123",
+                     "https://directions.example/clinic", "https://callnow.example/clinic"):
+            self.assertNotIn(dest, issues)  # booking, Google, address and phone links are never citations
         claims = list(wb["Claims Needing Verification"].iter_rows(min_row=2, values_only=True))
         self.assertEqual(len(claims), sum(len(c[2].split("|")) for c in fixture.CLAIMS))  # one row per claim
         self.assertEqual(claims[0][7], "Content")

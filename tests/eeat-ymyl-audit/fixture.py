@@ -76,6 +76,11 @@ LINKS = [  # source path, destination, anchor, status, position
     ("/blog/10-foods-that-lower-cholesterol/", "https://nutrition-univ.example/cholesterol-and-diet", "research on cholesterol", 200, "Content"),
     ("/blog/10-foods-that-lower-cholesterol/", "https://affiliate-store.example/superfoods", "superfood guide", 200, "Content"),
     ("/blog/is-intermittent-fasting-safe/", "https://dead-site.example/fasting-study", "this article", 404, "Content"),
+    # never citations, left out of every link check: a booking platform, Google Maps, and an address or phone anchor
+    ("/blog/is-intermittent-fasting-safe/", "https://booking.podium.com/clinic/123", "Book Now", 302, "Content"),
+    ("/services/botox/", "https://maps.app.goo.gl/abc123", "Read our reviews", 302, "Content"),
+    ("/services/botox/", "https://directions.example/clinic", "1200 Main Street, Springfield", 200, "Content"),
+    ("/conditions/migraine/", "https://callnow.example/clinic", "(555) 010-0199", 200, "Content"),
 ]
 
 EXTERNAL = [  # address, status, title, h1

@@ -17,15 +17,15 @@ Reference sheet: one row per audited page, in crawl order. URL, page type, then 
 
 ## 3. External Links Needed (Dev handoff)
 
-One row per page with no credible external source: URL, page type, the external links on the page now (none of them credible), the claims found on the page (to help choose a source), yellow **Source to link to**, yellow **Anchor text on the page** (existing text on the page to link from), yellow Notes, Completion handoff (Dev).
+One row per page with no credible external source: URL, page type, the external links on the page now (none of them credible), yellow **Source to link to**, yellow **Anchor text on the page** (existing text on the page to link from), yellow Notes, Completion handoff (Dev).
 
 ## 4. External Link Issues (Dev handoff)
 
-One row per external link with any issue (Dead link, No response, Check manually, No shared words): source page, anchor text, destination URL, status, issue, what the anchor was compared with (Title and H1, or URL), whether the destination is a credible source, yellow **Action** dropdown (Keep / Replace / Remove), yellow **Replacement URL**, yellow **New anchor text**, yellow Notes, Completion handoff (Dev).
+One row per external link with any issue, leaving out links that are never citations (`rules.md`) (Dead link, No response, Check manually, No shared words): source page, anchor text, destination URL, status, issue, what the anchor was compared with (Title and H1, or URL), whether the destination is a credible source, yellow **Action** dropdown (Keep / Replace / Remove), yellow **Replacement URL**, yellow **New anchor text**, yellow Notes, Completion handoff (Dev).
 
 ## 5. Claims Needing Verification (Content handoff)
 
-One row per claim on the sampled pages (5 per page type), in the page's own words: URL, page type, claim, the credible sources the page cites now, yellow **Source to cite** (the SEO adds a real source for the claim), yellow **Claim status** dropdown (Accurate claim / Bad claim), yellow **Claim update** (the corrected wording to use on the site), Completion handoff (Content). A page Claude did not read has one row with "Not read".
+One row per claim on the sampled pages (5 per page type), in the page's own words, leaving out pricing, credentials and years of experience (`rules.md`): URL, page type, claim, the credible sources the page cites now, yellow **Source to cite** (the SEO adds a real source for the claim), yellow **Claim status** dropdown (Accurate claim / Bad claim), yellow **Claim update** (the corrected wording to use on the site), Completion handoff (Content). A page Claude did not read has one row with "Not read".
 
 ## 6. Sample Page Check
 
